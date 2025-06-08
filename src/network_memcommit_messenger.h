@@ -13,10 +13,8 @@ namespace dg::network_memcommit_messenger{
 
             using memregion_kind_t = uint8_t;
 
-            static inline constexpr uint8_t EXPRESS_HIGH_LATENCY_REGION = 0u;
-            static inline constexpr uint8_t EXPRESS_MID_LATENCY_REGION  = 1u;
-            static inline constexpr uint8_t EXPRESS_LOW_LATENCY_REGION  = 2u;
-            static inline constexpr uint8_t NOMRAL_REGION               = 3u;
+            static inline constexpr uint8_t EXPRESS_REGION  = 0u;
+            static inline constexpr uint8_t NOMRAL_REGION   = 1u;
 
             virtual ~MemregionRadixerInterface() noexcept = default;
             virtual auto radix(uma_ptr_t) noexcept -> std::expected<memregion_kind_t, exception_t> = 0;
@@ -101,32 +99,20 @@ namespace dg::network_memcommit_messenger{
             std::shared_ptr<MemregionRadixerInterface> memregion_express_radixer;
             std::shared_ptr<dg::network_mempress::MemoryPressInterface> press;
             size_t press_vectorization_sz;
-            std::unique_ptr<WareHouseIngestionConnectorInterface> high_latency_warehouse;
-            size_t high_latency_warehouse_feed_cap;
-            std::unique_ptr<WareHouseIngestionConnectorInterface> mid_latency_warehouse;
-            size_t mid_latency_warehouse_feed_cap;
-            std::unique_ptr<WareHouseIngestionConnectorInterface> low_latency_warehouse;
-            size_t low_latency_warehouse_feed_cap;
+            std::unique_ptr<WareHouseIngestionConnectorInterface> warehouse_connector;
+            size_t warehouse_connector_feed_cap;
 
         public:
 
             MemeventMessenger(std::shared_ptr<MemregionRadixerInterface> memregion_express_radixer,
                               std::shared_ptr<dg::network_mempress::MemoryPressInterface> press,
                               size_t press_vectorization_sz,
-                              std::unique_ptr<WareHouseIngestionConnectorInterface> high_latency_warehouse,
-                              size_t high_latency_warehouse_feed_cap,
-                              std::unique_ptr<WareHouseIngestionConnectorInterface> mid_latency_warehouse,
-                              size_t mid_latency_warehouse_feed_cap,
-                              std::unique_ptr<WareHouseIngestionConnectorInterface> low_latency_warehouse,
-                              size_t low_latency_warehouse_feed_cap) noexcept: memregion_express_radixer(std::move(memregion_express_radixer)),
-                                                                               press(std::move(press)),
-                                                                               press_vectorization_sz(press_vectorization_sz),
-                                                                               high_latency_warehouse(std::move(high_latency_warehouse)),
-                                                                               high_latency_warehouse_feed_cap(high_latency_warehouse_feed_cap),
-                                                                               mid_latency_warehouse(std::move(mid_latency_warehouse)),
-                                                                               mid_latency_warehouse_feed_cap(mid_latency_warehouse_feed_cap),
-                                                                               low_latency_warehouse(std::move(low_latency_warehouse)),
-                                                                               low_latency_warehouse_feed_cap(low_latency_warehouse_feed_cap){}
+                              std::unique_ptr<WareHouseIngestionConnectorInterface> warehouse_connector,
+                              size_t warehouse_connector_feed_cap) noexcept: memregion_express_radixer(std::move(memregion_express_radixer)),
+                                                                             press(std::move(press)),
+                                                                             press_vectorization_sz(press_vectorization_sz),
+                                                                             warehouse_connector(std::move(warehouse_connector)),
+                                                                             warehouse_connector_feed_cap(warehouse_connector_feed_cap){}
 
             void push(std::move_iterator<virtual_memory_event_t *> data_arr, size_t sz) noexcept{
 
@@ -146,42 +132,18 @@ namespace dg::network_memcommit_messenger{
                 auto press_feeder                                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&press_feed_resolutor,
                                                                                                                                                                                              trimmed_press_vectorization_sz,
                                                                                                                                                                                              press_feeder_mem.get()));
-                
-                //------------------------
-
-                auto high_latency_warehouse_feed_resolutor              = InternalWareHouseFeedResolutor{};
-                high_latency_warehoues_feed_resolutor.dst               = this->high_latency_warehouse.get();
-
-                size_t trimmed_high_latency_warehouse_feed_cap          = std::min(std::min(this->high_latency_warehouse_feed_cap, this->high_latency_warehouse->max_consume_size()), sz);
-                size_t high_latency_warehouse_feeder_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&high_latency_warehouse_feed_resolutor, trimmed_high_latency_warehouse_feed_cap);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> high_latency_warehouse_feeder_mem(high_latency_warehouse_feeder_allocation_cost);
-                auto high_latency_warehouse_feeder                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&high_latency_warehouse_feed_resolutor, 
-                                                                                                                                                                                          trimmed_high_latency_warehouse_feed_cap,
-                                                                                                                                                                                          high_latency_warehouse_feeder_mem.get()));
 
                 //------------------------
 
-                auto mid_latency_warehouse_feed_resolutor               = InternalWareHouseFeedResolutor{};
-                mid_latency_warehouse_feed_resolutor.dst                = this->mid_latency_warehouse.get();
+                auto warehouse_feed_resolutor                           = InternalWareHouseFeedResolutor{};
+                warehoues_feed_resolutor.dst                            = this->warehouse_connector.get();
 
-                size_t trimmed_mid_latency_warehouse_feed_cap           = std::min(std::min(this->mid_latency_warehouse_feed_cap, this->mid_latency_warehouse->max_consume_size()), sz);
-                size_t mid_latency_warehouse_feeder_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&mid_latency_warehouse_feed_resolutor, trimmed_mid_latency_warehouse_feed_cap);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> mid_latency_warehouse_feeder_mem(mid_latency_warehouse_feeder_allocation_cost);
-                auto mid_latency_warehouse_feeder                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&mid_latency_warehouse_feed_resolutor,
-                                                                                                                                                                                          trimmed_mid_latency_warehouse_feed_cap,
-                                                                                                                                                                                          mid_latency_warehouse_feeder_mem.get()));
-
-                //------------------------
-
-                auto low_latency_warehouse_feed_resolutor               = InternalWareHouseFeedResolutor{};
-                low_latency_warehouse_feed_resolutor.dst                = this->low_latency_warehouse.get();
-
-                size_t trimmed_low_latency_warehouse_feed_cap           = std::min(std::min(this->low_latency_warehouse_feed_cap, this->low_latency_warehouse->max_consume_size()), sz);
-                size_t low_latency_warehouse_feeder_allocation_cost     = dg::network_producer_consumer::delvrsrv_allocation_cost(&low_latency_warehouse_feed_resolutor, trimmed_low_latency_warehouse_feed_cap);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> low_latency_warehouse_feeder_mem(low_latency_warehouse_feeder_allocation_cost);
-                auto low_latency_warehouse_feeder                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&low_latency_warehouse_feed_resolutor,
-                                                                                                                                                                                          trimmed_low_latency_warehouse_feed_cap,
-                                                                                                                                                                                          low_latency_warehouse_feeder_mem.get()));
+                size_t trimmed_warehouse_feed_cap                       = std::min(std::min(this->warehouse_connector_feed_cap, this->high_latency_warehouse->max_consume_size()), sz);
+                size_t high_latency_warehouse_feeder_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&warehouse_feed_resolutor, trimmed_warehouse_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> warehouse_feeder_mem(high_latency_warehouse_feeder_allocation_cost);
+                auto warehouse_feeder                                   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&warehouse_feed_resolutor, 
+                                                                                                                                                                                          trimmed_warehouse_feed_cap,
+                                                                                                                                                                                          warehouse_feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     uma_ptr_t notifying_addr = this->extract_notifying_addr(base_data_arr[i]);
@@ -193,22 +155,12 @@ namespace dg::network_memcommit_messenger{
                     }
 
                     switch (memregion_kind.value()){
-                        case MemregionLatencyRadixerInterface::EXPRESS_HIGH_LATENCY_REGION:
+                        case MemregionLatencyRadixerInterface::EXPRESS_REGION:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(high_latency_warehouse_feeder.get(), std::move(base_data_arr[i]));
+                            dg::network_producer_consumer::delvrsrv_deliver(warehouse_feeder.get(), std::move(base_data_arr[i]));
                             break;
                         }
-                        case MemregionLatencyRadixerInterface::EXPRESS_MID_LATENCY_REGION:
-                        {
-                            dg::network_producer_consumer::delvrsrv_deliver(mid_latency_warehouse_feeder.get(), std::move(base_data_arr[i]));
-                            break;
-                        }
-                        case MemregionLatencyRadixerInterface::EXPRESS_LOW_LATENCY_REGION:
-                        {
-                            dg::network_producer_consumer::delvrsrv_deliver(low_latency_warehouse_feeder.get(), std::move(base_data_arr[i]));
-                            break;
-                        }
-                        case MemregionLatencyRadixerInterface::NOMRAL_REGION
+                        case MemregionLatencyRadixerInterface::NOMRAL_REGION:
                         {
                             uma_ptr_t notifying_region = dg::memult::region(notifying_addr, this->press->memregion_size());
                             dg::network_producer_consumer::delvrsrv_kv_deliver(press_feeder.get(), notifying_region, std::move(base_data_arr[i]));
@@ -259,6 +211,8 @@ namespace dg::network_memcommit_messenger{
                     }
                     case dg::network_memcommit_factory::event_kind_signal_aggregation_signal:
                     {
+                        //we dont know how to solve the problem of sigagg is a virtualized_event, and sigagg contains a virtualized event
+
                         // virtual_sigagg_event_t sigagg_event     = dg::network_memcommit_factory::devirtualize_sigagg_signal_event(memevent);
                         // sigagg_event_kind_t sigagg_kind         = dg::network_memcommit_factory::read_aggregation_kind(sigagg_event);
 
