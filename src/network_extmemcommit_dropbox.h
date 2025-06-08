@@ -10,266 +10,352 @@
 
 namespace dg::network_extmemcommit_dropbox{
 
-    using event_t = dg::network_external_memcommit_model::poly_event_t; 
+    //alrights, we'll connect this to the network_rest
+    //we'll take in Request Order, batch the requests, make the requests, and wait
+    //we'll wont be using reactor this time but rather a dg::vector<Request> directly
+
+    //what we'd attempt to do at this component is taking in request
+    //authorize the request, keep track of token lifetime + token refresh virtues
+    //connect to the network_rest interface
+
+    //keep retrying the request until the timeout
+    //if failed invoke the exception_handler
+
+    //very complicated
+    //we need to use our own preinstalled symmetric keys
+    //such is every connected server on spawn should know each other symmetric encoding method 
+    //whenever we are requesting a token, we expose our symmetric key by the token length
+    //too complicated, we should have used sessions with asymmetric nonsense
+
+    //the problem is that we'd want to try to hide the destination of the token
+    //so the attacker could not use the exposed token along the line to make malicious requests
+    //bounce request is a request to another server to do another request
+    //it's sort of tors, yet we'd want to support the bounce request to hide our token destination
+
+    //this is complicated to implement, we'll work on this for 2-3 days
+    //essentially, we'd allow user to set user|password or persitent token of another p2p credentials via REST
+    //we'd kind of register that to the RAM or the persistent database
+    //we'd want to peek the value of user|password or persistent token to make that temporary token request
+    //that temporary token is exposed to the traffic, and we don't need to worry about that token got into the wrong hand as much as we'd worry about the persistent token
+    //we'd get that temp token via TokenControllerInterface
+
+    //the TokenControllerInterface is a finite unordered_map, that use a fifo queue to fit the capacity
+    //if the Address * exceeds the TokenControllerCapacity, we'd get the value via the first REST request, and that'd kind of get truncated after pushed to the TokenControllerInterface
+    //we have an internal "virtues" of semanticalizing request + response by using struct + compact_serializer, unfortunately, we are not using JSON yet
+
+    //we'd want to retry the request for retry_count time before dropping the request and invoke exception_handler
+
+    //as for WareHouseInterface, we'd need to keep the "workload" under control to make sure that we are not flooding the warehouse
+    //we'd return exception immediately to the user if the warehouse is not ExhaustionControlled and the warehouse has reached its designated efficient capacity
+    //I think this should suffice for this component
+    //we actually made the requests so fast that they are not even requests, but a direct socket communication
+
+    //we are actually very proud of our request protocol, just a few twists here and there for the unordered_map hint + address and we should be good
+    //the fact that we have made it this far is actually a miracle
 
     struct Request{
-        Address requestor;
         Address requestee;
-        event_t event;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(requestor, requestee, event);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(requestor, requestee, event);
-        }
+        dg::network_extmemcommit_model::poly_event_t poly_event;
+        uint8_t retry_count;
+        bool has_unique_request_id;
+        std::chrono::nanoseconds timeout;
+        std::unique_ptr<dg::network_exception::ExceptionHandlerInterface> exception_handler;
     };
 
-    using request_t = Request;
-    
-    struct RequestContainerInterface{
-        virtual ~RequestContainerInterface() noexcept = default;
-        virtual void push(Request) noexcept = 0;
-        virtual auto pop() noexcept -> std::optional<Request> = 0;
+    struct AuthorizedRequest{
+        Request request;
+        std::string token;
     };
 
-    struct RequestCenterInterface: public virtual RequestContainerInterface{
-        virtual ~RequestCenterInterface() noexcept = default;
-        virtual void send(Request) noexcept = 0;
-        virtual auto recv() noexcept -> std::optional<Request> = 0;
+    struct Token{
+        dg::string token;
+        std::chrono::time_point<std::chrono::utc_clock> expiry;
     };
 
-    class LckContainer: public virtual RequestContainerInterface{
-        
-        private:
-
-            dg::vector<Request> request_vec;
-            std::unique_ptr<std::mutex> lck;
-        
-        public:
-
-            LckContainer(dg::vector<Request> request_vec,
-                         std::unique_ptr<std::mutex> lck) noexcept: request_vec(std::move(request_vec)),
-                                                                    lck(std::move(lck)){}
-
-            void push(Request request) noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->lck);
-                this->request_vec.push_back(std::move(request));
-            }
-
-            auto pop() noexcept -> std::optional<Request>{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->lck);
-                
-                if (this->request_vec.empty()){
-                    return std::nullopt;
-                }
-
-                auto rs = std::move(this->request_vec.back());
-                this->request_vec.pop_back();
-
-                return {std::in_place_t{}, std::move(rs)};
-            }
-    };
-
-    class OutBoundDispatcher: public virtual dg::network_concurrency::WorkerInterface{
-
-        private:
-
-            std::shared_ptr<RequestContainerInterface> outbound_container;
-            const size_t vectorization_sz; 
-            const size_t addr_vectorization_sz; 
+    class WareHouseInterface{
 
         public:
 
-            OutBoundDispatcher(std::shared_ptr<RequestContainerInterface> outbound_container, 
-                               size_t vectorization_sz,
-                               size_t addr_vectorization_sz) noexcept: outbound_container(std::move(outbound_container)),
-                                                                       vectorization_sz(vectorization_sz),
-                                                                       addr_vectorization_sz(addr_vectorization_sz){}
+            virtual ~WareHouseInterface() noexcept = default;
+            virtual auto push(dg::vector<Request>&& request_vec) noexcept -> exception_t = 0;
+            virtual auto pop() noexcept -> dg::vector<Request> = 0;
+    };
 
-            bool run_one_epoch() noexcept{
-                
-                const size_t SERIALIZATION_OVERHEAD = dg::network_compact_serializer::size(dg::vector<request_t>{});
-                const size_t MAX_DISPATCH_BYTE_SZ   = dg::network_kernel_mailbox::MAX_SUBMIT_SIZE - SERIALIZATION_OVERHEAD;
-                HelperClass dispatcher{}; 
+    class TokenControllerInterface{
 
-                {
-                    dg::vector<request_t> recv_request = this->recv();
+        public:
 
-                    if (recv_request.empty()){
-                        return false;
-                    }
+            virtual ~TokenControllerInterface() noexcept = default;
+            virtual void set_token(const Address * const Token *, size_t, exception_t *) noexcept = 0;
+            virtual void get_token(const Address *, std::optional<Token> *) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
 
-                    using handle_t      = dg::network_type_traits_x::remove_expected_t<decltype(dg::network_raii_producer_consumer::xdelvsrv_open_raiihandle(&dispatcher, this->addr_vectorization_sz, MAX_DISPATCH_BYTE_SZ, MAX_DISPATCH_BYTE_SZ))>; //interface coersion might not work
-                    auto delivery_map   = dg::unordered_map<Address, handle_t>{};
+    class TokenRequestorInterface{
 
-                    for (request_t& request: recv_request){
-                        Address dst_ip  = request.requestor;
-                        auto map_ptr    = delivery_map.find(dst_ip); 
+        public:
 
-                        if (map_ptr == delivery_map.end()){
-                            auto handle = dg::network_exception_handler::nothrow_log(dg::network_raii_producer_consumer::xdelvsrv_open_raiihandle(&dispatcher, this->addr_vectorization_sz, MAX_DISPATCH_BYTE_SZ, MAX_DISPATCH_BYTE_SZ));
-                            auto [emplace_ptr, status] = delivery_map.emplace(std::make_pair(dst_ip, std::move(handle)));
-                            map_ptr = emplace_ptr;
-                            dg::network_genult::assert(status);
+            virtual ~TokenRequestorInterface() noexcept = default;
+            virtual void request_token(const Address *, std::expected<Token, exception_t> *)  noexcept = 0;
+    };
+
+    class RequestAuthorizerInterface{
+
+        public:
+
+            virtual ~RequestAuthorizerInterface() noexcept = default;
+            virtual void authorize_request(std::move_iterator<Request *>, size_t, std::expected<AuthorizedRequest, exception_t> *) noexcept = 0;
+    };
+
+    class RequestorInterface{
+
+        public:
+
+            virtual ~RequestorInterface() noexcept = default;
+            virtual void request(std::move_iterator<AuthorizedRequest *>, size_t) noexcept = 0;
+    };
+
+    class WareHouse: public virtual WareHouseInterface{
+
+    };
+
+    class TokenController: public virtual TokenControllerInterface{
+
+        private:
+
+            dg::unordered_unstable_map<Address, Token> token_map;
+            size_t map_capacity;
+
+        public:
+
+
+    };
+
+    class RequestAuthorizer: public virtual RequestAuthorizerInterface{
+
+        private:
+
+            std::unique_ptr<TokenRequestorInterface> token_requestor;
+            std::unique_ptr<TokenControllerInterface> token_controller;
+            size_t max_retry_count;
+            size_t max_timeout;
+            std::chrono::nanoseconds token_expiry_window;
+        
+        public:
+            
+            RequestAuthorizer(std::unique_ptr<TokenRequestorInterface> token_requestor,
+                              std::unique_ptr<TokenControllerInterface> token_controller,
+                              size_t max_retry_count,
+                              size_t max_timeout,
+                              std::chrono::nanoseconds token_expiry_window) noexcept: token_requestor(std::move(token_requestor)),
+                                                                                      token_controller(std::move(token_controller)),
+                                                                                      max_retry_count(max_retry_count),
+                                                                                      max_timeout(max_timeout),
+                                                                                      token_expiry_window(token_expiry_window){}
+
+            void authorize_request(std::move_iterator<Request *> request_arr, size_t request_arr_sz, std::expected<AuthorizedRequest, exception_t> * output_arr) noexcept{
+
+            }
+    };
+
+    class Requestor: public virtual RequestorInterface{
+
+        private:
+
+            size_t kvfeed_vectorization_sz;
+
+        public:
+
+            Requestor(size_t kvfeed_vectorization_sz) noexcept: kvfeed_vectorization_sz(kvfeed_vectorization_sz){}
+
+            void request(std::move_iterator<AuthorizedRequest *> authorized_request_arr, size_t sz) noexcept{
+
+                // auto rest_payload = dg::network_rest::ExternalMemcommitRequest{.requestee   = };
+            }
+        
+        private:
+
+            struct InternalResolutor: public virtual dg::network_producer_consumer::KVConsumerInterface<Address, AuthorizedRequest>{
+
+                dg::network_producer_consumer::KVDeliveryHandle<Address, AuthorizedRequest> * next_retriable_handler; 
+
+                void push(const Address& address, std::move_iterator<AuthorizedRequest *> auth_request_vec, size_t sz) noexcept{
+
+                    AuthorizedRequest * auth_request_vec_base = auth_request_vec.base(); 
+
+                    std::expected<dg::vector<dg::network_rest::ExternalMemcommitRequest>, exception_t> rest_request_vec = dg::network_exception::cstyle_initialize<dg::vector<dg::network_rest::ExternalMemcommitRequest>>(sz);
+
+                    if (!rest_request_vec.has_value()){
+                        for (size_t i = 0u; i < sz; ++i){
+                            if (auth_request_vec_base[i].request.exception_handler != nullptr){
+                                auth_request_vec_base[i].request.exception_handler->update(rest_request_vec.error());
+                            }
                         }
 
-                        exception_t err = dg::network_producer_consumer::xdelvsrv_deliver(map_ptr->second.get(), std::move(request), dg::network_compact_serializer::size(request)); //dangy
-                        dg::network_exception_handler::nothrow_log(err);
-                    }
-                }
-
-                return true;
-            }
-        
-        private:
-
-            auto recv() noexcept -> dg::vector<Request>{
-
-                dg::vector<Request> rs{};
-                rs.reserve(this->vectorization_sz);
-
-                for (size_t i = 0u; i < this->vectorization_sz; ++i){
-                    std::optional<Request> request = this->outbound_container->pop();
-                    
-                    if (!static_cast<bool>(request)){
-                        return rs;
-                    }
-
-                    rs.push_back(std::move(request.value()));
-                }
-
-                return rs;
-            }
-
-            struct HelperClass: public virtual dg::network_raii_producer_consumer::ConsumerInterface<request_t>{
-            
-                void push(dg::vector<request_t> data) noexcept{
-                    
-                    if (data.size() == 0u){
                         return;
                     }
 
-                    Address dst     = data.front().requestor;
-                    size_t bsz      = dg::network_compact_serializer::size(data);
-                    auto bstream    = dg::string(bsz);
-                    dg::network_compact_serializer::serialize_into(bstream.data(), data);
-                    dg::network_kernel_mailbox::send(dst, std::move(bstream), dg::network_kernel_mailbox::CHANNEL_EXTMEMCOMMIT);
+                    if (!rest_response_vec.has_value()){
+                        for (size_t i = 0u; i < sz; ++i){
+                            if (auth_request_vec_base[i].request.exception_handler != nullptr){
+                                auth_request_vec_base[i].request.exception_handler->update(rest_response_vec.error());
+                            }
+                        }
+
+                        return;
+                    }
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        dg::network_rest::ExternalMemcommitRequest rest_request{.requestee  = auth_request_vec_base[i].request.requestee,
+                                                                                .requestor  = dg::network_ip_data::host_addr(),
+                                                                                .timeout    = auth_request_vec_base[i].request.timeout,
+                                                                                .payload    = std::move(auth_request_vec_base[i].request.poly_event), //
+                                                                                .token      = std::move(auth_request_vec_base[i].token)}; //
+
+                        static_assert(std::is_nothrow_move_assignable_v<dg::network_rest::ExternalMemcommitRequest>);
+                        rest_request_vec.value()[i] = std::move(rest_request);
+                    }
+
+                    std::expected<dg::vector<dg::network_rest::ExternalMemcommitResponse>, exception_t> rest_response_vec = dg::network_rest::requestmany_extnmemcommit(dg::network_rest::get_normal_rest_controller(), rest_request_vec.value());
+
+                    if (!rest_response_vec.has_value()){
+                        for (size_t i = 0u; i < sz; ++i){
+                            if (auth_request_vec_base[i].request.exception_handler != nullptr){
+                                auth_request_vec_base[i].request.exception_handler->update(rest_response_vec.error());
+                            }
+                        }
+
+                        return;
+                    }
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(rest_response_vec.value()[i].server_err_code)){
+                            if (dg::network_rest::is_retriable_error(rest_response_vec.value()[i].server_err_code)){
+
+                            } else{
+
+                            }
+
+                            continue;
+                        }
+
+                        if (dg::network_exception::is_failed(rest_response_vec.value()[i].base_err_code)){
+                            //we got an exception from the base, we know this radixes as not retriable
+
+                            continue;
+                        }
+                    }
                 }
             };
     };
 
-    class InBoundDispatcher: public virtual dg::network_concurrency::WorkerInterface{
+    class RequestDispatcher: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            std::shared_ptr<RequestContainerInterface> inbound_container;
-        
+            std::shared_ptr<WareHouseInterface> warehouse;
+            std::shared_ptr<RequestAuthorizerInterface> request_authorizer;
+            std::shared_ptr<MemcommitRequestorInterface> memcommit_requestor;
+
         public:
 
-            DropBoxDispatcher(std::shared_ptr<RequestContainerInterface> inbound_container) noexcept: inbound_container(std::move(inbound_container)){}
+            RequestDispatcher(std::shared_ptr<WareHouseInterface> warehouse,
+                              std::shared_ptr<RequestAuthorizerInterface> request_authorizer,
+                              std::shared_ptr<MemcommitRequestorInterface> memcommit_requestor) noexcept: warehouse(std::move(warehouse)),
+                                                                                                          request_authorizer(std::move(request_authorizer)),
+                                                                                                          memcommit_requestor(std::move(memcommit_requestor)){}
 
             bool run_one_epoch() noexcept{
 
-                std::optional<dg::string> bstream = dg::network_kernel_mailbox::recv(dg::network_kernel_mailbox::CHANNEL_EXTMEMCOMMIT);
-                
-                if (!static_cast<bool>(bstream)){
-                    return false;
+                dg::vector<Request> request_vec = this->warehouse->pop();
+
+                std::expected<dg::vector<std::expected<AuthorizedRequest, exception_t>>, exception_t> authorized_request_vec    = dg::network_exception::cstyle_initialize<dg::vector<std::expected<AuthorizedRequest, exception_t>>>(request_vec.size());
+                std::expected<dg::vector<AuthorizedRequest>, exception_t> requesting_request_vec                                = dg::network_exception::cstyle_initialize<dg::vector<AuthorizedRequest>>(request_vec.size());
+                size_t requesting_request_vec_sz                                                                                = 0u; 
+
+                if (!authorized_request_vec.has_value()){
+                    for (const Request& request: request_vec){
+                        if (request.exception_handler != nullptr){
+                            request.exception_handler->update(authorized_request_vec.error());
+                        }
+                    }
+
+                    return true;
                 }
 
-                dg::vector<Request> recv_data{};
-                dg::network_compact_serializer::deserialize_into(recv_data, bstream->data());
+                if (!requesting_request_vec.has_value()){
+                    for (const Request& request: request_vec){
+                        if (request.exception_handler != nullptr){
+                            request.exception_handler->update(requesting_request_vec.error());
+                        }
+                    }
 
-                for (Request& request: recv_data){
-                    this->inbound_container->push(std::move(request));
+                    return true;
                 }
+
+                this->request_authroizer->authorize_request(std::make_move_iterator(request_vec.data()), request_vec.size(), authorized_request_vec.data());
+
+                for (size_t i = 0u; i < request_vec.size(); ++i){
+                    if (!authorized_request_vec[i].has_value()){
+                        if (request_vec[i].exception_handler != nullptr){
+                            request_vec[i].exception_handler->update(authorized_request_vec[i].error());
+                        }
+
+                        continue;
+                    }
+
+                    requesting_request_vec.value()[requesting_request_vec_sz++] = std::move(authorized_request_vec[i].value());
+                }
+
+                this->memcommit_requestor->request(std::make_move_iterator(requesting_request_vec.value().data()), requesting_request_vec_sz);
 
                 return true;
             }
     };
 
-    //this is probably questionable - yet I think there's more to RequestCenter than just a warehouse
-    //split the responsibility here for future extension - the implementation is placeholder only - not necessarily the final implementation
-    //the responsibility that could only be extended here is kind request - let's say that signals are compact - injections are expensive - then vectorization sz for each kind should be different 
-    //or anonymous request - think onion - request has random routing and a countdown - mask requestor and requestee
-    //the implementation should be simple - for countdown != 0, randomize peer, change requestor - current, send request -> the randomized peer, track the request in memory for backprop 
-    //not necessary in the next few years - but in the future - where massive P2P network is required - not for computation - but trust issues
-
-    class RequestCenter: public virtual RequestCenterInterface{
+    class DropBox: public virtual dg::network_producer_consumer::ConsumerInterface<Request>{
 
         private:
 
-            dg::vector<dg::network_concurrency::daemon_raii_handle_t> workers;
-            std::shared_ptr<RequestContainerInterface> outbound_container;
-            std::shared_ptr<RequestContainerInterface> inbound_container;
-        
+            std::shared_ptr<WareHouseInterface> warehouse;
+            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
+
         public:
 
-            RequestCenter(dg::vector<dg::network_concurrency::daemon_raii_handle_t> workers,
-                          std::shared_ptr<RequestContainerInterface> outbound_container,
-                          std::shared_ptr<RequestContainerInterface> inbound_container) noexcept: workers(std::move(workers)),
-                                                                                                  outbound_container(std::move(outbound_container)),
-                                                                                                  inbound_container(std::move(inbound_container)){}
-            
-            void send(Request request) noexcept{
+            DropBox(std::shared_ptr<WareHouseInterface> warehouse,
+                    dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec) noexcept: warehouse(std::move(warehouse)),
+                                                                                                    daemon_vec(std::move(daemon_vec)){}
 
-                this->outbound_container->push(std::move(request));
-            }
+            void push(std::move_iterator<Request *> request_arr, size_t sz) noexcept{
 
-            auto recv() noexcept -> std::optional<Request>{
-
-                return this->inbound_container->pop();
-            }
-    };
-
-    class RequestDropBox: public virtual dg::network_raii_producer_consumer::ConsumerInterface<Request>{
-
-        private:
-
-            std::shared_ptr<RequestCenterInterface> request_center;
-        
-        public:
-
-            RequestDropBox(std::shared_ptr<RequestCenterInterface> request_center) noexcept: request_center(std::move(request_center)){}
-
-            void push(dg::vector<Request> request_vec) noexcept{
-
-                for (auto& request: request_vec){
-                    this->request_center->send(std::move(request));
+                if (sz == 0u){
+                    return;
                 }
-            }
-    };
 
-    class RequestProducer: public virtual dg::network_raii_producer_consumer::ProducerInterface<Request>{
+                Request * base_request_arr                                  = request_arr.base();
+                std::expected<dg::vector<Request>, exception_t> request_vec = dg::network_exception::cstyle_initialize<dg::vector<Request>>(sz);
 
-        private:
-
-            std::shared_ptr<RequestCenterInterface> request_center;
-        
-        public:
-
-            RequestProducer(std::shared_ptr<RequestCenterInterface> request_center) noexcept: request_center(std::move(request_center)){}
-
-            auto get(size_t capacity) noexcept -> dg::vector<Request>{
-
-                dg::vector<Request> vec{};
-
-                for (size_t i = 0u; i < capacity; ++i){
-                    std::optional<Request> request = this->request_center->pop();
-
-                    if (!static_cast<bool>(request)){
-                        return vec;
+                if (!request_vec.has_value()){
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (base_request_arr[i].exception_handler != nullptr){
+                            base_request_arr[i].exception_handler->update(request_vec.error());
+                        }
                     }
 
-                    vec.push_back(std::move(request.value()));
+                    return;
                 }
 
-                return vec;
+                static_assert(std::is_nothrow_move_assignable_v<Request>);
+                std::copy(std::make_move_iterator(base_request_arr), std::make_move_iterator(std::next(base_request_arr, sz)), request_vec->begin());
+                exception_t err = this->warehouse->push(std::move(request_vec.value()));
+
+                if (dg::network_exception::is_failed(err)){
+                    for (const Request& request: request_vec.value()){
+                        if (request.exception_handler != nullptr){
+                            request.exception_handler->update(err);
+                        }
+                    }
+                }
             }
     };
 }

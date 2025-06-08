@@ -20,6 +20,8 @@
 
 namespace dg::network_tile_member_access::implementation{
 
+    //alright, we'll work on this component + getsetters for 10 hours
+
     using uma_ptr_t = dg::network_pointer::uma_ptr_t;
 
     static constexpr auto dg_align(size_t alignment_sz, size_t blk_sz) noexcept -> size_t{

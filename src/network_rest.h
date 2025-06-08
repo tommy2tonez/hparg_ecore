@@ -521,7 +521,7 @@ namespace dg::network_rest{
     struct UserLogRetrieveBaseResponse{
         dg::vector<dg::network_postgres_db::model::UserLogEntry> log_vec;
         exception_t retrieve_err_code;
-        
+
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
             reflector(log_vec, retrieve_err_code);

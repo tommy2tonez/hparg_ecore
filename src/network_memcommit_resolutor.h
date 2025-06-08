@@ -16293,14 +16293,16 @@ namespace dg::network_memcommit_resolutor{
                 constexpr void dg_reflect(const Reflector& reflector) const{
                     reflector(dst_region_rcu_addr, dst_region_device_id, 
                               lhs_region_rcu_addr_vec, lhs_region_logit_device_id_vec, lhs_region_grad_device_id_vec,
-                              rhs_region_rcu_addr_vec, rhs_region_logit_device_id_vec, rhs_region_grad_device_id_vec);
+                              rhs_region_rcu_addr_vec, rhs_region_logit_device_id_vec, rhs_region_grad_device_id_vec,
+                              dispatch_platform);
                 }
 
                 template <class Reflector>
                 constexpr void dg_reflect(const Reflector& reflector){
                     reflector(dst_region_rcu_addr, dst_region_device_id,
                               lhs_region_rcu_addr_vec, lhs_region_logit_device_id_vec, lhs_region_grad_device_id_vec,
-                              rhs_region_rcu_addr_vec, rhs_region_logit_device_id_vec, rhs_region_grad_device_id_vec);
+                              rhs_region_rcu_addr_vec, rhs_region_logit_device_id_vec, rhs_region_grad_device_id_vec,
+                              dispatch_platform);
                 }
 
                 template <class Reflector>
