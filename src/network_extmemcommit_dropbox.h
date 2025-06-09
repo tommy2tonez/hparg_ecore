@@ -38,7 +38,7 @@ namespace dg::network_extmemcommit_dropbox{
     //this is important because we only have 2-3 synchronizer worker, when we are waiting for a guy, we are waiting for ... next guys
     //we need to cap the waiting job size (to not explode the global memory consumption and return error as soon as possible) 
 
-    //
+    //we are expecting to do 10GB/s, I will talk about the compact backward conscious buffer next month
 
     struct Request{
         Address requestee;
