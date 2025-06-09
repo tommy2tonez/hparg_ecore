@@ -38,7 +38,9 @@ namespace dg::network_extmemcommit_dropbox{
     //this is important because we only have 2-3 synchronizer worker, when we are waiting for a guy, we are waiting for ... next guys
     //we need to cap the waiting job size (to not explode the global memory consumption and return error as soon as possible) 
 
-    //we are expecting to do 10GB/s, I will talk about the compact backward conscious buffer next month
+    //alright, we have solved the problem of requests, we'll need to force the cap by forcing the "unit size" at the dropbox and CAP the synchronizable + CAP the warehouse, we need to precalulate this to do "implicit controlled internal memory"
+    //Mom made a request about adaptive exhaustion controlled, by building somewhat a "feedback point" of all exhaustion controlled components, we'd want to dynamically adjust the smp release + acquire @ the socket, we'd want 0.1 ms latency 
+    //this is a Machine Learning project that we would do later
 
     struct Request{
         Address requestee;
@@ -94,7 +96,7 @@ namespace dg::network_extmemcommit_dropbox{
         public:
 
             virtual ~SynchronizableWareHouseInterface() noexcept = default;
-            virtual auto push(std::unique_ptr<SynchronizableInterface>&&, std::chrono::nanoseconds max_sync_duration) noexcept -> exception_t = 0;
+            virtual auto push(std::unique_ptr<SynchronizableInterface>&&, std::chrono::nanoseconds sync_duration) noexcept -> exception_t = 0;
             virtual auto pop() noexcept -> std::unique_ptr<SynchronizableInterface> = 0;
     };
 
@@ -134,6 +136,203 @@ namespace dg::network_extmemcommit_dropbox{
 
     class WareHouse: public virtual WareHouseInterface{
 
+        private:
+
+            dg::pow2_cyclic_queue<dg::vector<Request>> request_vec_queue;
+            dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Request>> *, std::binary_semaphore *>> waiting_queue;
+            size_t warehouse_population_sz;
+            size_t warehouse_population_cap;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            WareHouse(dg::pow2_cyclic_queue<dg::vector<Request>> request_vec_queue,
+                      dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Request>> *, std::binary_semaphore *>> waiting_queue,
+                      size_t warehouse_population_sz,
+                      size_t warehouse_population_cap,
+                      std::unique_ptr<std::mutex> mtx) noexcept: request_vec_queue(std::move(request_vec_queue)),
+                                                                 waiting_queue(std::move(waiting_queue)),
+                                                                 warehouse_population_sz(warehouse_population_sz),
+                                                                 warehouse_population_cap(warehouse_population_cap),
+                                                                 mtx(std::move(mtx)){}
+
+            auto push(dg::vector<Request>&& request_vec) noexcept -> exception_t{
+
+                if (request_vec.empty()){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                std::binary_semaphore * releasing_smp = nullptr;
+                exception_t err = [&]() noexcept{
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->waiting_queue.empty()){
+                        auto [fetching_addr, smp]   = this->waiting_queue.front();
+                        this->waiting_queue.pop_front();
+                        *fetching_addr              = std::move(request_vec);
+                        releasing_smp               = smp;
+
+                        return dg::network_exception::SUCCESS;
+                    }
+
+                    if (this->request_vec_queue.size() == this->request_vec_queue.capacity()){
+                        return dg::network_exception::RESOURCE_EXHAUSTION;
+                    }
+
+                    size_t new_warehouse_sz = this->warehouse_population_sz + request_vec.size(); 
+
+                    if (new_warehouse_sz > this->warehouse_population_cap){
+                        return dg::network_exception::RESOURCE_EXHAUSTION;
+                    }
+
+                    this->request_vec_queue.push_back(std::move(request_vec));
+                    this->warehouse_population_sz = new_warehouse_sz;
+
+                    return dg::network_exception::SUCCESS;
+                }();
+
+                if (releasing_smp != nullptr){
+                    releasing_smp->release();
+                }
+
+                return return_err;
+            }
+
+            auto pop() noexcept -> dg::vector<Request>{
+
+                std::binary_semaphore smp(0);
+                std::optional<dg::vector<Request>> request;
+
+                {
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->request_vec_queue.empty()){
+                        auto rs = std::move(this->request_vec_queue.front());
+                        this->request_vec_queue.pop_front();
+                        return rs;
+                    }
+
+                    //we'll see about this
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (this->waiting_queue.size() == this->waiting_queue.capacity()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    this->waiting_queue.push_back(std::make_pair(&request, &smp));
+                }
+
+                smp.acquire();
+                return dg::vector<Request>(std::move(request.value()));
+            }
+    };
+
+    struct SynchronizableTemporalEntry{
+        std::unique_ptr<SynchronizableInterface> synchronizable;
+        std::chrono::time_point<std::chrono::steady_clock> abs_timeout;
+    };
+
+    class SynchronizableWareHouse: public virtual SynchronizableWareHouseInterface{
+
+        private:
+
+            dg::vector<SynchronizableTemporalEntry> priority_queue;
+            dg::pow2_cyclic_queue<std::pair<std::unique_ptr<SynchronizableInterface> *, std::binary_semaphore *>> waiting_queue;
+            size_t priority_queue_cap;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<std::chrono::nanoseconds> max_sync_duration;
+
+        public:
+
+            static inline constexpr greater_cmp = [](const SynchronizableTemporalEntry& lhs, const SynchronizableTemporalEntry& rhs) noexcept{
+                return lhs.abs_timeout > rhs.abs_timeout;
+            };
+
+            SynchronizableWareHouse(dg::vector<SynchronizableTemporalEntry> priority_queue,
+                                    dg::pow2_cyclic_queue<std::pair<std::unique_ptr<SynchronizableInterface> *, std::binary_semaphore *>> waiting_queue,
+                                    size_t priority_queue_cap,
+                                    std::unique_ptr<std::mutex> mtx,
+                                    std::chrono::nanoseconds max_sync_duration) noexcept: priority_queue(std::move(priority_queue)),
+                                                                                          waiting_queue(std::move(waiting_queue)),
+                                                                                          priority_queue_cap(priority_queue_cap),
+                                                                                          mtx(std::move(mtx)),
+                                                                                          max_sync_duration(stdx::hdi_container<std::chrono::nanoseconds>{max_sync_duration}){}
+
+            auto push(std::unique_ptr<SynchronizableInterface>&& synchronizable, std::chrono::nanoseconds sync_duration) noexcept -> exception_t{
+
+                if (synchronizable == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                if (sync_duration > this->max_sync_duration.value){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                std::binary_semaphore * releasing_smp = nullptr;
+
+                exception_t return_err = [&, this]() noexcept{
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->waiting_queue.empty()){
+                        auto [fetching_addr, smp]   = this->waiting_queue.front();
+                        this->waiting_queue.pop_front();
+                        *fetching_addr              = std::move(synchronizable);
+                        releasing_smp               = smp;
+
+                        return dg::network_exception::SUCCESS;
+                    }
+
+                    if (this->priority_queue.size() == this->priority_queue_cap){
+                        return dg::network_exception::RESOURCE_EXHAUSTION;
+                    }
+
+                    auto inserting_entry            = SynchronizableTemporalEntry{.synchronizable   = std::move(synchronizable),
+                                                                                  .abs_timeout      = std::chrono::steady_clock::now() + sync_duration};
+
+                    this->priority_queue.push_back(std::move(inserting_entry));
+                    std::push_heap(this->priority_queue.begin(), this->priority_queue.end(), greater_cmp);
+
+                    return dg::network_exception::SUCCESS;
+                }();
+
+                if (releasing_smp != nullptr){
+                    releasing_smp->release();
+                }
+
+                return return_err;
+            }
+
+            auto pop() noexcept -> std::unique_ptr<SynchronizableInterface>{
+
+                std::binary_semaphore smp(0);
+                std::unique_ptr<SynchronizableInterface> syncable; 
+
+                {
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->priority_queue.empty()){
+                        std::pop_heap(this->priority_queue.begin(), this->priority_queue.end(), greater_cmp);
+                        auto rs = std::move(this->priority_queue.back());
+                        this->priority_queue.pop_back();
+
+                        return rs;
+                    }
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (this->waiting_queue.size() == this->waiting_queue.capacity()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    this->waiting_queue.push_back(std::make_pair(&syncable, &smp));
+                }
+
+                smp.acquire();
+                return syncable;
+            }
     };
 
     class TokenController: public virtual TokenControllerInterface{
@@ -277,9 +476,9 @@ namespace dg::network_extmemcommit_dropbox{
                     feed_resolutor.request_warehouse        = this->request_warehouse;
 
                     size_t trimmed_feed_sz                  = std::min(std::min(this->request_feed_vectorization_sz, dg::network_rest::max_request_size()), valid_request_sz);
-                    size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_feed_sz);
+                    size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_feed_sz);
                     dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
-                    auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_feed_sz, feeder_mem.get()));
+                    auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_feed_sz, feeder_mem.get()));
 
                     for (size_t i = 0u; i < valid_request_sz; ++i){
                         if (dg::network_exception::is_failed(dedicated_id_err_vec.value()[i])){
@@ -290,8 +489,7 @@ namespace dg::network_extmemcommit_dropbox{
                             continue;
                         }
 
-                        auto key = base_authorized_request_arr[i].request.requestee;
-                        dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), key, std::move(base_authorized_request_arr[i]));
+                        dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), std::move(base_authorized_request_arr[i]));
                     }
                 }
             }
@@ -440,103 +638,79 @@ namespace dg::network_extmemcommit_dropbox{
                     }
             };
 
-            struct InternalResolutor: public virtual dg::network_producer_consumer::KVConsumerInterface<Address, DedicatedAuthorizedRequest>{
+            struct InternalResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<AuthorizedRequest>{
 
                 std::shared_ptr<SynchronizableWareHouseInterface> synchronizable_warehouse;
                 std::shared_ptr<WareHouseInterface> request_warehouse;
 
-                //the reason we'd want to do this eventloop is because we cant guarantee that our token duration is good enough
-                //and we can't force bussing threads to wait
-                //bussing threads should be for bussing memory only
-
-                //dedicated wait threads are very cheap, we can spawn 1024 concurrent waiting threads just to synchronize our requests, that's totally fine
-
                 auto make_response_synchronizable(dg::vector<Request>&& request_vec,
-                                                  dg::vector<std::unique_ptr<dg::network_exception::ExceptionHandlerInterface>>&& handler_vec,
                                                   std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>>&& promise) noexcept -> std::expected<std::unique_ptr<InternalSynchronizer>, exception_t>{
 
+                    return dg::network_exception_handler::nothrow_log(dg::network_allocation::cstyle_make_unique<InternalSynchronizer>(std::move(request_vec), 
+                                                                                                                                       std::move(promise)),
+                                                                                                                                       this->request_warehouse);
                 }
 
-                auto to_base_request_vec(const DedicatedAuthorizedRequest * inp_arr, size_t sz) noexcept -> std::expected<dg::vector<Request>, exception_t>{
+                auto to_base_request_vec(std::move_iterator<AuthorizedRequest *> inp_arr, size_t sz) noexcept -> std::expected<dg::vector<Request>, exception_t>{
 
+                    std::expected<dg::vector<Request>, exception_t> rs = dg::network_exception::cstyle_initialize<dg::vector<Request>>(sz);
+
+                    if (!rs.has_value()){
+                        return std::unexpected(rs.error());
+                    }
+
+                    std::copy(inp_arr, std::next(inp_arr, sz), rs->begin());
+                    return rs;
                 }
 
-                void push(const Address& address, std::move_iterator<DedicatedAuthorizedRequest *> auth_request_vec, size_t sz) noexcept{
+                void push(std::move_iterator<AuthorizedRequest *> auth_request_vec, size_t sz) noexcept{
 
-                    DedicatedAuthorizedRequest * auth_request_vec_base = auth_request_vec.base(); 
+                    AuthorizedRequest * auth_request_vec_base = auth_request_vec.base(); 
+                    dg::network_stack_allocation::NoExceptAllocation<dg::network_rest::ExternalMemcommitRequest[]> rest_request_arr(sz);
 
-                    std::expected<dg::vector<dg::network_rest::ExternalMemcommitRequest>, exception_t> rest_request_vec = dg::network_exception::cstyle_initialize<dg::vector<dg::network_rest::ExternalMemcommitRequest>>(sz);
+                    for (size_t i = 0u; i < sz; ++i){
+                        dg::network_rest::ExternalMemcommitRequest rest_request{.requestee  = auth_request_vec_base[i].request.requestee,
+                                                                                .requestor  = dg::network_ip_data::host_addr(),
+                                                                                .timeout    = auth_request_vec_base[i].request.timeout,
+                                                                                .payload    = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_extmemcommit_model::poly_event_t>(auth_request_vec_base[i].request.poly_event)), //
+                                                                                .token      = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(auth_request_vec_base[i].token)),
+                                                                                .request_id = auth_request_vec_base[i].request.request_id};
 
-                    if (!rest_request_vec.has_value()){
+                        static_assert(std::is_nothrow_move_assignable_v<dg::network_rest::ExternalMemcommitRequest>);
+                        rest_request_arr[i] = std::move(rest_request);
+                    }
+
+                    std::expected<std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>>, exception_t> promise = dg::network_rest::requestmany_extnmemcommit(dg::network_rest::get_normal_rest_controller(), rest_request_vec.value());
+
+                    if (!promise.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
-                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.request.exception_handler->update(rest_request_vec.error());
+                            if (auth_request_vec_base[i].request.exception_handler != nullptr){
+                                auth_request_vec_base[i].request.exception_handler->update(promise.error());
                             }
                         }
 
                         return;
                     }
 
-                    std::expected<dg::vector<Request>, exception_t> base_request_vec = this->to_base_request_vec(auth_request_vec_base, sz);
+                    std::expected<dg::vector<Request>, exception_t> base_request_vec = this->to_base_request_vec(std::make_move_iterator(rest_request_arr.get()), sz);
 
                     if (!base_request_vec.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
-                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.request.exception_handler->update(base_request_vec.error());
+                            if (auth_request_vec_base[i].request.exception_handler != nullptr){
+                                auth_request_vec_base[i].request.exception_handler->update(base_request_vec.error());
                             }
                         }
 
                         return;
-                    }
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        dg::network_rest::ExternalMemcommitRequest rest_request{.requestee  = auth_request_vec_base[i].request.request.requestee,
-                                                                                .requestor  = dg::network_ip_data::host_addr(),
-                                                                                .timeout    = auth_request_vec_base[i].request.request.timeout,
-                                                                                .payload    = std::move(auth_request_vec_base[i].request.request.poly_event), //
-                                                                                .token      = std::move(auth_request_vec_base[i].request.token),
-                                                                                .request_id = auth_request_vec_base[i].request_id}; //
-
-                        static_assert(std::is_nothrow_move_assignable_v<dg::network_rest::ExternalMemcommitRequest>);
-                        rest_request_vec.value()[i] = std::move(rest_request);
-                    }
-
-                    std::expected<std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>>, exception_t> rest_response_vec = dg::network_rest::requestmany_extnmemcommit(dg::network_rest::get_normal_rest_controller(), rest_request_vec.value());
-
-                    if (!rest_response_vec.has_value()){
-                        for (size_t i = 0u; i < sz; ++i){
-                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.request.exception_handler->update(rest_response_vec.error());
-                            }
-                        }
-
-                        return;
-                    }
-
-                    std::expected<dg::vector<std::unique_ptr<ExceptionHandlerInterface>>> exception_handler_vec = dg::network_exception::cstyle_initialize<dg::vector<std::unique_ptr<ExceptionHandlerInterface>>>(sz);
-
-                    if (!exception_handler_vec.has_value()){
-                        for (size_t i = 0u; i < sz; ++i){
-                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.request.exception_handler->update(exception_handler_vec.error());
-                            }
-                        }
-
-                        return;
-                    }
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        exception_handler_vec.value()[i] = std::move(auth_request_vec_base[i].request.request.exception_handler);
                     }
 
                     std::expected<std::unique_ptr<InternalSynchronizer>, exception_t> synchronizable = this->make_response_synchronizable(std::move(base_request_vec.value()),
-                                                                                                                                          std::move(exception_handler_vec.value()),
-                                                                                                                                          std::move(rest_response_vec.value()));
+                                                                                                                                          std::move(promise.value()));
 
                     if (!synchronizable.has_value()){
-                        for (size_t i = 0u; i < sz; ++i){
-                            if (exception_handler.value()[i] != nullptr){
-                                exception_handler.value()[i]->update(synchronizable.error());
+                        for (const Request& request: base_request_vec.value()){
+                            if (request.exception_handler != nullptr){
+                                request.exception_handler->update(synchronizable.error());
                             }
                         }
 
