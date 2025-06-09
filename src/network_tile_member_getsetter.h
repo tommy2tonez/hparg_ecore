@@ -40,6 +40,42 @@ namespace dg::network_tile_member_getsetter{
     using dst_info_t            = dg::network_tile_metadata::dst_info_t;
     using timein_t              = dg::network_tile_metadata::timein_t;
 
+    //
+
+    void set_immu_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{
+
+    }
+
+    auto set_immu_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{
+
+    }
+
+    void set_immu_logit_nothrow(uma_ptr_t ptr, void * logit_ptr, size_t logit_bsz) noexcept{
+
+    }
+
+    auto set_immu_logit(uma_ptr_t ptr, void * logit_ptr, size_t logit_bsz) noexcept -> exception_t{
+
+    }
+
+    void set_immu_memevent_operatable_id_nothrow(uma_ptr_t, operatable_id_set_t operatable_id) noexcept{
+
+    }
+
+    auto set_immu_memevent_operatable_id(uma_ptr_t, operatable_id_set_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_immu_forward_operatable_id_nothrow(uma_ptr_t, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_immu_forward_operatable_id(uma_ptr_t, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    //
+
     void set_leaf_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{
 
         static_assert(std::is_trivially_copyable_v<init_status_t>);
@@ -259,6 +295,22 @@ namespace dg::network_tile_member_getsetter{
         set_mono_operatable_id_nothrow(dg::network_tile_member_access::safethrow_mono_ptr_access(ptr), operatable_id);
     }
 
+    void set_mono_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    } 
+
+    auto set_mono_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+    
+    void set_mono_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_mono_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
     void set_mono_forward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
 
         static_assert(std::is_trivially_copyable_v<dispatch_control_t>);
@@ -283,22 +335,6 @@ namespace dg::network_tile_member_getsetter{
     }
 
     auto set_mono_backward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
-
-    }
-
-    void set_mono_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
-
-    }
-
-    auto set_mono_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
-
-    }
-
-    void set_mono_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
-
-    }
-
-    auto set_mono_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
 
     }
 
@@ -333,6 +369,78 @@ namespace dg::network_tile_member_getsetter{
 
     //blkr
 
+    void set_blkr_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{
+
+    }
+
+    auto set_blkr_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{
+
+    }
+
+    void set_blkr_observer_nothrow(uma_ptr_t ptr, const TileObserver& observer, size_t idx) noexcept{
+
+    }
+
+    auto set_blkr_observer(uma_ptr_t ptr, const TileObserver& observer, size_t idx) noexcept -> exception_t{
+
+    }
+
+    void set_blkr_observer_size_nothrow(uma_ptr_t ptr, size_t sz) noexcept{
+
+    }
+
+    auto set_blkr_observer_size(uma_ptr_t ptr, size_t sz) noexcept -> exception_t{
+
+    }
+
+    void set_blkr_logit_nothrow() noexcept{
+
+    }
+
+    auto set_blkr_logit() noexcept -> exception_t{
+
+    }
+
+    void set_blkr_signal_smph_addr_nothrow() noexcept{
+
+    }
+
+    auto set_blkr_signal_smph_addr() noexcept -> exception_t{
+
+    }
+
+    void set_blkr_memevent_operatable_id_nothrow() noexcept{
+
+    }
+
+    auto set_blkr_memevent_operatable_id() noexcept -> exception_t{
+
+    }
+
+    void set_blkr_forward_operatable_id_nothrow() noexcept{
+
+    }
+
+    auto set_blkr_forward_operatable_id() noexcept -> exception_t{
+
+    }
+
+    void set_blkr_forward_dispatch_control_nothrow() noexcept{
+
+    }
+
+    auto set_blkr_forward_dispatch_control() noexcept -> exception_t{
+
+    }
+
+    void set_blkr_descendant_nothrow() noexcept{
+
+    }
+
+    auto set_blkr_descendant() noexcept -> exception_t{
+
+    }
+
     //
 
     void set_pair_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{
@@ -354,7 +462,7 @@ namespace dg::network_tile_member_getsetter{
         set_pair_init_status_nothrow(dg::network_tile_member_access::safethrow_pair_ptr_access(ptr), init_status);
     }
 
-    void set_pair_observer_nothrow(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept{
+    void set_pair_observer_nothrow(uma_ptr_t ptr, const TileObserver& addr, size_t idx) noexcept{
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
         
@@ -368,7 +476,7 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t));
     }
 
-    auto set_pair_observer(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept -> exception_t{
+    auto set_pair_observer(uma_ptr_t ptr, const TileObserver& addr, size_t idx) noexcept -> exception_t{
 
         set_pair_observer_nothrow(dg::network_tile_member_access::safethrow_pair_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     } 
@@ -562,6 +670,156 @@ namespace dg::network_tile_member_getsetter{
         set_pair_right_descendant_nothrow(dg::network_tile_member_access::safethrow_pair_ptr_access(ptr), addr);
     } 
 
+    //poly does another type check to return get/setter errors
+    //the errors are intentional to actually disable certain forward + backward + features getters + setters
+    //so it's important to set_poly_poly_type first
+
+    //this is important
+
+    void set_poly_init_status_nothrow(uma_ptr_t, init_status_t init_status) noexcept{
+
+    }
+
+    auto set_poly_init_status(uma_ptr_t, init_status_t) noexcept -> exception_t{
+
+    }
+
+    void set_poly_observer_nothrow(uma_ptr_t, const TileObserver&, size_t idx) noexcept{
+
+    }
+
+    auto set_poly_observer(uma_ptr_t, const TileObserver&, size_t idx) noexcept -> exception_t{
+
+    }
+
+    void set_poly_observer_size_nothrow(uma_ptr_t, size_t) noexcept{
+
+    }
+
+    auto set_poly_observer_size(uma_ptr_t, size_t) noexcept -> exception_t{
+
+    }
+
+    void set_poly_poly_type_nothrow(uma_ptr_t, poly_tile_t) noexcept{
+
+    }
+
+    auto set_poly_poly_type(uma_ptr_t, poly_tile_t) noexcept -> exception_t{
+
+    }
+
+    void set_poly_logit_nothrow(uma_ptr_t, void * logit_addr, size_t logit_bsz) noexcept{
+
+    }
+
+    auto set_poly_logit(uma_ptr_t, void * logit_addr, size_t logit_bsz) noexcept -> exception_t{
+
+    }
+
+    void set_poly_grad_nothrow(uma_ptr_t, void * grad_addr, size_t grad_bsz) noexcept{
+
+    }
+
+    auto set_poly_grad(uma_ptr_t, void * grad_addr, size_t grad_bsz) noexcept -> exception_t{
+
+    }
+
+    void set_poly_signal_smph_addr_nothrow(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept{
+
+    }
+
+    auto set_poly_signal_smph_addr(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept -> exception_t{
+
+    }
+
+    void set_poly_memevent_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_poly_memevent_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_poly_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_poly_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_poly_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_poly_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_poly_forward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
+
+    }
+
+    auto set_poly_forward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
+
+    }
+
+    void set_poly_backward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
+
+    }
+
+    auto set_poly_backward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
+
+    }
+
+    void set_poly_grad_status_nothrow(uma_ptr_t ptr, grad_status_t grad_status) noexcept{
+
+    }
+
+    auto set_poly_grad_status(uma_ptr_t ptr, grad_status_t grad_status) noexcept -> exception_t{
+
+    }
+
+    void set_poly_pong_count_nothrow(uma_ptr_t ptr, pong_count_t pong_count) noexcept{
+
+    }
+
+    auto set_poly_pong_count(uma_ptr_t ptr, pong_count_t pong_count) noexcept -> exception_t{
+
+    }
+
+    void set_poly_expected_pong_count_nothrow(uma_ptr_t ptr, pong_count_t pong_count) noexcept{
+
+    }
+
+    auto set_poly_expected_pong_count(uma_ptr_t ptr, pong_count_t pong_count) noexcept -> exception_t{
+
+    }
+
+    void set_poly_dispatch_major_nothrow(uma_ptr_t, dispatch_major_t dispatch_major) noexcept{
+
+    }
+
+    auto set_poly_dispatch_major(uma_ptr_t, dispatch_major_t dispatch_major) noexcept -> exception_t{
+
+    }
+
+    void set_poly_left_descendant_nothrow(uma_ptr_t ptr, uma_ptr_t addr) noexcept{
+
+    }
+
+    auto set_poly_left_descendant(uma_ptr_t ptr, uma_ptr_t addr) noexcept -> exception_t{
+
+    }
+
+    void set_poly_right_descendant_nothrow(uma_ptr_t ptr, uma_ptr_t addr) noexcept{
+
+    }
+
+    auto set_poly_right_descendant(uma_ptr_t ptr, uma_ptr_t addr) noexcept -> exception_t{
+
+    }
+
     //
 
     void set_uacm_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{
@@ -583,7 +841,7 @@ namespace dg::network_tile_member_getsetter{
         set_uacm_init_status_nothrow(dg::network_tile_member_access::safethrow_uacm_ptr_access(ptr), init_status);
     }
 
-    void set_uacm_observer_nothrow(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept{
+    void set_uacm_observer_nothrow(uma_ptr_t ptr, const TileObserver& addr, size_t idx) noexcept{
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
 
@@ -597,7 +855,7 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t));
     }
 
-    auto set_uacm_observer(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept -> exception_t{
+    auto set_uacm_observer(uma_ptr_t ptr, const TileObserver& addr, size_t idx) noexcept -> exception_t{
 
         set_uacm_observer_nothrow(dg::network_tile_member_access::safethrow_uacm_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     }
@@ -785,7 +1043,7 @@ namespace dg::network_tile_member_getsetter{
         set_pacm_init_status_nothrow(dg::network_tile_member_access::safethrow_pacm_ptr_access(ptr), init_status);
     }
 
-    void set_pacm_observer_nothrow(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept{ 
+    void set_pacm_observer_nothrow(uma_ptr_t ptr, const TileObserver& addr, size_t idx) noexcept{ 
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
 
@@ -799,7 +1057,7 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t)); 
     }
 
-    auto set_pacm_observer(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept -> exception_t{
+    auto set_pacm_observer(uma_ptr_t ptr, const TileObserver& addr, size_t idx) noexcept -> exception_t{
 
         set_pacm_observer_nothrow(dg::network_tile_member_access::safethrow_pacm_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     }
@@ -1012,13 +1270,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(init_status_t));
     }
 
-    void set_crit_init_status(uma_ptr_t ptr, init_status_t init_status){
+    auto set_crit_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{
 
         set_crit_init_status_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), init_status);
     }
 
-    template <size_t ARR_IDX>
-    void set_crit_observer_nothrow(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>) noexcept{
+    void set_crit_observer_nothrow(uma_ptr_t ptr, const TileObserver& observer, size_t idx) noexcept{
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
 
@@ -1032,13 +1289,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t));
     }
 
-    template <size_t ARR_IDX>
-    void set_crit_observer(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>){
+    auto set_crit_observer(uma_ptr_t ptr, const TileObserver& observer, size_t idx) noexcept -> exception_t{
 
         set_crit_observer_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     } 
 
-    void set_crit_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ>) noexcept{
+    void set_crit_observer_size_nothrow(uma_ptr_t ptr, size_t sz) noexcept{
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
 
@@ -1052,12 +1308,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
     }
 
-    void set_crit_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+    auto set_crit_observer_size(uma_ptr_t ptr, size_t sz) noexcept -> exception_t{
 
         set_crit_observer_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), arr);
     }
 
-    void set_crit_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
+    void set_crit_logit_nothrow(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept{
 
         uma_ptr_t dst   = {};
         void * src      = addr;
@@ -1071,12 +1327,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, cpy_sz);
     }
 
-    void set_crit_logit(uma_ptr_t ptr, void * addr){
+    auto set_crit_logit(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept -> exception_t{
 
         set_crit_logit_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), addr);
     }
-    
-    void set_crit_clogit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
+
+    void set_crit_clogit_nothrow(uma_ptr_t ptr, void * clogit_addr, size_t clogit_bsz) noexcept{
 
         uma_ptr_t dst   = {};
         void * src      = addr;
@@ -1090,12 +1346,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, cpy_sz);
     }
 
-    void set_crit_clogit(uma_ptr_t ptr, void * addr){
+    auto set_crit_clogit(uma_ptr_t ptr, void * clogit_addr, size_t clogit_bsz) noexcept -> exception_t{
         
         set_crit_clogit_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), addr);
     }
 
-    void set_crit_grad_nothrow(uma_ptr_t ptr, void * addr) noexcept{
+    void set_crit_grad_nothrow(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept{
 
         uma_ptr_t dst   = {};
         void * src      = addr;
@@ -1109,12 +1365,20 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, cpy_sz);
     }
 
-    void set_crit_grad(uma_ptr_t ptr, void * addr){
+    auto set_crit_grad(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept -> exception_t{
 
         set_crit_grad_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), addr);
     }
 
-    void set_crit_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+    void set_crit_signal_smph_addr_nothrow(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept{
+
+    }
+
+    auto set_crit_signal_smph_addr(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept -> exception_t{
+
+    }
+
+    void set_crit_memevent_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
 
         static_assert(std::is_trivially_copyable_v<operatable_id_t>);
 
@@ -1128,12 +1392,28 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(operatable_id_t));
     }
 
-    void set_crit_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id){
+    auto set_crit_memevent_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
 
         set_crit_operatable_id_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), operatable_id);
     }
 
-    void set_crit_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
+    void set_crit_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_crit_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_crit_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_crit_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_crit_forward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
 
         static_assert(std::is_trivially_copyable_v<dispatch_control_t>);
 
@@ -1147,29 +1427,34 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(dispatch_control_t));
     }
 
-    void set_crit_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control){
+    auto set_crit_forward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
 
         set_crit_dispatch_control_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), dispatch_control);
     }
 
-    void set_crit_pong_count_nothrow(uma_ptr_t ptr, pong_count_t pong_count) noexcept{
+    void set_crit_backward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
 
-        static_assert(std::is_trivially_copyable_v<pong_count_t>);
-
-        uma_ptr_t dst   = {};
-        void * src      = &pong_count;
-        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
-            dst = Accessor::pong_count_addr(ptr); 
-        };
-
-        dg::network_tile_member_access::get_crit_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_crit_ptr_access(ptr));
-        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(pong_count_t));
     }
 
-    void set_crit_pong_count(uma_ptr_t ptr, pong_count_t pong_count){
+    auto set_crit_backward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
 
-        set_crit_pong_count_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), pong_count);
     }
+
+    void set_crit_grad_status_nothrow(uma_ptr_t ptr, grad_status_t grad_status) noexcept{
+
+    }
+
+    auto set_crit_grad_status(uma_ptr_t ptr, grad_status_t grad_status) noexcept -> exception_t{
+
+    }
+
+    void set_crit_learning_rate_nothrow(uma_ptr_t ptr, crit_learning_rate_t learning_rate) noexcept{
+
+    }
+
+    auto set_crit_learning_rate(uma_ptr_t ptr, crit_learning_rate_t learning_rate) noexcept -> exception_t{
+
+    } 
 
     void set_crit_descendant_nothrow(uma_ptr_t ptr, uma_ptr_t addr) noexcept{
 
@@ -1185,29 +1470,118 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t));
     }
 
-    void set_crit_descendant(uma_ptr_t ptr, uma_ptr_t addr){
+    auto set_crit_descendant(uma_ptr_t ptr, uma_ptr_t addr) noexcept -> exception_t{
 
         set_crit_descendant_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), addr);
-    } 
-
-    void set_crit_kind_nothrow(uma_ptr_t ptr, crit_kind_t crit_kind) noexcept{
-
-        static_assert(std::is_trivially_copyable_v<crit_kind_t>);
-
-        uma_ptr_t dst   = {};
-        void * src      = &crit_kind;
-        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
-            dst = Accessor::crit_kind_addr(ptr);
-        };
-
-        dg::network_tile_member_access::get_crit_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_crit_ptr_access(ptr));
-        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(crit_kind_t));
     }
 
-    void set_crit_kind(uma_ptr_t ptr, crit_kind_t crit_kind){
+    //extnsrc (extnsrc compresses, extnsrx is the shadow of extnsrc, extndst decompresses)
 
-        set_crit_kind_nothrow(dg::network_tile_member_access::safethrow_crit_ptr_access(ptr), crit_kind);
-    }
+    void set_extnsrc_init_status_nothrow(){}
+
+    void set_extnsrc_observer_nothrow(){}
+
+    void set_extnsrc_observer_size_nothrow(){}
+
+    void set_extnsrc_counterpart_nothrow(){}
+
+    void set_extnsrc_counterpart_shadow_nothrow(){}
+
+    void set_extnsrc_request_retry_count_nothrow(){}
+
+    void set_extnsrc_request_timeout_nothrow(){}
+
+    void set_extnsrc_request_logid_nothrow(){}
+
+    void set_extnsrc_logit_nothrow(){}
+
+    void set_extnsrc_grad_nothrow(){}
+
+    void set_extnsrc_signal_smph_addr_nothrow(){}
+
+    void set_extnsrc_memevent_operatable_id_nothrow(){}
+
+    void set_extnsrc_forward_operatable_id_nothrow(){}
+
+    void set_extnsrc_backward_operatable_id_nothrow(){}
+
+    void set_extnsrc_forward_dispatch_control_nothrow(){}
+
+    void set_extnsrc_backward_dispatch_control_nothrow(){}
+
+    void set_extnsrc_grad_status_nothrow(){}
+
+    void set_extnsrc_descendant_nothrow(){}
+
+    //extnsrx
+
+    void set_extnsrx_init_status_nothrow(){}
+
+    void set_extnsrx_logit_nothrow(){}
+
+    // void set_extnsrx_signal_smph_addr_nothrow(){} 
+
+    void set_extnsrx_memevent_operatable_id_nothrow(){}
+
+    void set_extnsrx_forward_operatable_id_nothrow(){}
+
+    // void set_extnsrx_counterpart_nothrow(){}
+
+    //extndst
+
+    void set_extndst_init_status_nothrow(){}
+    
+    void set_extndst_observer_nothrow(){}
+
+    void set_extndst_observer_size_nothrow(){}
+
+    void set_extndst_counterpart_nothrow(){}
+
+    void set_extndst_counterpart_shadow_nothrow(){}
+
+    void set_extndst_request_retry_count_nothrow(){}
+
+    void set_extndst_request_timeout_nothrow(){}
+
+    void set_extndst_logit_nothrow(){}
+
+    void set_extndst_grad_nothrow(){}
+
+    void set_extndst_signal_smph_addr_nothrow(){}
+
+    void set_extndst_memevent_operatable_id_nothrow(){}
+
+    void set_extndst_forward_operatable_id_nothrow(){}
+
+    void set_extndst_backward_operatable_id_nothrow(){}
+
+    void set_extndst_forward_dispatch_control_nothrow(){}
+
+    void set_extndst_backward_dispatch_control_nothrow(){}
+
+    void set_extndst_grad_status_nothrow(){}
+
+    void set_extndst_descendant_nothrow(){}
+
+    //extndsx, we have considered very carefully, the extndsx backprop must be unique, guaranteed by the SigaggSmph to make sure we are not overriding + over transmitting, though that is allowed
+    //we just dont do grad accumulation @ extndsx, it's very messy
+
+    void set_extndsx_init_status_nothrow(){}
+
+    void set_extndsx_grad_nothrow(){}
+
+    // void set_extndsx_signal_smph_addr_nothrow(){}
+
+    void set_extndsx_memevent_operatable_id_nothrow(){}
+
+    void set_extndsx_backward_operatable_id_nothrow(){}
+
+    void set_extndsx_backward_dispatch_control_nothrow(){} 
+
+    void set_extndsx_grad_status_nothrow(){} 
+
+    void set_extndsx_descendant_nothrow(){}
+
     //--
 
     void set_msgrfwd_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{
@@ -1224,13 +1598,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(init_status_t));
     }
 
-    void set_msgrfwd_init_status(uma_ptr_t ptr, init_status_t init_status){
+    auto set_msgrfwd_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{
 
         set_msgrfwd_init_status_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), init_status);
     }
 
-    template <size_t ARR_IDX>
-    void set_msgrfwd_observer_nothrow(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>) noexcept{
+    void set_msgrfwd_observer_nothrow(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept{
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
 
@@ -1244,12 +1617,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t));
     }
 
-    void set_msgrfwd_observer(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>){
+    auto set_msgrfwd_observer(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept -> exception_t{
 
         set_msgrfwd_observer_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     }
 
-    void set_msgrfwd_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+    void set_msgrfwd_observer_size_nothrow(uma_ptr_t ptr, size_t sz) noexcept{
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
 
@@ -1263,12 +1636,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_uma::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
     }
 
-    void set_msgrfwd_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+    auto set_msgrfwd_observer_size(uma_ptr_t ptr, size_t sz) noexcept -> exception_t{
 
         set_msgrfwd_observer_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), arr);
     }
 
-    void set_msgrfwd_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
+    void set_msgrfwd_logit_nothrow(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept{
 
         uma_ptr_t dst   = {};
         void * src      = addr;
@@ -1282,12 +1655,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, cpy_sz);
     }
 
-    void set_msgrfwd_logit(uma_ptr_t ptr, void * addr){
+    auto set_msgrfwd_logit(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept -> exception_t{
 
         set_msgrfwd_logit_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), addr);
     }
 
-    void set_msgrfwd_grad_nothrow(uma_ptr_t ptr, void * addr) noexcept{
+    void set_msgrfwd_grad_nothrow(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept{
 
         uma_ptr_t dst   = {};
         void * src      = addr;
@@ -1301,12 +1674,20 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, cpy_sz);
     } 
 
-    void set_msgrfwd_grad(uma_ptr_t ptr, void * addr){
+    auto set_msgrfwd_grad(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept -> exception_t{
 
         set_msgrfwd_grad_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), addr);
     }
 
-    void set_msgrfwd_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+    void set_msgrfwd_signal_smph_addr_nothrow(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept{
+
+    } 
+
+    auto set_msgrfwd_signal_smph_addr(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept -> exception_t{
+
+    }
+
+    void set_msgrfwd_memevent_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
 
         static_assert(std::is_trivially_copyable_v<operatable_id_t>);
 
@@ -1320,12 +1701,28 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(operatable_id_t));
     }
 
-    void set_msgrfwd_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id){
+    auto set_msgrfwd_memevent_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
 
         set_msgrfwd_operatable_id_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), operatable_id);
     }
 
-    void set_msgrfwd_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
+    void set_msgrfwd_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_msgrfwd_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    void set_msgrfwd_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_msgrfwd_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_msgrfwd_forward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
 
         static_assert(std::is_trivially_copyable_v<dispatch_control_t>);
 
@@ -1339,29 +1736,45 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(dispatch_control_t));
     }
 
-    void set_msgrfwd_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control){
+    auto set_msgrfwd_forward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
 
         set_msgrfwd_dispatch_control_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), dispatch_control);
     }
 
-    void set_msgrfwd_pong_count_nothrow(uma_ptr_t ptr, pong_count_t pong_count) noexcept{
+    void set_msgrfwd_backward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
 
-        static_assert(std::is_trivially_copyable_v<pong_count_t>);
+    }
+
+    auto set_msgrfwd_backward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
+
+    } 
+
+    void set_msgrfwd_grad_status_nothrow(uma_ptr_t ptr, grad_status_t grad_status) noexcept{
+
+    }
+
+    auto set_msgrfwd_grad_status(uma_ptr_t ptr, grad_status_t grad_status) noexcept -> exception_t{
+
+    } 
+
+    void set_msgrfwd_dst_info_nothrow(uma_ptr_t ptr, client_delivery_info_t dst_info) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<dst_info_t>);
 
         uma_ptr_t dst   = {};
-        void * src      = &pong_count; 
+        void * src      = &dst_info;
         auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
-            dst = Accessor::pong_count_addr(ptr);
+            dst = Accessor::dst_info_addr(ptr); 
         };
 
         dg::network_tile_member_access::get_msgrfwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrfwd_ptr_access(ptr));
-        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(pong_count_t));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(dst_info_t));
     }
-    
-    void set_msgrfwd_pong_count(uma_ptr_t ptr, pong_count_t pong_count){
 
-        set_msgrfwd_pong_count_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), pong_count);
-    }
+    auto set_msgrfwd_dst_info(uma_ptr_t ptr, client_delivery_info_t dst_info) noexcept -> exception_t{
+
+        set_msgrfwd_dst_info_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), dst_info);
+    } 
 
     void set_msgrfwd_descendant_nothrow(uma_ptr_t ptr, uma_ptr_t addr) noexcept{
 
@@ -1377,32 +1790,13 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t));
     }
 
-    void set_msgrfwd_descendant(uma_ptr_t ptr, uma_ptr_t addr){
+    auto set_msgrfwd_descendant(uma_ptr_t ptr, uma_ptr_t addr) noexcept -> exception_t{
 
         set_msgrfwd_descendant_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), addr);
     }
 
-    void set_msgrfwd_dst_info_nothrow(uma_ptr_t ptr, dst_info_t dst_info) noexcept{
-
-        static_assert(std::is_trivially_copyable_v<dst_info_t>);
-
-        uma_ptr_t dst   = {};
-        void * src      = &dst_info;
-        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
-            dst = Accessor::dst_info_addr(ptr); 
-        };
-
-        dg::network_tile_member_access::get_msgrfwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrfwd_ptr_access(ptr));
-        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(dst_info_t));
-    }
-
-    void set_msgrfwd_dst_info(uma_ptr_t ptr, dst_info_t dst_info){
-
-        set_msgrfwd_dst_info_nothrow(dg::network_tile_member_access::safethrow_msgrfwd_ptr_access(ptr), dst_info);
-    } 
-
     //
-    
+
     void set_msgrbwd_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{
 
         static_assert(std::is_trivially_copyable_v<init_status_t>);
@@ -1417,13 +1811,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(init_status_t));
     }
 
-    void set_msgrbwd_init_status(uma_ptr_t ptr, init_status_t init_status){
+    auto set_msgrbwd_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{
 
         set_msgrbwd_init_status_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), init_status);
     }
 
-    template <size_t ARR_IDX>
-    void set_msgrbwd_observer_nothrow(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>) noexcept{
+    void set_msgrbwd_observer_nothrow(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept{
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
 
@@ -1437,13 +1830,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t));
     }
 
-    template <size_t ARR_IDX>
-    void set_msgrbwd_observer(uma_ptr_t ptr, uma_ptr_t addr, const std::integral_constant<size_t, ARR_IDX>){
+    auto set_msgrbwd_observer(uma_ptr_t ptr, uma_ptr_t addr, size_t idx) noexcept -> exception_t{
 
         set_msgrbwd_observer_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), addr, std::integral_constant<size_t, ARR_IDX>{});
     }
 
-    void set_msgrbwd_observer_nothrow(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr) noexcept{
+    void set_msgrbwd_observer_size_nothrow(uma_ptr_t ptr, size_t sz) noexcept{
 
         static_assert(std::is_trivially_copyable_v<uma_ptr_t>);
 
@@ -1457,12 +1849,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, OBSERVER_ARR_SZ * sizeof(uma_ptr_t));
     }
 
-    void set_msgrbwd_observer(uma_ptr_t ptr, std::array<uma_ptr_t, OBSERVER_ARR_SZ> arr){
+    auto set_msgrbwd_observer_size(uma_ptr_t ptr, size_t sz) noexcept -> exception_t{
 
         set_msgrbwd_observer_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), arr);
     }
 
-    void set_msgrbwd_logit_nothrow(uma_ptr_t ptr, void * addr) noexcept{
+    void set_msgrbwd_logit_nothrow(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept{
 
         uma_ptr_t dst   = {};
         void * src      = addr;
@@ -1476,12 +1868,12 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, cpy_sz);
     }
 
-    void set_msgrbwd_logit(uma_ptr_t ptr, void * addr){
+    auto set_msgrbwd_logit(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept -> exception_t{
 
         set_msgrbwd_logit_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), addr);
     }
 
-    void set_msgrbwd_grad_nothrow(uma_ptr_t ptr, void * addr) noexcept{
+    void set_msgrbwd_grad_nothrow(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept{
 
         uma_ptr_t dst   = {};
         void * src      = addr;
@@ -1495,12 +1887,20 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, cpy_sz);
     }
 
-    void set_msgrbwd_grad(uma_ptr_t dst, void * addr){
+    auto set_msgrbwd_grad(uma_ptr_t dst, void * grad_addr, size_t grad_bsz) noexcept -> exception_t{
 
         set_msgrbwd_grad_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(dst), addr);
     } 
 
-    void set_msgrbwd_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+    void set_msgrbwd_signal_smph_addr_nothrow(uma_ptr_t dst, std::optional<uma_ptr_t> smph_addr) noexcept{
+
+    }
+
+    auto set_msgrbwd_signal_smph_addr(uma_ptr_t dst, std::optional<uma_ptr_t> smph_addr) noexcept -> exception_t{
+
+    }
+
+    void set_msgrbwd_memevent_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
 
         static_assert(std::is_trivially_copyable_v<operatable_id_t>);
 
@@ -1514,12 +1914,28 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(operatable_id_t));
     }
 
-    void set_msgrbwd_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id){
+    auto set_msgrbwd_memevent_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
 
         set_msgrbwd_operatable_id_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), operatable_id);
     }
 
-    void set_msgrbwd_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
+    void set_msgrbwd_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+
+    }
+
+    auto set_msgrbwd_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_msgrbwd_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{
+        
+    }
+
+    auto set_msgrbwd_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{
+
+    }
+
+    void set_msgrbwd_forward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
 
         static_assert(std::is_trivially_copyable_v<dispatch_control_t>);
 
@@ -1533,29 +1949,53 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(dispatch_control_t));
     }
 
-    void set_msgrbwd_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control){
+    auto set_msgrbwd_forward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
 
         set_msgrbwd_dispatch_control_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), dispatch_control);
     }
 
-    void set_msgrbwd_pong_count_nothrow(uma_ptr_t ptr, pong_count_t pong_count) noexcept{
+    void set_msgrbwd_backward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{
 
-        static_assert(std::is_trivially_copyable_v<pong_count_t>);
-        
+    }
+
+    auto set_msgrbwd_backward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{
+
+    }
+
+    void set_msgrbwd_grad_status_nothrow(uma_ptr_t ptr, grad_status_t grad_status) noexcept{
+
+    }
+
+    auto set_msgrbwd_grad_status(uma_ptr_t ptr, grad_status_t grad_status) noexcept -> exception_t{
+
+    }
+
+    void set_msgrbwd_is_delivered_nothrow(uma_ptr_t ptr, bool is_delivered) noexcept{
+
+    }
+
+    auto set_msgrbwd_is_delivered(uma_ptr_t ptr, bool is_delivered) noexcept -> exception_t{
+
+    }
+
+    void set_msgrbwd_dst_info_nothrow(uma_ptr_t ptr, client_delivery_info_t dst_info) noexcept{
+
+        static_assert(std::is_trivially_copyable_v<dst_info_t>);
+
         uma_ptr_t dst   = {};
-        void * src      = &pong_count;
+        void * src      = &dst_info;
         auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
-            dst = Accessor::pong_count_addr(ptr); 
+            dst = Accessor::dst_info_addr(ptr); 
         };
 
         dg::network_tile_member_access::get_msgrbwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrbwd_ptr_access(ptr));
-        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(pong_count_t));
+        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(dst_info_t));
     }
 
-    void set_msgrbwd_pong_count(uma_ptr_t ptr, pong_count_t pong_count){
+    void set_msgrbwd_dst_info(uma_ptr_t ptr, client_delivery_info_t dst_info){
 
-        set_msgrbwd_pong_count_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), pong_count);
-    }
+        set_msgrbwd_dst_info_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), dst_info);
+    } 
 
     void set_msgrbwd_descendant_nothrow(uma_ptr_t ptr, uma_ptr_t addr) noexcept{
         
@@ -1571,47 +2011,9 @@ namespace dg::network_tile_member_getsetter{
         dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(uma_ptr_t));
     }
 
-    void set_msgrbwd_descendant(uma_ptr_t ptr, uma_ptr_t src){
+    auto set_msgrbwd_descendant(uma_ptr_t ptr, uma_ptr_t addr) noexcept -> exception_t{
 
         set_msgrbwd_descendant_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), src);
-    } 
-    
-    void set_msgrbwd_timein_nothrow(uma_ptr_t ptr, timein_t timein) noexcept{/
-
-        static_assert(std::is_trivially_copyable_v<timein_t>);
-
-        uma_ptr_t dst   = {};
-        void * src      = &timein;
-        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
-            dst = Accessor::timein_addr(ptr); 
-        };
-
-        dg::network_tile_member_access::get_msgrbwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrbwd_ptr_access(ptr));
-        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(timein_t));
-    }
-
-    void set_msgrbwd_timein(uma_ptr_t ptr, timein_t timein){
-
-        set_msgrbwd_timein_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), timein);
-    }
-
-    void set_msgrbwd_dst_info_nothrow(uma_ptr_t ptr, dst_info_t dst_info) noexcept{
-
-        static_assert(std::is_trivially_copyable_v<dst_info_t>);
-
-        uma_ptr_t dst   = {};
-        void * src      = &dst_info;
-        auto cb_lambda  = [&]<class Accessor>(const Accessor) noexcept{
-            dst = Accessor::dst_info_addr(ptr); 
-        };
-
-        dg::network_tile_member_access::get_msgrbwd_static_polymorphic_accessor(cb_lambda, dg::network_tile_member_access::safe_msgrbwd_ptr_access(ptr));
-        dg::network_memops_umax::memcpy_host_to_uma_nothrow(dst, src, sizeof(dst_info_t));
-    }
-
-    void set_msgrbwd_dst_info(uma_ptr_t ptr, dst_info_t dst_info){
-
-        set_msgrbwd_dst_info_nothrow(dg::network_tile_member_access::safethrow_msgrbwd_ptr_access(ptr), dst_info);
     } 
 
     //

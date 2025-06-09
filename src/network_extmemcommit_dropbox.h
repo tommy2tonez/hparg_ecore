@@ -238,6 +238,7 @@ namespace dg::network_extmemcommit_dropbox{
 
                 {
                     auto feed0_resolutor                    = InternalResolutor{};
+                    feed0_resolutor.next_retriable_handler  = nullptr;
 
                     size_t trimmed_feed0_sz                 = std::min(std::min(this->request_feed_vectorization_sz, dg::network_rest::max_request_size()), valid_request_sz);
                     size_t feeder0_allocation_cost          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed0_resolutor, trimmed_feed0_sz);
