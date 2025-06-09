@@ -13,9 +13,14 @@ namespace dg::network_extmemcommit_dropbox{
     //problem is that we can't use shared_ptr for these requests, so we'd have to use std::move_iterator<> all the times
     //the truth is that 99% of the time, the machine spends time to move large buffer arounds, we dont want to fall into that trap
     //it seems very bad to use the move iterator logics, but trust me, that's our biggest savior, from delvrsrv to these unique_ptr moving to etc. 
-    //in this component, we'd want to do a handshake + authentication by using token
-    //we are to make sure that the client has approved our request storm before doing actual requests
-    //this component looks very minimalistic yet sufficient to do most of the request logics, namely the famous re-request that would be the back back bone of our computation tree
+
+    //well we need, we HAVE TO use signal_smph_tile to aggregate roughly 64.000 tiles, worth of at least 1 GB of transfer/ one gatling gun mailchimp
+    //we'd deliver that via our wrapped_dropbox which would further split that do the waitable size -> dropbox -> warehouse -> dispatcher -> get authenticated (cache + batch handshake, this is another request, smh) -> trinity requestor
+
+    //this is roughly 10000x faster request, simply by waiting concurrently many guys, we are to hit the worst wait time of max(arr) instead of latency(e) + latency(e1) + ...
+    //with all the benefits of requests, literally ...
+
+    //best yet, the chance of request not getting responses is close to 0, one every exabytes to due God glitch
 
     struct Request{
         Address requestee;
@@ -41,6 +46,15 @@ namespace dg::network_extmemcommit_dropbox{
     struct Token{
         dg::string token;
         std::chrono::time_point<std::chrono::utc_clock> expiry;
+    };
+
+    class DropBoxInterface{
+
+        public:
+
+            virtual ~DropBoxInterface() noexcept = default;
+            virtual void drop(std::move_iterator<Request *> request_arr, size_t sz) noexcept = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     class WareHouseInterface{
@@ -497,18 +511,21 @@ namespace dg::network_extmemcommit_dropbox{
             }
     };
 
-    class DropBox: public virtual dg::network_producer_consumer::ConsumerInterface<Request>{
+    class DropBox: public virtual DropBoxInterface{
 
         private:
 
             std::shared_ptr<WareHouseInterface> warehouse;
             dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
+            size_t consume_sz_per_load; 
 
         public:
 
             DropBox(std::shared_ptr<WareHouseInterface> warehouse,
-                    dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec) noexcept: warehouse(std::move(warehouse)),
-                                                                                                    daemon_vec(std::move(daemon_vec)){}
+                    dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
+                    size_t consume_sz_per_load) noexcept: warehouse(std::move(warehouse)),
+                                                          daemon_vec(std::move(daemon_vec)),
+                                                          consume_sz_per_load(consume_sz_per_load){}
 
             void push(std::move_iterator<Request *> request_arr, size_t sz) noexcept{
 
@@ -541,6 +558,53 @@ namespace dg::network_extmemcommit_dropbox{
                     }
                 }
             }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->consume_sz_per_load;
+            }
+    };
+
+    class WrappedDropBoxConsumer: public virtual dg::network_producer_consumer::ConsumerInterface<Request>{
+
+        private:
+
+            std::shared_ptr<DropBoxInterface> dropbox;
+            size_t feed_vectorization_sz; 
+
+        public:
+
+            WrappedDropBoxConsumer(std::shared_ptr<DropBoxInterface> dropbox,
+                                   size_t feed_vectorization_sz) noexcept: dropbox(std::move(dropbox)),
+                                                                           feed_vectorization_sz(feed_vectorization_sz){}
+
+            void push(std::move_iterator<Request *> request_arr, size_t sz) noexcept{
+
+                Request * base_request_arr      = request_arr.base();
+
+                auto internal_resolutor         = InternalResolutor{};
+                internal_resolutor.dropbox      = this->dropbox.get();
+
+                size_t trimmed_feed_sz          = std::min(std::min(sz, this->feed_vectorization_sz), this->dropbox->max_consume_size());
+                size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&internal_resolutor, trimmed_feed_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_resolutor, trimmed_feed_sz, feeder_mem.get()));
+
+                for (size_t i = 0u; i < sz; ++i){
+                    dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), std::move(base_request_arr[i]));
+                }
+            }
+        
+        private:    
+            
+            struct InternalResolutor: dg::network_producer_consumer::ConsumerInterface<Request>{
+
+                DropBoxInterface * dropbox;
+
+                void push(std::move_iterator<Request *> request_arr, size_t request_arr_sz) noexcept{
+                    dropbox->drop(request_arr, request_arr_sz);
+                }
+            };
     };
 }
 
