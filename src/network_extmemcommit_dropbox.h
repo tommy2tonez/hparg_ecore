@@ -13,6 +13,9 @@ namespace dg::network_extmemcommit_dropbox{
     //problem is that we can't use shared_ptr for these requests, so we'd have to use std::move_iterator<> all the times
     //the truth is that 99% of the time, the machine spends time to move large buffer arounds, we dont want to fall into that trap
     //it seems very bad to use the move iterator logics, but trust me, that's our biggest savior, from delvrsrv to these unique_ptr moving to etc. 
+    //in this component, we'd want to do a handshake + authentication by using token
+    //we are to make sure that the client has approved our request storm before doing actual requests
+    //this component looks very minimalistic yet sufficient to do most of the request logics, namely the famous re-request that would be the back back bone of our computation tree
 
     struct Request{
         Address requestee;
