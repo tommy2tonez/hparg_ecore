@@ -1530,7 +1530,7 @@ namespace dg::network_tile_member_getsetter{
     //extndst
 
     void set_extndst_init_status_nothrow(){}
-    
+
     void set_extndst_observer_nothrow(){}
 
     void set_extndst_observer_size_nothrow(){}

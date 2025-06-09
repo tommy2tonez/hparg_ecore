@@ -22,6 +22,17 @@ namespace dg::network_extmemcommit_dropbox{
 
     //best yet, the chance of request not getting responses is close to 0, one every exabytes to due God glitch
 
+    //what is wrong???
+    //our resolutor guy is busing the memory very heavily + waiting the request to be callbacked
+    //we are not managing the threads correctly
+
+    //we need to have a guy waiting for the promise, and a guy busing memory to make the request
+    //we'd need to offload the responsibility RIGHT THERE
+    //so there are guys that are dedicated to waiting and there are guys that are dedicated to busing memory
+    //when I'm telling you this is hard, it is hard
+
+    //we need to have somewhat a detached cyclic flow
+
     struct Request{
         Address requestee;
         dg::network_extmemcommit_model::poly_event_t poly_event;
@@ -57,6 +68,14 @@ namespace dg::network_extmemcommit_dropbox{
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
+    class SynchronizableInterface{
+
+        public:
+
+            virtual ~SynchronizableInterface() noexcept = default;
+            virtual void sync() noexcept = 0;
+    };
+
     class WareHouseInterface{
 
         public:
@@ -64,6 +83,14 @@ namespace dg::network_extmemcommit_dropbox{
             virtual ~WareHouseInterface() noexcept = default;
             virtual auto push(dg::vector<Request>&& request_vec) noexcept -> exception_t = 0;
             virtual auto pop() noexcept -> dg::vector<Request> = 0;
+    };
+
+    class SynchronizableWareHouseInterface{
+
+        public:
+
+            virtual auto push(std::unique_ptr<SynchronizableInterface>&&) noexcept -> exception_t = 0;
+            virtual auto pop() noexcept -> std::unique_ptr<SynchronizableInterface> = 0;
     };
 
     class TokenControllerInterface{
@@ -163,16 +190,20 @@ namespace dg::network_extmemcommit_dropbox{
 
             size_t requestid_feed_vectorization_sz;
             size_t request_feed_vectorization_sz;
-            // size_t request2_feed_vectorization_sz; //we probably want to increase the buffer to allow certain leeways, 2 request 1 == 1 request 2, etc.
-            // size_t request3_feed_vectorization_sz; 
+            std::shared_ptr<SynchronizableWareHouseInterface> syncable_warehouse;
+            std::shared_ptr<WareHouseInterface> request_warehouse;
 
         public:
 
             static inline constexpr size_t MAX_REQUEST_RETRY_COUNT = 3u; 
 
             TrinityRequestor(size_t requestid_feed_vectorization_sz,
-                             size_t request_feed_vectorization_sz) noexcept: requestid_feed_vectorization_sz(requestid_feed_vectorization_sz),
-                                                                             request_feed_vectorization_sz(request_feed_vectorization_sz){}
+                             size_t request_feed_vectorization_sz,
+                             std::shared_ptr<SynchronizableWareHouseInterface> syncable_warehouse,
+                             std::shared_ptr<WareHouseInterface> request_warehouse) noexcept: requestid_feed_vectorization_sz(requestid_feed_vectorization_sz),
+                                                                                              request_feed_vectorization_sz(request_feed_vectorization_sz),
+                                                                                              syncable_warehouse(std::move(syncable_warehouse)),
+                                                                                              request_warehouse(std::move(request_warehouse)){}
 
             void request(std::move_iterator<AuthorizedRequest *> authorized_request_arr, size_t sz) noexcept{
 
@@ -254,37 +285,14 @@ namespace dg::network_extmemcommit_dropbox{
                 }
 
                 {
-                    auto feed0_resolutor                    = InternalResolutor{};
-                    feed0_resolutor.next_retriable_handler  = nullptr;
+                    auto feed_resolutor                     = InternalResolutor{};
+                    feed_resolutor.synchronizable_warehouse = this->syncable_warehouse;
+                    feed_resolutor.request_warehouse        = this->request_warehouse;
 
-                    size_t trimmed_feed0_sz                 = std::min(std::min(this->request_feed_vectorization_sz, dg::network_rest::max_request_size()), valid_request_sz);
-                    size_t feeder0_allocation_cost          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed0_resolutor, trimmed_feed0_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder0_mem(feeder0_allocation_cost);
-                    auto feeder0                            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed0_resolutor, trimmed_feed0_sz, feeder0_mem.get()));
-
-                    auto feed1_resolutor                    = InternalResolutor{};
-                    feed1_resolutor.next_retriable_handler  = feeder0.get();
-
-                    size_t trimmed_feed1_sz                 = std::min(std::min(this->request_feed_vectorization_sz, dg::network_rest::max_request_size()), valid_request_sz);
-                    size_t feeder1_allocation_cost          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed1_resolutor, trimmed_feed1_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder1_mem(feeder1_allocation_cost);
-                    auto feeder1                            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed1_resolutor, trimmed_feed1_sz, feeder1_mem.get()));
-
-                    auto feed2_resolutor                    = InternalResolutor{};
-                    feed2_resolutor.next_retriable_handler  = feeder1.get();
-
-                    size_t trimmed_feed2_sz                 = std::min(std::min(this->request_feed_vectorization_sz, dg::network_rest::max_request_size()), valid_request_sz);
-                    size_t feeder2_allocation_cost          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed2_resolutor, trimmed_feed2_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder2_mem(feeder2_allocation_cost);
-                    auto feeder2                            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed2_resolutor, trimmed_feed2_sz, feeder2_mem.get()));
-
-                    size_t feed3_resolutor                  = InternalResolutor{};
-                    feed3_resolutor.next_retriable_handler  = feeder2.get();
-
-                    size_t trimmed_feed3_sz                 = std::min(std::min(this->request_feed_vectorization_sz, dg::network_rest::max_request_size()), valid_request_sz);
-                    size_t feeder3_allocation_cost          = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed3_resolutor, trimmed_feed3_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder3_mem(feeder3_allocation_cost);
-                    auto feeder3                            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed3_resolutor, trimmed_feed3_sz, feeder3_mem.get())); 
+                    size_t trimmed_feed_sz                  = std::min(std::min(this->request_feed_vectorization_sz, dg::network_rest::max_request_size()), valid_request_sz);
+                    size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_feed_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder0_mem(feeder_allocation_cost);
+                    auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_feed_sz, feeder0_mem.get()));
 
                     for (size_t i = 0u; i < valid_request_sz; ++i){
                         if (dg::network_exception::is_failed(dedicated_id_err_vec.value()[i])){
@@ -296,7 +304,7 @@ namespace dg::network_extmemcommit_dropbox{
                         }
 
                         auto key = dedicated_authorized_request_vec.value()[i].request.request.requestee;
-                        dg::network_producer_consumer::delvrsrv_kv_deliver(feeder3.get(), key, std::move(dedicated_authorized_request_vec.value()[i]));
+                        dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), key, std::move(dedicated_authorized_request_vec.value()[i]));
                     }
                 }
             }
@@ -333,7 +341,97 @@ namespace dg::network_extmemcommit_dropbox{
 
             struct InternalResolutor: public virtual dg::network_producer_consumer::KVConsumerInterface<Address, DedicatedAuthorizedRequest>{
 
-                dg::network_producer_consumer::KVDeliveryHandle<Address, DedicatedAuthorizedRequest> * next_retriable_handler; 
+                std::shared_ptr<SynchronizableWareHouseInterface> synchronizable_warehouse;
+                std::shared_ptr<WareHouseInterface> request_warehouse;
+
+                //the reason we'd want to do this eventloop is because we cant guarantee that our token duration is good enough
+                //and we can't force bussing threads to wait
+                //bussing threads should be for bussing memory only
+
+                //dedicated wait threads are very cheap, we can spawn 1024 concurrent waiting threads just to synchronize our requests, that's totally fine
+
+                auto make_response_synchronizable(dg::vector<Request>&& request_vec,
+                                                  dg::vector<std::unique_ptr<dg::network_exception::ExceptionHandlerInterface>>&& handler_vec,
+                                                  std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>>&& promise) noexcept -> std::expected<std::unique_ptr<InternalSynchronizer>, exception_t>{
+                    
+                    auto task = [request_warehouse_cpy  = this->request_warehouse,
+                                 _request_vec           = std::move(request_vec),
+                                 _handler_vec           = std::move(handler_vec),
+                                 _promise               = std::move(promise)]() noexcept{
+                    
+                        dg::vector<dg::network_rest::ExternalMemcommitResponse> response_vec = _promise->get();
+
+                        if constexpr(DEBUG_MODE_FLAG){
+                            if (response_vec.size() != _request_vec.size()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            }
+
+                            if (response_vec.size() != _handler_vec.size()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } 
+                        }
+                        
+                        size_t sz = _request_vec.size();
+
+                        for (size_t i = 0u; i < sz; ++i){
+                            if (dg::network_exception::is_failed(response_vec[i].server_err_code)){
+                                if (dg::network_rest::is_retriable_error(response_vec[i].server_err_code)){
+                                    if (_request_vec[i].retry_count == 0u){
+                                        if (_request_vec[i].exception_handler != nullptr){
+                                            _request_vec[i].exception_handler->update(dg::network_exception::DROPBOX_REQUEST_MAX_RETRY_REACHED); //buff from server_err_cde -> this code
+                                        }
+                                    } else{
+                                        //we'd have to see if this could be through
+
+                                        if (this->next_retriable_handler != nullptr){
+                                            _request_vec[i].retry_count -= 1u;
+                                            // auto key = _request_vec[i].requestee;
+                                            // dg::network_producer_consumer::delvrsrv_kv_deliver(this->next_retriable_handler, key, std::move(auth_request_vec_base[i]));
+
+                                        } else {
+
+                                            //we are to notify that this could not be thru, we'd buff that to the REST_REQUEST_MAX_RETRY_REACHED
+
+                                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
+                                                auth_request_vec_base[i].request.request.exception_handler->update(dg::network_exception::DROPBOX_REQUEST_MAX_RETRY_REACHED);
+                                            }
+                                        }
+                                    }
+                                } else{
+                                    if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
+                                        auth_request_vec_base[i].request.request.exception_handler->update(rest_response_vec.value()[i].server_err_code);
+                                    }
+                                }
+
+                                continue;
+                            }
+
+                            if (dg::network_exception::is_failed(rest_response_vec.value()[i].base_err_code)){
+                                if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
+                                    auth_request_vec_base[i].request.request.exception_handler->update(rest_response_vec.value()[i].base_err_code);
+                                }
+
+                                //we got an exception from the base, we know this radixes as not retriable
+
+                                continue;
+                            }
+
+                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
+                                auth_request_vec_base[i].request.request.exception_handler->update(dg::network_exception::SUCCESS);
+                            }
+
+                            //we are thru, we are to notify that this was thru
+                        }
+                    };
+
+
+                }
+
+                auto to_base_request_vec(const DedicatedAuthorizedRequest * inp_arr, size_t sz) noexcept -> std::expected<dg::vector<Request>, exception_t>{
+
+                }
 
                 void push(const Address& address, std::move_iterator<DedicatedAuthorizedRequest *> auth_request_vec, size_t sz) noexcept{
 
@@ -351,10 +449,12 @@ namespace dg::network_extmemcommit_dropbox{
                         return;
                     }
 
-                    if (!rest_response_vec.has_value()){
+                    std::expected<dg::vector<Request>, exception_t> base_request_vec = this->to_base_request_vec(auth_request_vec_base, sz);
+
+                    if (!base_request_vec.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
                             if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.request.exception_handler->update(rest_response_vec.error());
+                                auth_request_vec_base[i].request.request.exception_handler->update(base_request_vec.error());
                             }
                         }
 
@@ -365,30 +465,32 @@ namespace dg::network_extmemcommit_dropbox{
                         dg::network_rest::ExternalMemcommitRequest rest_request{.requestee  = auth_request_vec_base[i].request.request.requestee,
                                                                                 .requestor  = dg::network_ip_data::host_addr(),
                                                                                 .timeout    = auth_request_vec_base[i].request.request.timeout,
-                                                                                .payload    = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_extmemcommit_model::poly_event_t>(auth_request_vec_base[i].request.request.poly_event)), //
-                                                                                .token      = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(auth_request_vec_base[i].request.token)),
+                                                                                .payload    = std::move(auth_request_vec_base[i].request.request.poly_event), //
+                                                                                .token      = std::move(auth_request_vec_base[i].request.token),
                                                                                 .request_id = auth_request_vec_base[i].request_id}; //
 
                         static_assert(std::is_nothrow_move_assignable_v<dg::network_rest::ExternalMemcommitRequest>);
                         rest_request_vec.value()[i] = std::move(rest_request);
                     }
 
-                    std::expected<dg::vector<dg::network_rest::ExternalMemcommitResponse>, exception_t> rest_response_vec = dg::network_rest::requestmany_extnmemcommit(dg::network_rest::get_normal_rest_controller(), rest_request_vec.value());
-
-                    //we are dealing with three kinds of errors, the client errors, the server errors and the server application errors  
-                    //client errors == std::expected<..., exception_t>, not retriable, we are having internal clients flood
-
-                    //server errors == the REST framework of the server is overloaded, bad traffic, bad requests, bad authentication, etc.
-
-                    //server explicit errors (explicit retriable because of etc. reasons, explicit cease to request because of etc. reasons)
-                    //server implicit errors (timeout + friends)
-
-                    //the application errors (the request was through, yet the application returns error, this is NOT the cachable properties, cachable means that the application response is unique, if the application has already responded, then we have crossed the protected line of the cachable)
+                    std::expected<std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>>, exception_t> rest_response_vec = dg::network_rest::requestmany_extnmemcommit(dg::network_rest::get_normal_rest_controller(), rest_request_vec.value());
 
                     if (!rest_response_vec.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
-                            if (auth_request_vec_base[i].request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.exception_handler->update(rest_response_vec.error());
+                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
+                                auth_request_vec_base[i].request.request.exception_handler->update(rest_response_vec.error());
+                            }
+                        }
+
+                        return;
+                    }
+
+                    std::expected<dg::vector<std::unique_ptr<ExceptionHandlerInterface>>> exception_handler_vec = dg::network_exception::cstyle_initialize<dg::vector<std::unique_ptr<ExceptionHandlerInterface>>>(sz);
+
+                    if (!exception_handler_vec.has_value()){
+                        for (size_t i = 0u; i < sz; ++i){
+                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
+                                auth_request_vec_base[i].request.request.exception_handler->update(exception_handler_vec.error());
                             }
                         }
 
@@ -396,52 +498,33 @@ namespace dg::network_extmemcommit_dropbox{
                     }
 
                     for (size_t i = 0u; i < sz; ++i){
-                        if (dg::network_exception::is_failed(rest_response_vec.value()[i].server_err_code)){
-                            if (dg::network_rest::is_retriable_error(rest_response_vec.value()[i].server_err_code)){
-                                if (auth_request_vec_base[i].request.request.retry_count == 0u){
-                                    if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                        auth_request_vec_base[i].request.request.exception_handler->update(dg::network_exception::DROPBOX_REQUEST_MAX_RETRY_REACHED); //buff from server_err_cde -> this code
-                                    }
-                                } else{
-                                    //we'd have to see if this could be through
+                        exception_handler_vec.value()[i] = std::move(auth_request_vec_base[i].request.request.exception_handler);
+                    }
 
-                                    if (this->next_retriable_handler != nullptr){
-                                        auth_request_vec_base[i].request.request.retry_count -= 1u;
-                                        auto key = auth_request_vec_base[i].request.request.requestee;
-                                        dg::network_producer_consumer::delvrsrv_kv_deliver(this->next_retriable_handler, key, std::move(auth_request_vec_base[i]));
-                                    } else {
+                    std::expected<std::unique_ptr<InternalSynchronizer>, exception_t> synchronizable = this->make_response_synchronizable(std::move(base_request_vec.value()),
+                                                                                                                                          std::move(exception_handler_vec.value()),
+                                                                                                                                          std::move(rest_response_vec.value()));
 
-                                        //we are to notify that this could not be thru, we'd buff that to the REST_REQUEST_MAX_RETRY_REACHED
-
-                                        if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                            auth_request_vec_base[i].request.request.exception_handler->update(dg::network_exception::DROPBOX_REQUEST_MAX_RETRY_REACHED);
-                                        }
-                                    }
-                                }
-                            } else{
-                                if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                    auth_request_vec_base[i].request.request.exception_handler->update(rest_response_vec.value()[i].server_err_code);
-                                }
+                    if (!synchronizable.has_value()){
+                        for (size_t i = 0u; i < sz; ++i){
+                            if (exception_handler.value()[i] != nullptr){
+                                exception_handler.value()[i]->update(synchronizable.error());
                             }
-
-                            continue;
                         }
 
-                        if (dg::network_exception::is_failed(rest_response_vec.value()[i].base_err_code)){
-                            if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.request.exception_handler->update(rest_response_vec.value()[i].base_err_code);
+                        return;
+                    }
+
+                    exception_t err = this->synchronizable_warehouse->push(std::move(synchronizable.value()));
+
+                    if (dg::network_exception::is_failed()){
+                        for (size_t i = 0u; i < sz; ++i){
+                            if (synchronizable.value()->get_callback_vec()[i] != nullptr){
+                                synchronizable.value()->get_callback_vec()[i]->update(err);
                             }
-
-                            //we got an exception from the base, we know this radixes as not retriable
-
-                            continue;
                         }
 
-                        if (auth_request_vec_base[i].request.request.exception_handler != nullptr){
-                            auth_request_vec_base[i].request.request.exception_handler->update(dg::network_exception::SUCCESS);
-                        }
-
-                        //we are thru, we are to notify that this was thru
+                        return;
                     }
                 }
             };
