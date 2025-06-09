@@ -351,12 +351,12 @@ namespace dg::network_extmemcommit_dropbox{
 
                     void sync() noexcept{
 
-                        if constexpr(DEBUG_MODE_FLAG){
-                            if (this->was_sync){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                std::abort();
-                            }
+                        if (this->was_sync){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
 
+                        if constexpr(DEBUG_MODE_FLAG){
                             if (this->promise == nullptr){
                                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                                 std::abort();
@@ -397,7 +397,7 @@ namespace dg::network_extmemcommit_dropbox{
 
                             if (dg::network_exception::is_failed(response_vec[i].base_err_code)){
                                 if (this->request_vec[i].exception_handler != nullptr){
-                                    this->request_vec[i].exception_handler->update(rest_response_vec.value()[i].base_err_code);
+                                    this->request_vec[i].exception_handler->update(response_vec[i].base_err_code);
                                 }
 
                                 //we got an exception from the base, we know this radixes as not retriable
@@ -718,14 +718,15 @@ namespace dg::network_extmemcommit_dropbox{
                     dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), std::move(base_request_arr[i]));
                 }
             }
-        
+
         private:    
-            
+
             struct InternalResolutor: dg::network_producer_consumer::ConsumerInterface<Request>{
 
                 DropBoxInterface * dropbox;
 
                 void push(std::move_iterator<Request *> request_arr, size_t request_arr_sz) noexcept{
+
                     dropbox->drop(request_arr, request_arr_sz);
                 }
             };
