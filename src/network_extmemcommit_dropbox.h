@@ -399,95 +399,20 @@ namespace dg::network_extmemcommit_dropbox{
                         continue;
                     }
 
-                    auto feed_arg = InternalFeedArgument{.dst           = std::move(generic_address.value()),
+                    auto feed_arg = InternalFeedArgument{.generic_dst   = std::move(generic_address.value()),
                                                          .token_output  = std::next(output_arr, i)};
 
                     dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), std::move(feed_arg));
                 }
             }
-        
-        private:
 
-            struct InternalFeedArgument{
-                dg::string generic_dst;
-                std::expected<Token, exception_t> * token_output;
-            };
+        private:
 
             struct Auth2FeedArgument{
                 dg::string generic_dst;
                 dg::string username;
                 dg::string password;
                 std::expected<Token, exception_t> * token_output;
-            };
-
-            struct InternalResolutor: dg::network_producer_consumer::ConsumerInterface<InternalFeedArgument>{
-
-                dg::network_producer_consumer::DeliveryHandle<Auth2FeedArgument> * auth2_feeder;
-
-                void push(std::move_iterator<InternalFeedArgument *> data_arr, size_t sz) noexcept{
-
-                    InternalFeedArgument * base_data_arr    = data_arr.base();
-                    dg::vector<dg::string> generic_dst_vec  = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<dg::string>>(sz));
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        generic_dst_vec[i] = std::move(base_data_arr[i].generic_dst);
-                    }
-
-                    std::expected<dg::vector<dg::network_postgres_db::model::P2PAuthentication>> p2p_auth_vec = dg::network_postgres_db::get_authentication_vec_by_id(generic_dst_vec);
-
-                    if (!p2p_auth_vec.has_value()){
-                        for (size_t i = 0u; i < sz; ++i){
-                            base_data_arr[i].token_output = std::unexpected(p2p_auth_vec.error());
-                        }
-
-                        return;
-                    }
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        switch (p2p_auth_vec.value()[i].authentication_kind){
-                            case dg::network_p2p_authentication::Auth2:
-                            {
-                                std::expected<dg::network_p2p_authentication::Auth2Request, exception_t> auth2_request = dg::network_p2p_authentication::decode_auth2_request_payload(p2p_auth_vec.value()[i].content); 
-
-                                if (!auth2_request.has_value()){
-                                    *base_data_arr[i].token_output  = std::unexpected(auth2_request.error());
-                                } else{
-                                    auto feed_arg                   = Auth2FeedArgument{.dst            = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(generic_dst_vec[i])),
-                                                                                        .username       = std::move(auth2_request->username),
-                                                                                        .password       = std::move(auth2_request->password),
-                                                                                        .token_output   = base_data_arr[i].token_output};
-
-                                    dg::network_producer_consumer::delvrsrv_deliver(this->auth2_feeder, std::move(feed_arg));
-                                }
-
-                                break;
-                            }
-                            case dg::network_p2p_authentication::DedicatedToken:
-                            {
-                                std::expected<dg::network_p2p_authentication::DedicatedToken, exception_t> tok = dg::network_p2p_authentication::decode_dedicated_token_payload(p2p_auth_vec.value()[i].content);
-
-                                if (!tok.has_value()){
-                                    *base_data_arr[i].token_output  = std::unexpected(tok.error());
-                                } else{
-                                    *base_data_arr[i].token_output  = Token{.token   = std::move(tok->token),
-                                                                            .expiry  = std::nullopt};
-                                }
-
-                                break;
-                            }
-                            case dg::network_p2p_authentication::Unspecified:
-                            {
-                                *base_data_arr[i].token_output = std::unexpected(dg::network_exception::REST_P2P_AUTH_UNSPECIFIED);
-                                break;
-                            }
-                            default:
-                            {
-                                *base_data_arr[i].token_output  = std::unexpected(dg::network_exception::INTERNAL_CORRUPTION);
-                                break;
-                            }
-                        }
-                    }
-                }
             };
 
             //we'll worry about security later
@@ -544,6 +469,87 @@ namespace dg::network_extmemcommit_dropbox{
                     }
                 }
             };
+
+            struct InternalFeedArgument{
+                dg::string generic_dst;
+                std::expected<Token, exception_t> * token_output;
+            };
+
+            struct InternalResolutor: dg::network_producer_consumer::ConsumerInterface<InternalFeedArgument>{
+
+                dg::network_producer_consumer::DeliveryHandle<Auth2FeedArgument> * auth2_feeder;
+
+                void push(std::move_iterator<InternalFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    InternalFeedArgument * base_data_arr    = data_arr.base();
+                    dg::vector<dg::string> generic_dst_vec  = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<dg::string>>(sz));
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        generic_dst_vec[i] = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(base_data_arr[i].generic_dst));
+                    }
+
+                    std::expected<dg::vector<std::expected<dg::network_postgres_db::model::P2PAuthentication, exception_t>>, exception_t> p2p_auth_vec = dg::network_postgres_db::get_authentication_vec_by_id(generic_dst_vec);
+
+                    if (!p2p_auth_vec.has_value()){
+                        for (size_t i = 0u; i < sz; ++i){
+                            base_data_arr[i].token_output = std::unexpected(p2p_auth_vec.error());
+                        }
+
+                        return;
+                    }
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (!p2p_auth_vec.value()[i].has_value()){
+                            *base_data_arr[i].token_output = std::unexpected(p2p_auth_vec.value()[i].error()); 
+                            continue;
+                        }
+
+                        switch (p2p_auth_vec.value()[i]->authentication_kind){
+                            case dg::network_p2p_authentication::Auth2:
+                            {
+                                std::expected<dg::network_p2p_authentication::Auth2Request, exception_t> auth2_request = dg::network_p2p_authentication::decode_auth2_request_payload(p2p_auth_vec.value()[i]->content); 
+
+                                if (!auth2_request.has_value()){
+                                    *base_data_arr[i].token_output  = std::unexpected(auth2_request.error());
+                                } else{
+                                    auto feed_arg                   = Auth2FeedArgument{.dst            = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(generic_dst_vec[i])),
+                                                                                        .username       = std::move(auth2_request->username),
+                                                                                        .password       = std::move(auth2_request->password),
+                                                                                        .token_output   = base_data_arr[i].token_output};
+
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->auth2_feeder, std::move(feed_arg));
+                                }
+
+                                break;
+                            }
+                            case dg::network_p2p_authentication::DedicatedToken:
+                            {
+                                std::expected<dg::network_p2p_authentication::DedicatedToken, exception_t> tok = dg::network_p2p_authentication::decode_dedicated_token_payload(p2p_auth_vec.value()[i]->content);
+
+                                if (!tok.has_value()){
+                                    *base_data_arr[i].token_output  = std::unexpected(tok.error());
+                                } else{
+                                    *base_data_arr[i].token_output  = Token{.token   = std::move(tok->token),
+                                                                            .expiry  = std::nullopt};
+                                }
+
+                                break;
+                            }
+                            case dg::network_p2p_authentication::Unspecified:
+                            {
+                                *base_data_arr[i].token_output = std::unexpected(dg::network_exception::REST_P2P_AUTH_UNSPECIFIED);
+                                break;
+                            }
+                            default:
+                            {
+                                *base_data_arr[i].token_output  = std::unexpected(dg::network_exception::INTERNAL_CORRUPTION);
+                                break;
+                            }
+                        }
+                    }
+                }
+            };
+
     };
 
     class TokenController: public virtual TokenCacheControllerInterface{
@@ -565,14 +571,23 @@ namespace dg::network_extmemcommit_dropbox{
             std::unique_ptr<TokenRequestorInterface> token_requestor;
             std::unique_ptr<TokenCacheControllerInterface> token_cache_controller;
             std::chrono::nanoseconds token_expiry_window;
+            size_t insert_feed_sz;
+            size_t tokrequest_feed_sz;
+            size_t tokfetch_feed_sz;
 
         public:
 
             RequestAuthorizer(std::unique_ptr<TokenRequestorInterface> token_requestor,
                               std::unique_ptr<TokenCacheControllerInterface> token_cache_controller,
-                              std::chrono::nanoseconds token_expiry_window) noexcept: token_requestor(std::move(token_requestor)),
-                                                                                      token_cache_controller(std::move(token_cache_controller)),
-                                                                                      token_expiry_window(token_expiry_window){}
+                              std::chrono::nanoseconds token_expiry_window,
+                              size_t insert_feed_sz,
+                              size_t tokrequest_feed_sz,
+                              size_t tokfetch_feed_sz) noexcept: token_requestor(std::move(token_requestor)),
+                                                                 token_cache_controller(std::move(token_cache_controller)),
+                                                                 token_expiry_window(token_expiry_window),
+                                                                 insert_feed_sz(insert_feed_sz),
+                                                                 tokrequest_feed_sz(tokrequest_feed_sz),
+                                                                 tokfetch_feed_sz(tokfetch_feed_sz){}
 
             void authorize_request(std::move_iterator<Request *> request_arr, size_t request_arr_sz, std::expected<AuthorizedRequest, exception_t> * output_arr) noexcept{
 
@@ -582,7 +597,7 @@ namespace dg::network_extmemcommit_dropbox{
                 //we just implement, we dont really care if it is only 1 token or 1024 p2p tokens or 1MM tokens 
 
                 Request * base_request_arr  = request_arr.base();
-                dg::unordered_unstable_map<Address, std::expected<Token, exception_t>> addr_tok_map = this->extract_addr_tok_map(base_request_arr, request_arr_sz);
+                dg::unordered_unstable_map<Address, std::expected<Token, exception_t>> addr_tok_map = dg::network_exception_handler::nothrow_log(this->make_addr_tok_map(base_request_arr, request_arr_sz));
                 size_t actual_addr_sz       = addr_tok_map.size(); 
 
                 {
@@ -641,11 +656,26 @@ namespace dg::network_extmemcommit_dropbox{
                     }
 
                     output_arr[i] = AuthorizedRequest{.request  = std::move(base_request_arr[i]),
-                                                      .token    = std::move(map_ptr->second.value())};
+                                                      .token    = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(map_ptr->second.value()))};
                 }
             }
-        
+
         private:
+
+            static auto make_addr_tok_map(const Request * request_arr, size_t sz) noexcept -> std::expected<dg::unordered_unstable_map<Address, std::expected<Token, exception_t>>, exception_t>{
+
+                try{
+                    dg::unordered_unstable_map<Address, std::expected<Token, exception_t>> rs{};
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        rs.insert(std::make_pair(request_arr[i].requestee, std::expected<Token, exception_t>(dg::network_exception::EXPECTED_NOT_INITIALIZED)));
+                    }
+
+                    return rs;
+                } catch (...){
+                    return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+                }
+            } 
 
             struct TokenInsertArgument{
                 Address addr;
@@ -753,9 +783,12 @@ namespace dg::network_extmemcommit_dropbox{
                                 std::chrono::time_point<std::chrono::utc_clock> leeway_now      = now + this->leeway_latency;
                                 
                                 if (leeway_now < token_expiry){
-                                    *base_data_arr[i].dst   = std::move(token_arr[i].value().value());
+                                    *base_data_arr[i].dst = std::move(token_arr[i].value().value());
                                     continue;
                                 }
+                            } else{
+                                *base_data_arr[i].dst = std::move(token_arr[i].value().value());
+                                continue;
                             }
                         }
 
