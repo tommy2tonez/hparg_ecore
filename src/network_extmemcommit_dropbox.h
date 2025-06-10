@@ -124,7 +124,7 @@ namespace dg::network_extmemcommit_dropbox{
 
             virtual ~TokenCacheControllerInterface() noexcept = default;
             virtual void set_token(const Address * const Token *, size_t, exception_t *) noexcept = 0;
-            virtual void get_token(const Address *, std::optional<Token> *) noexcept = 0;
+            virtual void get_token(const Address *, size_t sz, std::expected<std::optional<Token>, exception_t> *) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
@@ -510,7 +510,7 @@ namespace dg::network_extmemcommit_dropbox{
                                                                                 .password   = std::move(base_data_arr[i].password)};
                     }
 
-                    std::expected<std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::Auth2TokenGenerateResponse>>>, exception_t> promise = dg::network_rest::requestmany_tokengen(request_vec);
+                    std::expected<std::unique_ptr<dg::network_rest::BatchPromise<dg::network_rest::Auth2TokenGenerateResponse>>, exception_t> promise = dg::network_rest::requestmany_tokengen(dg::network_rest::get_normal_rest_controller(), request_vec);
 
                     if (!promise.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
@@ -563,25 +563,187 @@ namespace dg::network_extmemcommit_dropbox{
 
             std::unique_ptr<TokenRequestorInterface> token_requestor;
             std::unique_ptr<TokenCacheControllerInterface> token_controller;
-            size_t max_retry_count;
-            size_t max_timeout;
             std::chrono::nanoseconds token_expiry_window;
 
         public:
 
             RequestAuthorizer(std::unique_ptr<TokenRequestorInterface> token_requestor,
                               std::unique_ptr<TokenCacheControllerInterface> token_controller,
-                              size_t max_retry_count,
-                              size_t max_timeout,
                               std::chrono::nanoseconds token_expiry_window) noexcept: token_requestor(std::move(token_requestor)),
                                                                                       token_controller(std::move(token_controller)),
-                                                                                      max_retry_count(max_retry_count),
-                                                                                      max_timeout(max_timeout),
                                                                                       token_expiry_window(token_expiry_window){}
 
             void authorize_request(std::move_iterator<Request *> request_arr, size_t request_arr_sz, std::expected<AuthorizedRequest, exception_t> * output_arr) noexcept{
 
+                //this component is actually tough to write
+                //we again, would want to stack 3 feeders, we'd fix the problem of requestee by using another map
+                //we usually dont ask why this why that, why token this token that, token is not usually batched etc.
+                //we just implement, we dont really care if it is only 1 token or 1024 p2p tokens or 1MM tokens 
+
+                Request * base_request_arr = request_arr.base();
+                dg::unordered_unstable_map<Address, std::expected<Token, exception_t>> addr_tok_map = this->extract_addr_tok_map(base_request_arr, request_arr_sz);
+
+                {
+                    for (size_t i = 0u; i < sz; ++i){
+                        auto map_ptr = addr_tok_map.find(base_request_arr[i].requestee);
+
+                        if constexpr(DEBUG_MODE_FLAG){
+                            if (map_ptr == addr_tok_map.end()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            }
+                        }
+
+                        auto fetch_arg  = TokenFetcherArgument{.addr    = base_request_arr[i].requestee,
+                                                               .dst     = &map_ptr->second};
+
+                        dg::network_producer_consumer::delvrsrv_deliver(feeder3.get(), std::move(fetch_arg));
+                    }
+                }
+
+                for (size_t i = 0u; i < request_arr_sz; ++i){
+                    auto map_ptr = addr_tok_map.find(base_request_arr[i].requestee);
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (map_ptr == addr_tok_map.end()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    if (!map_ptr->second.has_value()){
+                        output_arr[i] = std::unexpected(map_ptr->second.error());
+                        continue;
+                    }
+
+                    output_arr[i] = AuthorizedRequest{.request  = std::move(base_request_arr[i]),
+                                                      .token    = std::move(map_ptr->second.value())};
+                }
             }
+        
+        private:
+
+            struct TokenInsertArgument{
+                Address addr;
+                Token token;
+            };
+
+            struct TokenInsertFeedResolutor: dg::network_producer_consumer::ConsumerInterface<TokenInsertArgument>{
+
+                TokenCacheControllerInterface * cache_controller;
+
+                void push(std::move_iterator<TokenInsertArgument *> data_arr, size_t sz) noexcept{
+
+                    TokenInsertArgument * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<Token[]> token_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        addr_arr[i]     = std::move(base_data_arr[i].addr);
+                        token_arr[i]    = std::move(base_data_arr[i].token);
+                    }
+
+                    this->cache_controller->set_token(addr_arr.get(), token_arr.get(), exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }
+            };
+
+            struct TokenRequestArgument{
+                Address addr;
+                std::expected<Token, exception_t> * dst;
+            };
+
+            struct TokenRequestFeedResolutor: dg::network_producer_consumer::ConsumerInterface<TokenRequestArgument>{
+
+                dg::network_producer_consumer::DeliveryHandle<TokenInsertArgument> * insert_delivery_handle;
+                TokenRequestorInterface * token_requestor;
+
+                void push(std::move_iterator<TokenRequestArgument *> data_arr, size_t sz) noexcept{
+
+                    TokenRequestArgument * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<Token, exception_t>[]> tok_response_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        addr_arr[i] = base_data_arr[i].addr;
+                    }
+
+                    this->token_requestor->request_token(addr_arr.get(), sz, tok_response_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (!tok_response_arr[i].has_value()){
+                            *base_data_arr[i].dst = std::unexpected(tok_response_arr[i].error());
+                            continue;
+                        }
+
+                        *base_data_arr[i].dst   = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(tok_response_arr[i].value()));
+                        auto feed_arg           = TokenInsertArgument{.addr     = addr_arr[i],
+                                                                      .token    = std::move(tok_response_arr[i].value())};
+
+                        dg::network_producer_consumer::delvrsrv_deliver(this->insert_delivery_handle, std::move(feed_arg));
+                    }
+                }
+            };
+
+            struct TokenFetcherArgument{
+                Address addr;
+                std::expected<Token, exception_t> * dst;
+            };            
+
+            struct TokenFetcherFeedResolutor: dg::network_producer_consumer::ConsumerInterface<TokenFetcherArgument>{
+
+                dg::network_producer_consumer::DeliveryHandle<TokenRequestArgument> * request_delivery_handle;
+                TokenCacheControllerInterface * cache_controller;
+                std::chrono::nanoseconds leeway_latency;
+
+                void push(std::move_iterator<TokenFetcherArgument *> data_arr, size_t sz) noexcept{
+
+                    TokenFetcherArgument * base_data_arr = data_arr.base();
+                    dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<std::optional<Token>, exception_t>[]> token_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        addr_arr[i] = base_data_arr[i].addr;
+                    }
+
+                    this->cache_controller->get_token(addr_arr.get(), sz, token_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (!token_arr[i].has_value()){
+                            *base_data_arr[i].dst   = std::unexpected(token_arr[i].error());
+                            continue;
+                        }
+
+                        if (token_arr[i].value().has_value()){                            
+                            if (token_arr[i].value().value().expiry.has_value()){
+                                std::chrono::time_point<std::chrono::utc_clock> now             = std::chrono::utc_clock::now();
+                                std::chrono::time_point<std::chrono::utc_clock> token_expiry    = token_arr[i].value().value().expiry.value();
+                                std::chrono::time_point<std::chrono::utc_clock> leeway_now      = now + this->leeway_latency;
+                                
+                                if (leeway_now < token_expiry){
+                                    *base_data_arr[i].dst   = std::move(token_arr[i].value().value());
+                                    continue;
+                                }
+                            }
+                        }
+
+                        auto fetch_arg = TokenRequestArgument{.addr = base_data_arr[i].addr,
+                                                              .dst  = base_data_arr[i].dst};
+                        
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(fetch_arg));
+                    }
+                }
+            };
+
+
     };
 
     //this component is, contrary to my beliefs, very hard to write
@@ -739,19 +901,34 @@ namespace dg::network_extmemcommit_dropbox{
                 private:
 
                     dg::vector<Request> request_vec;
-                    std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>> promise;
+                    std::unique_ptr<dg::network_rest::BatchPromise<dg::network_rest::ExternalMemcommitResponse>> promise;
                     std::shared_ptr<WareHouseInterface> request_warehouse;
                     bool was_sync;
 
                 public:
 
                     InternalSynchronizer(dg::vector<Request> request_vec,
-                                         std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>> promise,
+                                         std::unique_ptr<dg::network_rest::BatchPromise<dg::network_rest::ExternalMemcommitResponse>> promise,
                                          std::shared_ptr<WareHouseInterface> request_warehouse) noexcept: request_vec(std::move(request_vec)),
                                                                                                           promise(std::move(promise)),
                                                                                                           request_warehouse(std::move(request_warehouse)),
-                                                                                                          was_sync(false){}
-                    
+                                                                                                          was_sync(false){
+
+                        if constexpr(DEBUG_MODE_FLAG){
+                            if (this->promise == nullptr){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            }
+                        }
+
+                        if constexpr(DEBUG_MODE_FLAG){
+                            if (this->promise->size() != this->request_vec.size()){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            }
+                        }
+                    }
+
                     ~InternalSynchronizer() noexcept{
 
                         this->sync();
@@ -764,21 +941,8 @@ namespace dg::network_extmemcommit_dropbox{
                             std::abort();
                         }
 
-                        if constexpr(DEBUG_MODE_FLAG){
-                            if (this->promise == nullptr){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                std::abort();
-                            }
-                        }
 
                         dg::vector<std::expected<dg::network_rest::ExternalMemcommitResponse, exception_t>> response_vec = this->promise->get();
-
-                        if constexpr(DEBUG_MODE_FLAG){
-                            if (response_vec.size() != this->request_vec.size()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                std::abort();
-                            }
-                        }
 
                         size_t sz           = this->request_vec.size();
                         size_t retriable_sz = 0u; 
@@ -862,7 +1026,7 @@ namespace dg::network_extmemcommit_dropbox{
                 std::shared_ptr<WareHouseInterface> request_warehouse;
 
                 auto make_response_synchronizable(dg::vector<Request>&& request_vec,
-                                                  std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>>&& promise) noexcept -> std::expected<std::unique_ptr<InternalSynchronizer>, exception_t>{
+                                                  std::unique_ptr<dg::network_rest::BatchPromise<dg::network_rest::ExternalMemcommitResponse>>&& promise) noexcept -> std::expected<std::unique_ptr<InternalSynchronizer>, exception_t>{
 
                     return dg::network_exception_handler::nothrow_log(dg::network_allocation::cstyle_make_unique<InternalSynchronizer>(std::move(request_vec), 
                                                                                                                                        std::move(promise)),
@@ -898,7 +1062,7 @@ namespace dg::network_extmemcommit_dropbox{
                         rest_request_arr[i] = std::move(rest_request);
                     }
 
-                    std::expected<std::unique_ptr<dg::network_rest::Promise<dg::vector<dg::network_rest::ExternalMemcommitResponse>>>, exception_t> promise = dg::network_rest::requestmany_extnmemcommit(dg::network_rest::get_normal_rest_controller(), rest_request_vec.value());
+                    std::expected<std::unique_ptr<dg::network_rest::BatchPromise<dg::network_rest::ExternalMemcommitResponse>>, exception_t> promise = dg::network_rest::requestmany_extnmemcommit(dg::network_rest::get_normal_rest_controller(), rest_request_vec.value());
 
                     if (!promise.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
