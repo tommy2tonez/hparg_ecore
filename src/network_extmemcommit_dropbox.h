@@ -396,6 +396,7 @@ namespace dg::network_extmemcommit_dropbox{
 
                     if (!generic_addr.has_value()){
                         output_arr[i] = std::unexpected(generic_address.error());
+                        continue;
                     }
 
                     auto feed_arg = InternalFeedArgument{.dst           = std::move(generic_address.value()),
@@ -451,10 +452,10 @@ namespace dg::network_extmemcommit_dropbox{
                                 if (!auth2_request.has_value()){
                                     *base_data_arr[i].token_output  = std::unexpected(auth2_request.error());
                                 } else{
-                                    auto feed_arg                   = {.dst             = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(generic_dst_vec[i])),
-                                                                       .username        = std::move(auth2_request->username),
-                                                                       .password        = std::move(auth2_request->password),
-                                                                       .token_output    = base_data_arr[i].token_output};
+                                    auto feed_arg                   = Auth2FeedArgument{.dst            = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(generic_dst_vec[i])),
+                                                                                        .username       = std::move(auth2_request->username),
+                                                                                        .password       = std::move(auth2_request->password),
+                                                                                        .token_output   = base_data_arr[i].token_output};
 
                                     dg::network_producer_consumer::delvrsrv_deliver(this->auth2_feeder, std::move(feed_arg));
                                 }
@@ -562,15 +563,15 @@ namespace dg::network_extmemcommit_dropbox{
         private:
 
             std::unique_ptr<TokenRequestorInterface> token_requestor;
-            std::unique_ptr<TokenCacheControllerInterface> token_controller;
+            std::unique_ptr<TokenCacheControllerInterface> token_cache_controller;
             std::chrono::nanoseconds token_expiry_window;
 
         public:
 
             RequestAuthorizer(std::unique_ptr<TokenRequestorInterface> token_requestor,
-                              std::unique_ptr<TokenCacheControllerInterface> token_controller,
+                              std::unique_ptr<TokenCacheControllerInterface> token_cache_controller,
                               std::chrono::nanoseconds token_expiry_window) noexcept: token_requestor(std::move(token_requestor)),
-                                                                                      token_controller(std::move(token_controller)),
+                                                                                      token_cache_controller(std::move(token_cache_controller)),
                                                                                       token_expiry_window(token_expiry_window){}
 
             void authorize_request(std::move_iterator<Request *> request_arr, size_t request_arr_sz, std::expected<AuthorizedRequest, exception_t> * output_arr) noexcept{
@@ -580,24 +581,47 @@ namespace dg::network_extmemcommit_dropbox{
                 //we usually dont ask why this why that, why token this token that, token is not usually batched etc.
                 //we just implement, we dont really care if it is only 1 token or 1024 p2p tokens or 1MM tokens 
 
-                Request * base_request_arr = request_arr.base();
+                Request * base_request_arr  = request_arr.base();
                 dg::unordered_unstable_map<Address, std::expected<Token, exception_t>> addr_tok_map = this->extract_addr_tok_map(base_request_arr, request_arr_sz);
+                size_t actual_addr_sz       = addr_tok_map.size(); 
 
                 {
-                    for (size_t i = 0u; i < sz; ++i){
-                        auto map_ptr = addr_tok_map.find(base_request_arr[i].requestee);
+                    auto insert_feed_resolutor                      = TokenInsertFeedResolutor{};
+                    insert_feed_resolutor.cache_controller          = this->token_cache_controller.get();
 
-                        if constexpr(DEBUG_MODE_FLAG){
-                            if (map_ptr == addr_tok_map.end()){
-                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                                std::abort();
-                            }
-                        }
+                    size_t trimmed_insert_feed_sz                   = std::min(std::min(this->insert_feed_sz, this->token_cache_controller->max_consume_size()), actual_addr_sz);
+                    size_t insert_feeder_allocation_cost            = dg::network_producer_consumer::delvrsrv_allocation_cost(&insert_feed_resolutor, trimmed_insert_feed_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> insert_feeder_mem(insert_feeder_allocation_cost);
+                    auto insert_feeder                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&insert_feed_resolutor, trimmed_insert_feed_sz, insert_feeder_mem.get()));
 
-                        auto fetch_arg  = TokenFetcherArgument{.addr    = base_request_arr[i].requestee,
-                                                               .dst     = &map_ptr->second};
+                    //------------------
 
-                        dg::network_producer_consumer::delvrsrv_deliver(feeder3.get(), std::move(fetch_arg));
+                    auto request_feed_resolutor                     = TokenRequestFeedResolutor{};
+                    request_feed_resolutor.insert_delivery_handle   = insert_feeder.get();
+                    request_feed_resolutor.token_requestor          = this->token_requestor.get();
+
+                    size_t trimmed_request_feed_sz                  = std::min(this->tokrequest_feed_sz, actual_addr_sz);
+                    size_t request_feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_allocation_cost(&request_feed_resolutor, trimmed_request_feed_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> request_feeder_mem(request_feeder_allocation_cost);
+                    auto request_feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&request_feed_resolutor, trimmed_request_feed_sz, request_feeder_mem.get()));
+
+                    //------------------
+
+                    auto tokfetch_feed_resolutor                    = TokenFetcherFeedResolutor{};
+                    tokfetch_feed_resolutor.request_delivery_handle = request_feeder.get();
+                    tokfetch_feed_resolutor.cache_controller        = this->token_cache_controller.get();
+                    tokfetch_feed_resolutor.leeway_latency          = this->token_expiry_window; 
+
+                    size_t trimmed_tokfetch_feed_sz                 = std::min(this->tokfetch_feed_sz, actual_addr_sz);
+                    size_t tokfetch_feeder_allocation_cost          = dg::network_producer_consumer::delvrsrv_allocation_cost(&tokfetch_feed_resolutor, trimmed_tokfetch_feed_sz);
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> tokfetch_feeder_mem(tokfetch_feeder_allocation_cost);
+                    auto tokfetch_feeder                            = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&tokfetch_feed_resolutor, trimmed_tokfetch_feed_sz, tokfetch_feeder_mem.get()));
+
+                    for (auto& map_pair: addr_tok_map){
+                        auto fetch_arg  = TokenFetcherArgument{.addr    = map_pair.first,
+                                                               .dst     = &map_pair.second};
+
+                        dg::network_producer_consumer::delvrsrv_deliver(tokfetch_feeder.get(), std::move(fetch_arg));
                     }
                 }
 
@@ -742,8 +766,6 @@ namespace dg::network_extmemcommit_dropbox{
                     }
                 }
             };
-
-
     };
 
     //this component is, contrary to my beliefs, very hard to write
@@ -937,10 +959,8 @@ namespace dg::network_extmemcommit_dropbox{
                     void sync() noexcept{
 
                         if (this->was_sync){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
+                            return;
                         }
-
 
                         dg::vector<std::expected<dg::network_rest::ExternalMemcommitResponse, exception_t>> response_vec = this->promise->get();
 
@@ -1074,7 +1094,7 @@ namespace dg::network_extmemcommit_dropbox{
                         return;
                     }
 
-                    std::expected<dg::vector<Request>, exception_t> base_request_vec = this->to_base_request_vec(std::make_move_iterator(rest_request_arr.get()), sz);
+                    std::expected<dg::vector<Request>, exception_t> base_request_vec = this->to_base_request_vec(std::make_move_iterator(auth_request_vec_base), sz);
 
                     if (!base_request_vec.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
@@ -1211,6 +1231,13 @@ namespace dg::network_extmemcommit_dropbox{
 
                 if (sz == 0u){
                     return;
+                }
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
                 }
 
                 Request * base_request_arr                                  = request_arr.base();
