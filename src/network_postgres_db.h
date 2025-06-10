@@ -92,7 +92,7 @@ namespace dg::network_postgres_db::model_factory{
     
     using namespace dg::network_postgres_db::model;
 
-    auto make_user(const dg::string&  id, const dg::string&  clearance, const dg::string&  salt, const dg::string&  verifiable) noexcept -> std::expected<User, exception_t>{
+    auto make_user(const dg::string& id, const dg::string&  clearance, const dg::string&  salt, const dg::string&  verifiable) noexcept -> std::expected<User, exception_t>{
 
         if (std::clamp(id.size(), USER_ID_MIN_LENGTH, USER_ID_MAX_LENGTH) != id.size()){
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
