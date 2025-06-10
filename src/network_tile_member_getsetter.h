@@ -1477,110 +1477,160 @@ namespace dg::network_tile_member_getsetter{
 
     //extnsrc (extnsrc compresses, extnsrx is the shadow of extnsrc, extndst decompresses)
 
-    void set_extnsrc_init_status_nothrow(){}
+    void set_extnsrc_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{}
+    auto set_extnsrc_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{}
 
-    void set_extnsrc_observer_nothrow(){}
+    void set_extnsrc_observer_nothrow(uma_ptr_t ptr, const TileObserver& observer, size_t idx) noexcept{}
+    auto set_extnsrc_observer(uma_ptr_t ptr, const TileObserver& observer, size_t idx) noexcept -> exception_t{} 
 
-    void set_extnsrc_observer_size_nothrow(){}
+    void set_extnsrc_observer_size_nothrow(uma_ptr_t ptr, size_t sz) noexcept{}
+    auto set_extnsrc_observer_size(uma_ptr_t ptr, size_t sz) noexcept -> exception_t{}
 
-    void set_extnsrc_counterpart_nothrow(){}
+    void set_extnsrc_counterpart_nothrow(uma_ptr_t ptr, uma_ptr_t counterpart) noexcept{}
+    auto set_extnsrc_counterpart(uma_ptr_t ptr, uma_ptr_t counterpart) noexcept -> exception_t{} 
 
-    void set_extnsrc_counterpart_shadow_nothrow(){}
+    void set_extnsrc_counterpart_shadow_nothrow(uma_ptr_t ptr, uma_ptr_t counterpart_shadow) noexcept{}
+    auto set_extnsrc_counterpart_shadow(uma_ptr_t ptr, uma_ptr_t counterpart_shadow) noexcept -> exception_t{}
 
-    void set_extnsrc_request_retry_count_nothrow(){}
+    void set_extnsrc_request_retry_count_nothrow(uma_ptr_t ptr, uint8_t retry_sz) noexcept{}
+    auto set_extnsrc_request_retry_count(uma_ptr_t ptr, uint8_t retry_sz) noexcept -> exception_t{}
 
-    void set_extnsrc_request_timeout_nothrow(){}
+    void set_extnsrc_request_timeout_nothrow(uma_ptr_t ptr, std::chrono::nanoseconds latency) noexcept{}
+    auto set_extnsrc_request_timeout(uma_ptr_t ptr, std::chrono::nanoseconds latency) noexcept -> exception_t{}
 
-    void set_extnsrc_request_logid_nothrow(){}
+    void set_extnsrc_request_logid_nothrow(uma_ptr_t ptr, uint32_t logid) noexcept{}
+    auto set_extnsrc_request_logid(uma_ptr_t ptr, uint32_t logid) noexcept -> exception_t{}
 
-    void set_extnsrc_logit_nothrow(){}
+    void set_extnsrc_logit_nothrow(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept{}
+    auto set_extnsrc_logit(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept -> exception_t{}
 
-    void set_extnsrc_grad_nothrow(){}
+    void set_extnsrc_grad_nothrow(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept{}
+    auto set_extnsrc_grad(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept -> exception_t{}
 
-    void set_extnsrc_signal_smph_addr_nothrow(){}
+    void set_extnsrc_signal_smph_addr_nothrow(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept{}
+    auto set_extnsrc_signal_smph_addr(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept -> exception_t{}
 
-    void set_extnsrc_memevent_operatable_id_nothrow(){}
+    void set_extnsrc_memevent_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extnsrc_memevent_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extnsrc_forward_operatable_id_nothrow(){}
+    void set_extnsrc_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extnsrc_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extnsrc_backward_operatable_id_nothrow(){}
+    void set_extnsrc_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extnsrc_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extnsrc_forward_dispatch_control_nothrow(){}
+    void set_extnsrc_forward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{}
+    auto set_extnsrc_forward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{} 
 
-    void set_extnsrc_backward_dispatch_control_nothrow(){}
+    void set_extnsrc_backward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{}
+    auto set_extnsrc_backward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{}
 
-    void set_extnsrc_grad_status_nothrow(){}
+    void set_extnsrc_grad_status_nothrow(uma_ptr_t ptr, grad_status_t grad_status) noexcept{}
+    auto set_extnsrc_grad_status(uma_ptr_t ptr, grad_status_t grad_status) noexcept -> exception_t{}
 
-    void set_extnsrc_descendant_nothrow(){}
+    void set_extnsrc_descendant_nothrow(uma_ptr_t ptr, uma_ptr_t descendant) noexcept{}
+    auto set_extnsrc_descendant(uma_ptr_t ptr, uma_ptr_t descendant) noexcept -> exception_t{}
 
-    //extnsrx
+    //extnsrx, extnsrx is not exactly a shadow of extnsrc but rather a "native_container" waiting for extnsrc to arrive + get the logit
+    //we'd flow with the logic for now, because we cant really solve the problem of smph otherwise
 
-    void set_extnsrx_init_status_nothrow(){}
+    void set_extnsrx_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{}
+    auto set_extnsrx_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{}
 
-    void set_extnsrx_logit_nothrow(){}
+    void set_extnsrx_logit_nothrow(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept{}
+    auto set_extnsrx_logit(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept -> exception_t{}
 
-    // void set_extnsrx_signal_smph_addr_nothrow(){} 
+    void set_extnsrx_signal_smph_addr_nothrow(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept{} 
+    auto set_extnsrx_signal_smph_addr(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept -> exception_t{} 
 
-    void set_extnsrx_memevent_operatable_id_nothrow(){}
+    void set_extnsrx_memevent_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extnsrx_memevent_operatable_id(uma_ptr_t operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extnsrx_forward_operatable_id_nothrow(){}
+    void set_extnsrx_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extnsrx_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    // void set_extnsrx_counterpart_nothrow(){}
+    void set_extnsrx_counterpart_nothrow(uma_ptr_t ptr, uma_ptr_t counterpart) noexcept{}
+    auto set_extnsrx_counterpart(uma_ptr_t ptr, uma_ptr_t counterpart) noexcept -> exception_t{}
 
     //extndst
 
-    void set_extndst_init_status_nothrow(){}
+    void set_extndst_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{}
+    auto set_extndst_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{}
 
-    void set_extndst_observer_nothrow(){}
+    void set_extndst_observer_nothrow(uma_ptr_t ptr, const TileObserver& observer, size_t idx) noexcept{}
+    auto set_extndst_observer(uma_ptr_t ptr, const TileObserver& observer, size_t idx) noexcept -> exception_t{} 
 
-    void set_extndst_observer_size_nothrow(){}
+    void set_extndst_observer_size_nothrow(uma_ptr_t ptr, size_t sz) noexcept{}
+    auto set_extndst_observer_size(uma_ptr_t ptr, size_t sz) noexcept -> exception_t{} 
 
-    void set_extndst_counterpart_nothrow(){}
+    void set_extndst_counterpart_nothrow(uma_ptr_t ptr, uma_ptr_t counterpart) noexcept{}
+    auto set_extndst_counterpart(uma_ptr_t ptr, uma_ptr_t counterpart) noexcept -> exception_t{}
 
-    void set_extndst_counterpart_shadow_nothrow(){}
+    void set_extndst_counterpart_shadow_nothrow(uma_ptr_t ptr, uma_ptr_t counterpart_shadow) noexcept{}
+    auto set_extndst_counterpart_shadow(uma_ptr_t ptr, uma_ptr_t counterpart_shadow) noexcept -> exception_t{} 
 
-    void set_extndst_request_retry_count_nothrow(){}
+    void set_extndst_request_retry_count_nothrow(uma_ptr_t ptr, uint8_t retry_sz) noexcept{}
+    auto set_extndst_request_retry_count(uma_ptr_t ptr, uint8_t retry_sz) noexcept -> exception_t{} 
 
-    void set_extndst_request_timeout_nothrow(){}
+    void set_extndst_request_timeout_nothrow(uma_ptr_t ptr, std::chrono::nanoseconds latency) noexcept{}
+    auto set_extndst_request_timeout(uma_ptr_t ptr, std::chrono::nanoseconds latency) noexcept -> exception_t{}
 
-    void set_extndst_logit_nothrow(){}
+    void set_extndst_logit_nothrow(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept{}
+    auto set_extndst_logit(uma_ptr_t ptr, void * logit_addr, size_t logit_bsz) noexcept -> exception_t{}
 
-    void set_extndst_grad_nothrow(){}
+    void set_extndst_grad_nothrow(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept{}
+    auto set_extndst_grad(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept -> exception_t{}
 
-    void set_extndst_signal_smph_addr_nothrow(){}
+    void set_extndst_signal_smph_addr_nothrow(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept{}
+    auto set_extndst_signal_smph_addr(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept -> exception_t{}
 
-    void set_extndst_memevent_operatable_id_nothrow(){}
+    void set_extndst_memevent_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extndst_memevent_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extndst_forward_operatable_id_nothrow(){}
+    void set_extndst_forward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extndst_forward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extndst_backward_operatable_id_nothrow(){}
+    void set_extndst_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extndst_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extndst_forward_dispatch_control_nothrow(){}
+    void set_extndst_forward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{}
+    auto set_extndst_forward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{}
 
-    void set_extndst_backward_dispatch_control_nothrow(){}
+    void set_extndst_backward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{}
+    auto set_extndst_backward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{}
 
-    void set_extndst_grad_status_nothrow(){}
+    void set_extndst_grad_status_nothrow(uma_ptr_t ptr, grad_status_t grad_status) noexcept{}
+    auto set_extndst_grad_status(uma_ptr_t ptr, grad_status_t grad_status) noexcept -> exception_t{}
 
-    void set_extndst_descendant_nothrow(){}
+    void set_extndst_descendant_nothrow(uma_ptr_t ptr, uma_ptr_t descendant) noexcept{}
+    auto set_extndst_descendant(uma_ptr_t ptr, uma_ptr_t descendant) noexcept -> exception_t{}
 
     //extndsx, we have considered very carefully, the extndsx backprop must be unique, guaranteed by the SigaggSmph to make sure we are not overriding + over transmitting, though that is allowed
     //we just dont do grad accumulation @ extndsx, it's very messy
 
-    void set_extndsx_init_status_nothrow(){}
+    void set_extndsx_init_status_nothrow(uma_ptr_t ptr, init_status_t init_status) noexcept{}
+    auto set_extndsx_init_status(uma_ptr_t ptr, init_status_t init_status) noexcept -> exception_t{}
 
-    void set_extndsx_grad_nothrow(){}
+    void set_extndsx_grad_nothrow(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept{}
+    auto set_extndsx_grad(uma_ptr_t ptr, void * grad_addr, size_t grad_bsz) noexcept -> exception_t{}
 
-    // void set_extndsx_signal_smph_addr_nothrow(){}
+    void set_extndsx_signal_smph_addr_nothrow(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept{}
+    auto set_extndsx_signal_smph_addr(uma_ptr_t ptr, std::optional<uma_ptr_t> smph_addr) noexcept -> exception_t{}
 
-    void set_extndsx_memevent_operatable_id_nothrow(){}
+    void set_extndsx_memevent_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extndsx_memevent_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extndsx_backward_operatable_id_nothrow(){}
+    void set_extndsx_backward_operatable_id_nothrow(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept{}
+    auto set_extndsx_backward_operatable_id(uma_ptr_t ptr, operatable_id_t operatable_id) noexcept -> exception_t{}
 
-    void set_extndsx_backward_dispatch_control_nothrow(){} 
+    void set_extndsx_backward_dispatch_control_nothrow(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept{}
+    auto set_extndsx_backward_dispatch_control(uma_ptr_t ptr, dispatch_control_t dispatch_control) noexcept -> exception_t{} 
 
-    void set_extndsx_grad_status_nothrow(){} 
+    void set_extndsx_grad_status_nothrow(uma_ptr_t ptr, grad_status_t grad_status) noexcept{}
+    auto set_extndsx_grad_status(uma_ptr_t ptr, grad_status_t grad_status) noexcept -> exception_t{} 
 
-    void set_extndsx_descendant_nothrow(){}
+    void set_extndsx_descendant_nothrow(uma_ptr_t ptr, uma_ptr_t descendant) noexcept{}
+    auto set_extndsx_descendant(uma_ptr_t ptr, uma_ptr_t descendant) noexcept -> exception_t{}
 
     //--
 
@@ -2386,7 +2436,8 @@ namespace dg::network_tile_member_getsetter{
         set_tile_pong_count_nothrow(dg::network_tile_member_access::safethrow_tile_ptr_access(ptr), pong_count);
     } 
     
-    //
+    //this is getting very headache
+    //I think at least 10000 lines just to implement the get/setters correctly
 
     auto get_leaf_rcu_addr_nothrow(uma_ptr_t ptr) noexcept -> uma_ptr_t{
 
