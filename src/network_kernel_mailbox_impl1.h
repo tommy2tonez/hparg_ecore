@@ -127,10 +127,10 @@ namespace dg::network_kernel_mailbox_impl1::model{
         }
     };
 
-    struct ConnectivityEntry{
-        std::chrono::time_point<std::chrono::utc_clock> connect_attempt_ts;
-        bool was_responded;
-    };
+    // struct ConnectivityEntry{
+    //     std::chrono::time_point<std::chrono::utc_clock> connect_attempt_ts;
+    //     bool was_responded;
+    // };
 
     //its complicated, we want to use __uint128_t to store unordered_set fling
     //we must use __uint128_t to store unordered_set fling
@@ -341,17 +341,6 @@ namespace dg::network_kernel_mailbox_impl1::external_interface{
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
-
-    class ConnectivityControllerInterface{
-
-        public:
-
-            virtual ~ConnectivityControllerInterface() noexcept = default;
-            virtual void is_connectable(model::Address *, size_t, std::expected<bool, exception_t> *) noexcept = 0;
-            virtual void outbound(model::Address *, size_t, exception_t *) noexcept = 0; 
-            virtual void inbound(model::Address *, size_t, exception_t *) noexcept = 0;
-            virtual auto max_consume_size() noexcept -> size_t = 0;
-    };
 
     class SchedulerInterface{
 
@@ -1264,401 +1253,6 @@ namespace dg::network_kernel_mailbox_impl1::semaphore_impl{
 }
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
-
-    //we can't really solve all of the connectivity problems
-    //yet this would reduce some of the connectivity problems
-    //ideally, we'd want to call connect() and wait for response before literally doing ANYTHING, that would be called connection-oriented, which introduces tons of latency which we really dont know how to solve
-    //we'll consider the approach, for now, this is fine
-
-    //the problem is that sometimes, an IP in a green list is not thru for various reasons, being blocked, bad traffic, sharks, or saturated bandwidth, etc.
-    //we dont want to further worsen the problem by being not diplomatic (keep sending requests with no responses)
-
-    //so we'd do a 120s interval reset, 10 seconds latency response
-    //which would, on average put the other 110s in the diplomatic range, which is 11/12 of the time, which is mostly diplomatic
-    //for this protocol, we assume that the transmission bandwidth is uniform
-    //there is no 2.5 MB/s and 10GB/s for one connection and another
-    //alright, this is hard to grasp but we'd attempt to control that at the cron job of extnsrc + extnsrx + extndsx + extndst, because every transmission controlled protocol is very short-sighted
-
-    //we'd do something called a convoluted + controlled + optimized plan of forward + backward
-    //such the plan would accurate every transmission of network from A -> B, see the network from the hollistic perspective to make the rightest decision
-
-    //we have considered every possible scenerio of doing sockets
-    //this is the right approach for the tile transportation
-
-    //we'll talk about the preplanned broadcast later
-    //like stock broadcast or movie broadcast or whatever broadcast that involves a predeterministic path of transportation
-    //this broadcast needs to compress (0.01% compression rate)
-    //this is the superior cache that people talked about
-    //in the sense that everything cache could do, we can do it better, by actually keeping the node on the filesystem to do cache retrival at a later time
-
-    //we are doing 10GB of socket/s with 10.000 memory orderings/s with literally no latency overhead (even though we could offset the cost by using NUMA affinity, we still need to decrease the number of total memory orderings) 
-    //we just need to pad the number of socket packet/s, we'll be fine
-
-    class ConnectivityController: public virtual ConnectivityControllerInterface,
-                                  public virtual UpdatableInterface{
-        
-        private:
-                                    
-            dg::unordered_unstable_map<model::Address, model::ConnectivityEntry> connectivity_table;
-            size_t connectivity_table_cap;
-            std::chrono::nanoseconds connectivity_lost_threshold;
-            std::unique_ptr<std::mutex> mtx;
-            stdx::hdi_container<size_t> consume_sz_per_load;
-
-        public:
-            
-            static inline constexpr size_t TICKING_CLOCK_RESOLUTION = 1024u;
-
-            ConnectivityController(dg::unordered_unstable_map<model::Address, model::ConnectivityEntry> connectivity_table,
-                                   size_t connectivity_table_cap,
-                                   std::chrono::nanoseconds connectivity_lost_threshold,
-                                   std::unique_ptr<std::mutex> mtx,
-                                   size_t consume_sz_per_load) noexcept: connectivity_table(std::move(connectivity_table)),
-                                                                         connectivity_table_cap(connectivity_table_cap),
-                                                                         connectivity_lost_threshold(connectivity_lost_threshold),
-                                                                         mtx(std::move(mtx)),
-                                                                         consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
-
-            void is_connectable(model::Address * addr_arr, size_t addr_arr_sz, std::expected<bool, exception_t> * output_arr) noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                auto clock = dg::ticking_clock<std::chrono::utc_clock>(TICKING_CLOCK_RESOLUTION); 
-
-                for (size_t i = 0u; i < addr_arr_sz; ++i){
-                    auto map_ptr = this->connectivity_table.find(addr_arr[i]); 
-
-                    if (map_ptr == this->connectivity_table.end()){
-                        output_arr[i] = true;
-                        continue;
-                    }
-
-                    if (map_ptr->second.was_responded){
-                        output_arr[i] = true;
-                        continue;
-                    }
-
-                    std::chrono::timepoint<std::chrono::utc_clock> expiry_threshold = map_ptr->second.connect_attempt_ts + this->connectivity_lost_threshold;
-                    
-                    if (clock.get() < expiry_threshold){
-                        output_arr[i] = true;
-                        continue;
-                    }
-
-                    output_arr[i] = false;
-                }
-            }
-
-            void outbound(model::Address * addr_arr, size_t addr_arr_sz, exception_t * exception_arr) noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                auto clock = dg::ticking_clock<std::chrono::utc_clock>(TICKING_CLOCK_RESOLUTION); 
-
-                for (size_t i = 0u; i < addr_arr_sz; ++i){
-                    auto map_ptr = this->connectivity_table.find(addr_arr[i]);
-
-                    if (map_ptr != this->connectivity_table.end()){
-                        exception_arr[i] = dg::network_exception::SUCCESS;
-                        continue;
-                    }
-
-                    if (this->connectivity_table.size() == this->connectivity_table_cap){
-                        exception_arr[i] = dg::network_exception::RESOURCE_EXHAUSTION;
-                        continue;
-                    }
-
-                    auto [insert_status, _] = this->connectivity_table.insert(std::make_pair(addr_arr[i], model::ConnectivityEntry{.connect_attempt_ts  = clock.get(),
-                                                                                                                                   .was_repsonded       = false}));
-
-                    if constexpr(DEBUG_MODE_FLAG){
-                        if (!insert_status){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                        }
-                    }
-
-                    exception_arr[i] = dg::network_exception::SUCCESS;
-                }
-            }
-
-            void inbound(model::Address * addr_arr, size_t addr_arr_sz, exception_t * exception_arr) noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                auto clock = dg::ticking_clock<std::chrono::utc_clock>(TICKING_CLOCK_RESOLUTION); 
-
-                for (size_t i = 0u; i < addr_arr_sz; ++i){
-                    auto map_ptr = this->connectivity_table.find(addr_arr[i]);
-
-                    if (map_ptr != this->connectivity_table.end()){
-                        map_ptr->second.was_responded = true;
-                        exception_arr[i] = dg::network_exception::SUCCESS;
-                        continue;
-                    }
-
-                    if (this->connectiviy_table.size() == this->connectivity_table_cap){
-                        exception_arr[i] = dg::network_exception::RESOURCE_EXHAUSTION;
-                        continue;
-                    }
-
-                    auto [insert_status, _] = this->connectivity_table.insert(std::make_pair(addr_arr[i], model::ConnectivityEntry{.connect_attempt_ts  = clock.get(),
-                                                                                                                                   .was_responded       = true}));
-
-                    if constexpr(DEBUG_MODE_FLAG){
-                        if (!insert_status){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                        }
-                    }
-
-                    exception_arr[i] = dg::network_exception::SUCCESS;
-                }
-            }
-
-            void update() noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                this->connectivity_table.clear();
-            }
-
-            auto max_consume_size() noexcept -> size_t{
-
-                return this->consume_sz_per_load.value;
-            }
-    };
-
-    class DistributedConnectivityController: public virtual ConnectivityControllerInterface{
-
-        private:
-
-            std::unique_ptr<std::unique_ptr<ConnectivityController>[]> base_connectivity_controller_arr;
-            size_t pow2_arr_sz;
-            size_t feed_vectorization_sz;
-            size_t consume_sz_per_load;
-
-        public:
-
-            DistributedConnectivityController(std::unique_ptr<std::unique_ptr<ConnectivityController>[]> base_connectivity_controller_arr,
-                                              size_t pow2_arr_sz,
-                                              size_t feed_vectorization_sz,
-                                              size_t consume_sz_per_load) noexcept: base_connectivity_controller_arr(std::move(base_connectivity_controller_arr)),
-                                                                                    pow2_arr_sz(pow2_arr_sz),
-                                                                                    feed_vectorization_sz(feed_vectorization_sz),
-                                                                                    consume_sz_per_load(consume_sz_per_load){}
-
-            void is_connectable(model::Address * addr_arr, size_t addr_arr_sz, std::expected<bool, exception_t> * output_arr) noexcept{
-
-                auto internal_resolutor                 = InternalIsConnectableFeedResolutor{};
-                internal_resolutor.controller_arr       = this->base_connectivity_controller_arr.get();
-
-                size_t trimmed_feed_vectorization_sz    = std::min(this->feed_vectorization_sz, addr_arr_sz);
-                size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_feed_vectorization_sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
-                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_feed_vectorization_sz, feeder_mem.get()));
-
-                //premature optimization
-
-                std::fill(output_arr, std::next(output_arr, addr_arr_sz), std::expected<bool, exception_t>(true));
-
-                for (size_t i = 0u; i < addr_arr_sz; ++i){    
-                    size_t hash_value   = dg::network_hash::hash_reflectible(addr_arr[i]);
-                    size_t arr_idx      = hash_value & (this->pow2_arr_sz - 1u);
-                    auto feed_arg       = InternalIsConnectableFeedArgument{};
-                    feed_arg.addr       = addr_arr[i];
-                    feed_arg.out_ptr    = std::next(output_arr, i); 
-
-                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), arr_idx, feed_arg);
-                }
-
-            }
-
-            void outbound(model::Address * addr_arr, size_t addr_arr_sz, exception_t * exception_arr) noexcept{
-
-                auto internal_resolutor                 = InternalOutBoundFeedResolutor{};
-                internal_resolutor.controller_arr       = this->base_connectivity_controller_arr.get();
-
-                size_t trimmed_feed_vectorization_sz    = std::min(this->feed_vectorization_sz, addr_arr_sz);
-                size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_feed_vectorization_sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
-                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_feed_vectorization_sz, feeder_mem.get()));
-
-                std::fill(exception_arr, std::next(exception_arr, addr_arr_sz), dg::network_exception::SUCCESS);
-
-                for (size_t i = 0u; i < addr_arr_sz, ++i){
-                    size_t hash_value       = dg::network_hash::hash_reflectible(addr_arr[i]);
-                    size_t arr_idx          = hash_value & (this->pow2_arr_sz - 1u);
-                    auto feed_arg           = InternalOutBoundFeedArgument{};
-                    feed_arg.addr           = addr_arr[i];
-                    feed_arg.exception_ptr  = std::next(exception_arr, i);
-
-                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), arr_idx, feed_arg);
-                }
-            }
-
-            void inbound(model::Address * addr_arr, size_t addr_arr_sz, exception_t * exception_arr) noexcept{
-
-                auto internal_resolutor                 = InternalInBoundFeedResolutor{};
-                internal_resolutor.controller_arr       = this->base_connectivity_controller_arr.get();
-
-                size_t trimmed_feed_vectorization_sz    = std::min(this->feed_vectorization_sz, addr_arr_sz);
-                size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_feed_vectorization_sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
-                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_feed_vectorization_sz, feeder_mem.get()));
-
-                std::fill(exception_arr, std::next(exception_arr, addr_arr_sz), dg::network_exception::SUCCESS);
-
-                for (size_t i = 0u; i < addr_arr_sz; ++i){
-                    size_t hash_value       = dg::network_hash::hash_reflectible(addr_arr[i]);
-                    size_t arr_idx          = hash_value & (this->pow2_arr_sz - 1u);
-                    auto feed_arg           = InternalInBoundFeedArgument{};
-                    feed_arg.addr           = addr_arr[i];
-                    feed_arg.exception_ptr  = std::next(exception_arr, i);
-
-                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), arr_idx, feed_arg);
-                }
-            }
-
-            auto size() const noexcept -> size_t{
-
-                return this->pow2_arr_sz;
-            }
-
-            void update(size_t idx) noexcept{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->pow2_arr_sz){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                this->base_connectivity_controller_arr[idx]->update();
-            }
-
-            auto max_consume_size() noexcept -> size_t{
-
-                return this->consume_sz_per_load;
-            }
-
-        private:
-
-            struct InternalIsConnectableFeedArgument{
-                model::Address addr;
-                std::expected<bool, exception_t> * out_ptr;
-            };
-
-            struct InternalIsConnectableFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalIsConnectableFeedArgument>{
-
-                std::unique_ptr<ConnectivityController> * controller_arr;
-
-                void push(const size_t& arr_idx, std::move_iterator<InternalIsConnectableFeedArgument *> data_arr, size_t sz) noexcept{
-
-                    dg::network_stack_allocation::NoExceptAllocation<model::Address[]> addr_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> response_arr(sz);
-
-                    InternalIsConnectableFeedArgument * base_data_arr = data_arr.base();
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        addr_arr[i] = base_data_arr[i].addr;
-                    }
-
-                    this->controller_arr[arr_idx]->is_connectable(addr_arr.get(), sz, response_arr.get());
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        if (!response_arr[i].has_value()){
-                            *base_data_arr[i].out_ptr = response_arr[i]; 
-                            continue;
-                        }
-
-                        if (!response_arr[i].value()){
-                            *base_data_arr[i].out_ptr = response_arr[i];
-                            continue;
-                        }
-                    }
-
-                }
-            };
-
-            struct InternalOutBoundFeedArgument{
-                model::Address addr;
-                exception_t * exception_ptr;
-            };
-
-            struct InternalOutBoundFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalOutBoundFeedArgument>{
-
-                std::unique_ptr<ConnectivityController> * controller_arr;
-
-                void push(const size_t& arr_idx, std::move_iterator<InternalOutBoundFeedArgument *> data_arr, size_t sz) noexcept{
-
-                    dg::network_stack_allocation::NoExceptAllocation<model::Address[]> addr_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
-
-                    InternalOutBoundFeedArgument * base_data_arr = data_arr.base();
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        addr_arr[i] = base_data_arr[i].addr;
-                    }
-
-                    this->controller_arr[arr_idx]->outbound(addr_arr.get(), sz, exception_arr.get());
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        if (dg::network_exception::is_failed(exception_arr[i])){
-                            *base_data_arr[i].exception_ptr = exception_arr[i];
-                        }
-                    }
-                }
-            };
-
-            struct InternalInBoundFeedArgument{
-                model::Address addr;
-                exception_t * exception_ptr;
-            };
-
-            struct InternalInBoundFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalInBoundFeedArgument>{
-
-                std::unique_ptr<ConnectivityController> * controller_arr;
-
-                void push(const size_t& arr_idx, std::move_iterator<InternalInBoundFeedArgument *> data_arr, size_t sz) noexcept{
-
-                    dg::network_stack_allocation::NoExceptAllocation<model::Address[]> addr_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
-
-                    InternalInBoundFeedArgument * base_data_arr = data_arr.base();
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        addr_arr[i] = base_data_arr[i].addr;
-                    }
-
-                    this->controller_arr[arr_idx]->inbound(addr_arr.get(), sz, exception_arr.get());
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        if (dg::network_exception::is_failed(exception_arr[i])){
-                            *base_data_arr[i].exception_ptr = exception_arr[i];
-                        }
-                    }
-                }
-            };
-    };
-
-    class DistributedConnectivityControllerUpdatableWrapper: public virtual UpdatableInterface{
-
-        private:
-
-            std::shared_ptr<DistributedConnectivityController> controller;
-            size_t idx;
-
-        public:
-
-            DistributedConnectivityControllerUpdatableWrapper(std::shared_ptr<DistributedConnectivityController> controller,
-                                                              size_t idx) noexcept: controller(std::move(controller)),
-                                                                                    idx(idx){}
-
-            void update() noexcept{
-
-                this->controller->update(this->idx);
-            }
-    };
 
     //OK
     class ComplexReactor{
@@ -4764,7 +4358,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container;
             std::shared_ptr<packet_controller::BorderControllerInterface> border_controller;
             std::shared_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> exhaustion_controller;
-            std::shared_ptr<packet_controller::ConnectivityControllerInterface> connectivity_controller;
             std::shared_ptr<model::SocketHandle> socket;
             size_t packet_consumption_cap;
             size_t packet_transmit_cap;
@@ -4775,14 +4368,12 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             OutBoundWorker(std::shared_ptr<packet_controller::PacketContainerInterface> outbound_packet_container,
                            std::shared_ptr<packet_controller::BorderControllerInterface> border_controller,
                            std::shared_ptr<packet_controller::KernelOutBoundTransmissionControllerInterface> exhaustion_controller,
-                           std::shared_ptr<packet_controller::ConnectivityControllerInterface> connectivity_controller,
                            std::shared_ptr<model::SocketHandle> socket,
                            size_t packet_consumption_cap,
                            size_t packet_transmit_cap,
                            size_t busy_threshold_sz) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
                                                                border_controller(std::move(border_controller)),
                                                                exhaustion_controller(std::move(exhaustion_controller)),
-                                                               connectivity_controller(std::move(connectivity_controller)),
                                                                socket(std::move(socket)),
                                                                packet_consumption_cap(packet_consumption_cap),
                                                                packet_transmit_cap(packet_transmit_cap),
@@ -4796,17 +4387,14 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(packet_arr_sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> traffic_response_arr(packet_arr_sz);
-                dg::network_stack_allocation::NoExceptAllocation<std::expected<bool, exception_t>[]> connectivity_response_arr(packet_arr_sz);
 
                 std::transform(packet_arr.get(), std::next(packet_arr.get(), packet_arr_sz), addr_arr.get(), [](const Packet& pkt){return pkt.to_addr;});
                 this->border_controller->thru(addr_arr.get(), packet_arr_sz, traffic_response_arr.get());
-                this->connectivity_controller->is_connectable(addr_arr.get(), packet_arr_sz, connectivity_response_arr.get());
 
                 {
                     auto mailchimp_resolutor                    = InternalMailChimpResolutor{};
                     mailchimp_resolutor.socket                  = this->socket.get();
                     mailchimp_resolutor.exhaustion_controller   = this->exhaustion_controller.get();
-                    mailchimp_resolutor.connectivity_controller = this->connectivity_controller.get();
 
                     size_t trimmed_mailchimp_delivery_sz        = std::min(this->packet_transmit_cap, packet_arr_sz);
                     size_t mailchimp_deliverer_alloc_sz         = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailchimp_resolutor, trimmed_mailchimp_delivery_sz);
@@ -4816,16 +4404,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     for (size_t i = 0u; i < packet_arr_sz; ++i){
                         if (dg::network_exception::is_failed(traffic_response_arr[i])){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(traffic_response_arr[i]));
-                            continue;
-                        }
-
-                        if (!connectivity_response_arr[i].has_value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(connectivity_response_arr[i].error()));
-                            continue;
-                        }
-
-                        if (!connectivity_response_arr[i].value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::SOCKET_BAD_CONNECTION));
                             continue;
                         }
 
@@ -4851,7 +4429,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 model::SocketHandle * socket;
                 packet_controller::KernelOutBoundTransmissionControllerInterface * exhaustion_controller;
-                packet_controller::ConnectivityControllerInterface * connectivity_controller;
 
                 void push(std::move_iterator<InternalMailChimpArgument *> data_arr, size_t sz) noexcept{
 
@@ -4873,8 +4450,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     for (size_t i = 0u; i < sz; ++i){
                         addr_arr[i] = base_data_arr[i].dst;
                     }
-
-                    this->connectivity_controller->outbound(addr_arr.get(), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i]))[
@@ -5134,7 +4709,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container;
             std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller;
             std::shared_ptr<packet_controller::BorderControllerInterface> inbound_border_controller;
-            std::shared_ptr<packet_controller::ConnectivityControllerInterface> connectivity_controller;
             std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen;
             std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator;
             size_t ack_vectorization_sz;
@@ -5149,7 +4723,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                           std::shared_ptr<packet_controller::BufferContainerInterface> inbound_buffer_container,
                           std::shared_ptr<packet_controller::InBoundIDControllerInterface> inbound_id_controller,
                           std::shared_ptr<packet_controller::BorderControllerInterface> inbound_border_controller,
-                          std::shared_ptr<packet_controller::ConnectivityControllerInterface> connectivity_controller,
                           std::shared_ptr<packet_controller::AckPacketGeneratorInterface> ack_packet_gen,
                           std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
                           size_t ack_vectorization_sz,
@@ -5160,7 +4733,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                               inbound_buffer_container(std::move(inbound_buffer_container)),
                                                               inbound_id_controller(std::move(inbound_id_controller)),
                                                               inbound_border_controller(std::move(inbound_border_controller)),
-                                                              connectivity_controller(std::move(connectivity_controller)),
                                                               ack_packet_gen(std::move(ack_packet_gen)),
                                                               packet_integrity_validator(std::move(packet_integrity_validator)),
                                                               ack_vectorization_sz(ack_vectorization_sz),
@@ -5283,9 +4855,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 auto traffic_resolutor                                  = InternalTrafficResolutor{};
                 traffic_resolutor.downstream_dst                        = inbound_deliverer.get();
                 traffic_resolutor.border_controller                     = this->inbound_border_controller.get();
-                traffic_resolutor.connectivity_controller               = this->connectivity_controller.get();
 
-                size_t trimmed_traffic_resolutor_delivery_sz            = std::min(std::min(this->connectivity_controller->max_consume_size(), std::min(this->inbound_border_controller->max_consume_size(), buf_arr_sz)), constants::DEFAULT_ACCUMULATION_SIZE); //traffic_stop_sz <= buf_arr_sz
+                size_t trimmed_traffic_resolutor_delivery_sz            = std::min(std::min(this->inbound_border_controller->max_consume_size(), buf_arr_sz), constants::DEFAULT_ACCUMULATION_SIZE); //traffic_stop_sz <= buf_arr_sz
                 size_t traffic_resolutor_allocation_cost                = dg::network_producer_consumer::delvrsrv_allocation_cost(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> traffic_resolutor_mem(traffic_resolutor_allocation_cost);
                 auto traffic_resolutor_deliverer                        = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&traffic_resolutor, trimmed_traffic_resolutor_delivery_sz, traffic_resolutor_mem.get())); 
@@ -5372,7 +4943,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                 dg::network_producer_consumer::DeliveryHandle<Packet> * downstream_dst;
                 packet_controller::BorderControllerInterface * border_controller;
-                packet_controller::ConnectivityControllerInterface * connectivity_controller; 
 
                 void push(std::move_iterator<Packet *> data_arr, size_t sz) noexcept{
 
@@ -5390,15 +4960,6 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         }
 
                         dg::network_producer_consumer::delvrsrv_deliver(this->downstream_dst, std::move(base_data_arr[i]));
-                    }
-
-                    this->connectivity_controller->inbound(addr_arr.get(), sz, response_arr.get());
-
-                    for (size_t i = 0u; i < sz; ++i){
-                        if (dg::network_exception::is_failed(response_arr[i])){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(response_arr[i]));
-                            continue;
-                        }
                     }
                 }
             };

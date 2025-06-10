@@ -10,55 +10,8 @@
 
 namespace dg::network_extmemcommit_dropbox{
 
-    //problem is that we can't use shared_ptr for these requests, so we'd have to use std::move_iterator<> all the times
-    //the truth is that 99% of the time, the machine spends time to move large buffer arounds, we dont want to fall into that trap
-    //it seems very bad to use the move iterator logics, but trust me, that's our biggest savior, from delvrsrv to these unique_ptr moving to etc. 
-
-    //well we need, we HAVE TO use signal_smph_tile to aggregate roughly 64.000 tiles, worth of at least 1 GB of transfer/ one gatling gun mailchimp
-    //we'd deliver that via our wrapped_dropbox which would further split that do the waitable size -> dropbox -> warehouse -> dispatcher -> get authenticated (cache + batch handshake, this is another request, smh) -> trinity requestor
-
-    //this is roughly 10000x faster request, simply by waiting concurrently many guys, we are to hit the worst wait time of max(arr) instead of latency(e) + latency(e1) + ...
-    //with all the benefits of requests, literally ...
-
-    //best yet, the chance of request not getting responses is close to 0, one every exabytes to due God glitch
-
-    //what is wrong???
-    //our resolutor guy is busing the memory very heavily + waiting the request to be callbacked
-    //we are not managing the threads correctly
-
-    //we need to have a guy waiting for the promise, and a guy busing memory to make the request
-    //we'd need to offload the responsibility RIGHT THERE
-    //so there are guys that are dedicated to waiting and there are guys that are dedicated to busing memory
-    //when I'm telling you this is hard, it is hard
-
-    //we need to have somewhat a detached cyclic flow
-
-    //we need to actually build a prioritized synchronization system
-    //to actually synchronize in a correct order
-    //this is important because we only have 2-3 synchronizer worker, when we are waiting for a guy, we are waiting for ... next guys
-    //we need to cap the waiting job size (to not explode the global memory consumption and return error as soon as possible) 
-
-    //alright, we have solved the problem of requests, we'll need to force the cap by forcing the "unit size" at the dropbox and CAP the synchronizable + CAP the warehouse, we need to precalulate this to do "implicit controlled internal memory"
-    //Mom made a request about adaptive exhaustion controlled, by building somewhat a "feedback point" of all exhaustion controlled components, we'd want to dynamically adjust the smp release + acquire @ the socket, we'd want 0.1 ms latency 
-    //this is a Machine Learning project that we would do later
-
-    //we'd do somewhat a bucket hint optimization
-    //exhaustion control optimization
-    //smp batch optimization
-    //request optimizations
-
-    //we'd probably be able to push 10GB/s for requests across AWS + Google Cloud
-    //we'd then implement a navigator, a.k.a., a backprop projection + forward projection optimization strategy by using differential equations + randomizations
-    //we'd want to improve our smph tile, the cron + the smph + the etc. logic are not good enough
-    //we'd post the benches later
-
-    //for token, we'd have three flows
-
-    //the request token by using REST injected credentials 
-    //the prepopulated token by REST injection
-    //or the cached request token for both of the cases
-    //we'd have to provide the user a way to tell us their preferred way of doing authentication
-    //we need to block get the tokens, or if client wants faster speed, they'd want to prepopulate the tokens
+    //we'll mainly use this to do connection handshakes, our request is actually normal request, very surprising
+    //we'll provide a way for user to do NAT Punch + handshake by setting up some forward tiles as forehead before doing any actual heavy forwards + backwards
 
     struct Request{
         Address requestee;
@@ -699,7 +652,7 @@ namespace dg::network_extmemcommit_dropbox{
                         token_arr[i]    = std::move(base_data_arr[i].token);
                     }
 
-                    this->cache_controller->set_token(addr_arr.get(), token_arr.get(), exception_arr.get());
+                    this->cache_controller->set_token(addr_arr.get(), token_arr.get(), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -781,7 +734,7 @@ namespace dg::network_extmemcommit_dropbox{
                                 std::chrono::time_point<std::chrono::utc_clock> now             = std::chrono::utc_clock::now();
                                 std::chrono::time_point<std::chrono::utc_clock> token_expiry    = token_arr[i].value().value().expiry.value();
                                 std::chrono::time_point<std::chrono::utc_clock> leeway_now      = now + this->leeway_latency;
-                                
+
                                 if (leeway_now < token_expiry){
                                     *base_data_arr[i].dst = std::move(token_arr[i].value().value());
                                     continue;
@@ -794,7 +747,7 @@ namespace dg::network_extmemcommit_dropbox{
 
                         auto fetch_arg = TokenRequestArgument{.addr = base_data_arr[i].addr,
                                                               .dst  = base_data_arr[i].dst};
-                        
+
                         dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(fetch_arg));
                     }
                 }
@@ -818,8 +771,6 @@ namespace dg::network_extmemcommit_dropbox{
     //if we don't cap the request global memory usage, we'll be like in the rocket with no cap in The Martian
     //this is actually hard to implement, very hard
 
-    //
-
     class TrinityRequestor: public virtual RequestorInterface{
 
         private:
@@ -828,7 +779,7 @@ namespace dg::network_extmemcommit_dropbox{
             size_t request_feed_vectorization_sz;
             std::shared_ptr<SynchronizableWareHouseInterface> syncable_warehouse;
             std::shared_ptr<WareHouseInterface> request_warehouse;
-            size_t max_retry_count; 
+            size_t max_retry_count;
 
         public:
 
@@ -880,8 +831,8 @@ namespace dg::network_extmemcommit_dropbox{
 
                     size_t trimmed_feed_sz          = std::min(std::min(this->requestid_feed_vectorization_sz, dg::network_rest::max_request_id_size()), valid_request_sz);
                     size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_feed_sz);
-                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> feed_mem(feeder_allocation_cost);
-                    auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_feed_sz, feed_mem.get()));
+                    dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                    auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_feed_sz, feeder_mem.get()));
 
                     std::fill(dedicated_id_err_vec->begin(), dedicated_id_err_vec->end(), dg::network_exception::SUCCESS);
 
@@ -916,7 +867,7 @@ namespace dg::network_extmemcommit_dropbox{
                             continue;
                         }
 
-                        dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), std::move(base_authorized_request_arr[i]));
+                        dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), std::move(base_authorized_request_arr[i]));
                     }
                 }
             }
@@ -1088,28 +1039,32 @@ namespace dg::network_extmemcommit_dropbox{
 
                 auto to_base_request_vec(std::move_iterator<AuthorizedRequest *> inp_arr, size_t sz) noexcept -> std::expected<dg::vector<Request>, exception_t>{
 
-                    std::expected<dg::vector<Request>, exception_t> rs = dg::network_exception::cstyle_initialize<dg::vector<Request>>(sz);
+                    AuthorizedRequest * base_inp_arr                    = inp_arr.base();
+                    std::expected<dg::vector<Request>, exception_t> rs  = dg::network_exception::cstyle_initialize<dg::vector<Request>>(sz);
 
                     if (!rs.has_value()){
                         return std::unexpected(rs.error());
                     }
 
-                    std::copy(inp_arr, std::next(inp_arr, sz), rs->begin());
+                    for (size_t i = 0u; i < sz; ++i){
+                        rs.value()[i] = std::move(base_inp_arr[i].request);
+                    }
+
                     return rs;
                 }
 
                 void push(std::move_iterator<AuthorizedRequest *> auth_request_vec, size_t sz) noexcept{
 
-                    AuthorizedRequest * auth_request_vec_base = auth_request_vec.base(); 
+                    AuthorizedRequest * base_auth_request_vec = auth_request_vec.base(); 
                     dg::network_stack_allocation::NoExceptAllocation<dg::network_rest::ExternalMemcommitRequest[]> rest_request_arr(sz);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        dg::network_rest::ExternalMemcommitRequest rest_request{.requestee  = auth_request_vec_base[i].request.requestee,
+                        dg::network_rest::ExternalMemcommitRequest rest_request{.requestee  = base_auth_request_vec[i].request.requestee,
                                                                                 .requestor  = dg::network_ip_data::host_addr(),
-                                                                                .timeout    = auth_request_vec_base[i].request.timeout,
-                                                                                .payload    = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_extmemcommit_model::poly_event_t>(auth_request_vec_base[i].request.poly_event)), //
-                                                                                .token      = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(auth_request_vec_base[i].token)),
-                                                                                .request_id = auth_request_vec_base[i].request.request_id};
+                                                                                .timeout    = base_auth_request_vec[i].request.timeout,
+                                                                                .payload    = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_extmemcommit_model::poly_event_t>(base_auth_request_vec[i].request.poly_event)), //
+                                                                                .token      = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::string>(base_auth_request_vec[i].token)),
+                                                                                .request_id = base_auth_request_vec[i].request.request_id};
 
                         static_assert(std::is_nothrow_move_assignable_v<dg::network_rest::ExternalMemcommitRequest>);
                         rest_request_arr[i] = std::move(rest_request);
@@ -1119,20 +1074,20 @@ namespace dg::network_extmemcommit_dropbox{
 
                     if (!promise.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
-                            if (auth_request_vec_base[i].request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.exception_handler->update(promise.error());
+                            if (base_auth_request_vec[i].request.exception_handler != nullptr){
+                                base_auth_request_vec[i].request.exception_handler->update(promise.error());
                             }
                         }
 
                         return;
                     }
 
-                    std::expected<dg::vector<Request>, exception_t> base_request_vec = this->to_base_request_vec(std::make_move_iterator(auth_request_vec_base), sz);
+                    std::expected<dg::vector<Request>, exception_t> base_request_vec = this->to_base_request_vec(std::make_move_iterator(base_auth_request_vec), sz);
 
                     if (!base_request_vec.has_value()){
                         for (size_t i = 0u; i < sz; ++i){
-                            if (auth_request_vec_base[i].request.exception_handler != nullptr){
-                                auth_request_vec_base[i].request.exception_handler->update(base_request_vec.error());
+                            if (base_auth_request_vec[i].request.exception_handler != nullptr){
+                                base_auth_request_vec[i].request.exception_handler->update(base_request_vec.error());
                             }
                         }
 
@@ -1224,18 +1179,18 @@ namespace dg::network_extmemcommit_dropbox{
                     return true;
                 }
 
-                this->request_authroizer->authorize_request(std::make_move_iterator(request_vec.data()), request_vec.size(), authorized_request_vec.data());
+                this->request_authroizer->authorize_request(std::make_move_iterator(request_vec.data()), request_vec.size(), authorized_request_vec->data());
 
                 for (size_t i = 0u; i < request_vec.size(); ++i){
-                    if (!authorized_request_vec[i].has_value()){
+                    if (!authorized_request_vec.value()[i].has_value()){
                         if (request_vec[i].exception_handler != nullptr){
-                            request_vec[i].exception_handler->update(authorized_request_vec[i].error());
+                            request_vec[i].exception_handler->update(authorized_request_vec.value()[i].error());
                         }
 
                         continue;
                     }
 
-                    requesting_request_vec.value()[requesting_request_vec_sz++] = std::move(authorized_request_vec[i].value());
+                    requesting_request_vec.value()[requesting_request_vec_sz++] = std::move(authorized_request_vec.value()[i].value());
                 }
 
                 this->memcommit_requestor->request(std::make_move_iterator(requesting_request_vec.value().data()), requesting_request_vec_sz);
