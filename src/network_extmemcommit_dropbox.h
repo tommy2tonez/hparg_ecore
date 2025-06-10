@@ -42,6 +42,16 @@ namespace dg::network_extmemcommit_dropbox{
     //Mom made a request about adaptive exhaustion controlled, by building somewhat a "feedback point" of all exhaustion controlled components, we'd want to dynamically adjust the smp release + acquire @ the socket, we'd want 0.1 ms latency 
     //this is a Machine Learning project that we would do later
 
+    //we'd do somewhat a bucket hint optimization
+    //exhaustion control optimization
+    //smp batch optimization
+    //request optimizations
+
+    //we'd probably be able to push 10GB/s for requests across AWS + Google Cloud
+    //we'd then implement a navigator, a.k.a., a backprop projection + forward projection optimization strategy by using differential equations + randomizations
+    //we'd want to improve our smph tile, the cron + the smph + the etc. logic are not good enough
+    //we'd post the benches later
+
     struct Request{
         Address requestee;
         dg::network_extmemcommit_model::poly_event_t poly_event;
@@ -133,6 +143,8 @@ namespace dg::network_extmemcommit_dropbox{
             virtual ~RequestorInterface() noexcept = default;
             virtual void request(std::move_iterator<AuthorizedRequest *>, size_t) noexcept = 0;
     };
+
+    //
 
     class WareHouse: public virtual WareHouseInterface{
 
