@@ -131,6 +131,24 @@ int main(){
     //alright, we'll try to have a demo soon guys
     //remember, the driver is very important
 
+    //well Son, I might not be coding within a year or two but I'll make sure my legacy lives on
+    //until then, we have to thru the lectures
+    //remember, the backprop driver is the most important driver in the history of mankind
+    //we need to find that driver by using randomization (THERE IS NO OTHER WAY)
+
+    //the request was done correctly by using a loop of synchronization
+    //we thru the requests almost instantly, and push the promise to the synchronizable warehouse which then would be delivered to synchronization worker who would check for the result and do another requests
+
+    //the synchronizable waiter is simply a worker waiting on an ascending order of timeout
+    //we'd want that to be in an ascending order because we dont want to not notify people on time, which would "hinder the warehouse exhaustability" + "hinder the ontimeness of user-requests hooked responses"
+    //we reckoned that a simple dg::network_exception::ExceptionHandlerInterface is sufficient, because people can actually build a synchronization protocol on top of that
+    //says using a binary semaphore to block the response
+
+    //we'd want that "detached" for various reasons, we dont want to be forcy for tasks that are not memory dangerous like cuda_asynchronous_device or host_asynchronous_device
+
+    //as for other concerns, it should be the dg::network_rest to take care of other responsibility from the security + optimizeness of requests batching + to ontimeness of responses, to etc.
+    //the dropbox responsibility is clearly cut, as for its only responsibility is to call network_rest efficiently and do proper handshakes by using auth2, and there isn't a better way to do so  
+
     size_t a                    = {};
     size_t b                    = {};
     auto [aa, bb]               = std::tie(a, b); 
