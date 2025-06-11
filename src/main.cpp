@@ -157,7 +157,44 @@ int main(){
     //this has a lot to do with input compression, such is we would want to maximize the density of input context (we are speaking in a language that is extremely dense)
     //as the logit density grew for the input context, the uniform responsibility converges
     //and as for the unit size, we always compress with the ratio of 2:1, 2 base operation for 1 upper operation, so there is not a problem of lost context
-    
+
+    //no, literally no one cares about how you bind your internal components or how your component is written
+    //people care about if your component does the job
+    //how to use your component
+    //how to reset your component
+    //and how to spawn your component
+
+    //if you keep thinking in terms of that, a.k.a. client perspective, we call it software engineering
+    //the engineering is the interfaces, the components, the responsibility of those components, not the low level implementation or your coding virtues
+
+    //if we look at the dropbox responsibility, it's to call the network_rest to make requests + wait (we might or might not want to improve the latency)
+    //if we look at the network_rest, it's to make a batch request + implement a Promise, this promise is not like other promises, it's called right after the return of the promise, and get() is simply a synchronization protocol
+    //alright, why don't we use the Promise<etc.> again? because it would be languagely incorrect, this is precisely why I said human being is terrible terrible at designing things that they think are reusable
+
+    //if we look at the kernel_map responsibility, it's to provide an interface of memory mapping, and the "border" of those memory maps are guaranteed by the allocator awaring of those boundaries
+    //this kernel_map is differnt from other cudamap or etc. map, why? because it's just different, we can't implement a generic version for these guys because those "different" parameters are our clue to optimization, why would we want to polymorphic the solution there?
+    //may or maybe the memory mapping will attempt to do "segmentation" mapping, we dont really care, the mapped memory must be IN BOUND
+
+    //the C++ language is very beautiful if we keep using unique_ptr<> + shared_ptr<>
+    //literally
+
+    //the problem with C++ is too many people are being too serious about the constructors move + copy, operator move + copy
+    //it's not that hard fellas
+
+    //stick to the number one rule, for the datastructure + semantic containers, we'd want to use those move + copy, operator move + copy, std::move_iterator<> + etc
+    //for other logic handler components, we'd want to use std::unique_ptr<> + std::shared_ptr<>, period, call a factory, get the component, and get on with it  
+
+    //we are doing tile forward dispatches roughly 10000x faster just by staying on CPU, imagine that we use the power of GPU + let CPU do all the kernel things
+    //this is thanks to our magical asynchronous device
+    //we split the workorders into two categories: the RAM_HEAVY and the CPU_HEAVY
+
+    //the CPU_HEAVY simply just loads everything into the cache and does linear-liked operations
+    //the RAM_HEAVY is intentionally bottlenecked by the hyperthreading + same-core affinity, we are "sacrificing" the cores to save the RAM bus 
+    //best yet, we just have 1 dedicated RAM worker to do the RAM_HEAVY, such would sacrifice the latency, we'll see about the options
+
+    //we scale with cores almost linearly, because we don't miss cache, everything is within the confinement of the unit
+    //unit is actually one of our proudest architect choice
+
     size_t a                    = {};
     size_t b                    = {};
     auto [aa, bb]               = std::tie(a, b); 

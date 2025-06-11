@@ -77,7 +77,7 @@ namespace dg::network_extmemcommit_dropbox{
 
             virtual ~TokenCacheControllerInterface() noexcept = default;
             virtual void set_token(const Address * const Token *, size_t, exception_t *) noexcept = 0;
-            virtual void get_token(const Address *, size_t sz, std::expected<std::optional<Token>, exception_t> *) noexcept = 0;
+            virtual void get_token(const Address *, size_t, std::expected<std::optional<Token>, exception_t> *) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
@@ -488,9 +488,16 @@ namespace dg::network_extmemcommit_dropbox{
 
                                 break;
                             }
+                            case dg::network_p2p_authentication::NoAuth:
+                            {
+                                *base_data_arr[i].token_output  = Token{.token      = dg::string(),
+                                                                        .expiry     = std::nullopt};
+
+                                break;
+                            }
                             case dg::network_p2p_authentication::Unspecified:
                             {
-                                *base_data_arr[i].token_output = std::unexpected(dg::network_exception::REST_P2P_AUTH_UNSPECIFIED);
+                                *base_data_arr[i].token_output  = std::unexpected(dg::network_exception::REST_P2P_AUTH_UNSPECIFIED);
                                 break;
                             }
                             default:
@@ -505,16 +512,219 @@ namespace dg::network_extmemcommit_dropbox{
 
     };
 
-    class TokenController: public virtual TokenCacheControllerInterface{
+    class TokenCacheController: public virtual TokenCacheControllerInterface{
 
         private:
 
-            dg::unordered_unstable_map<Address, Token> token_map;
-            size_t map_capacity;
+            dg::finite_unordered_unstable_map<Address, Token> base;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
+            TokenCacheController(dg::finite_unordered_unstable_map<Address, Token> base,
+                                 std::unique_ptr<std::mutex> mtx,
+                                 size_t consume_sz_per_load) noexcept: base(std::move(base)),
+                                                                       mtx(std::move(mtx)),
+                                                                       consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
+            
+            void set_token(const Address * addr_arr, const Token * token_arr, size_t sz, exception_t * exception_arr) noexcept{
 
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    Address addr                                = addr_arr[i];
+                    std::expected<Token, exception_t> cpy_tok   = dg::network_exception::cstyle_initialize<Token>(token_arr[i]);
+
+                    if (!cpy_tok.has_value()){
+                        exception_arr[i] = cpy_tok.error();
+                        continue;
+                    }
+
+                    this->base.insert_or_assign(std::make_pair(std::move(addr), std::move(cpy_tok.value())));
+                    exception_arr[i] = dg::network_exception::SUCCESS;
+                }
+            }
+
+            void get_token(const Address * addr_arr, size_t sz, std::expected<std::optional<Token>, exception_t> * rs_arr) noexcept{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    auto map_ptr = this->base.find(addr_arr[i]);
+                    
+                    if (map_ptr == this->base.end()){
+                        rs_arr[i] = std::optional<Token>(std::nullopt);
+                        continue;
+                    }
+
+                    std::expected<Token, exception_t> cpy_tok   = dg::network_exception::cstyle_initialize<Token>(map_ptr->second);
+
+                    if (!cpy_tok.has_value()){
+                        rs_arr[i] = std::unexpected(cpy_tok.error());
+                        continue;
+                    }
+
+                    rs_arr[i] = std::optional<Token>(std::move(cpy_tok.value()));
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->consume_sz_per_load.value;
+            }
+    };
+
+    //alright, I got a hint from a good friend of mine, to actually "have a nice random offset before doing distributed map"
+    //this helps reducing the map collision significantly
+    //we'll implement this even though I doubt that this would be of help in terms of performance
+    //alright, because this is very important in terms of doing requests
+
+    //the token cache controller when correctly used in conjunction with keyvalue_feed_vectorization_sz would actually access the unordered map in such an order that has no lock contentions
+    //the DistributedTokenCacheController can actually "composite" the DistributedTokenCacheController, leaving a cache footprint that is optimal, we'll talk about this
+    //this is somewhat a radix sort implementation, our radix is the downstream unordered map, the last unordered_map would fit in the operating cache
+    //this is the most important implementation of heavy cache whose key value memory footprint is stack
+
+    class DistributedTokenCacheController: public virtual TokenCacheControllerInterface{
+
+        private:
+
+            std::unique_ptr<std::unique_ptr<TokenCacheControllerInterface>[]> token_cache_controller_arr;
+            size_t pow2_arr_sz;
+            size_t keyvalue_feed_vectorization_sz; 
+            size_t consume_sz_per_load; 
+
+        public:
+
+            DistributedTokenCacheController(std::unique_ptr<std::unique_ptr<TokenCacheControllerInterface>[]> token_cache_controller_arr,
+                                            size_t pow2_arr_sz,
+                                            size_t keyvalue_feed_vectorization_sz,
+                                            size_t consume_sz_per_load) noexcept: token_cache_controller_arr(std::move(token_cache_controller_arr)),
+                                                                                  pow2_arr_sz(pow2_arr_sz),
+                                                                                  keyvalue_feed_vectorization_sz(keyvalue_feed_vectorization_sz),
+                                                                                  consume_sz_per_load(consume_sz_per_load){}
+
+            void set_token(const Address * addr_arr, const Token * token_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                auto internal_resolutor                         = InternalSetTokenFeedResolutor{};
+                internal_resolutor.dst                          = this->token_cache_controller_arr.get(); 
+
+                size_t trimmed_keyvalue_feed_vectorization_sz   = std::min(std::min(this->keyvalue_feed_vectorization_sz, this->consume_sz_per_load), sz);
+                size_t feeder_allocation_cost                   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_keyvalue_feed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_feed_vectorization_sz, feeder_mem.get())); 
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    std::expected<Token, exception_t> cpy_token = dg::network_exception::cstyle_initialize<Token>(token_arr[i]);
+
+                    if (!cpy_token.has_value()){
+                        exception_arr[i] = cpy_token.error();
+                        continue;
+                    }
+
+                    size_t hashed_value     = dg::network_hash::hash_reflectible(addr_arr[i]);
+                    size_t arr_idx          = hashed_value & (this->pow2_arr_sz - 1u);
+                    auto feed_arg           = InternalSetTokenFeedArgument{};
+                    feed_arg.addr           = addr_arr[i];
+                    feed_arg.token          = std::move(cpy_token.value());
+                    feed_arg.exception_ptr  = std::next(exception_arr, i);
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), arr_idx, std::move(feed_arg));
+                }
+            }
+
+            void get_token(const Address * addr_arr, size_t sz, std::expected<std::optional<Token>, exception_t> * output_arr){
+
+                auto internal_resolutor                         = InternalGetTokenFeedResolutor{};
+                internal_resolutor.dst                          = this->token_cache_controller_arr.get();
+
+                size_t trimmed_keyvalue_feed_vectorization_sz   = std::min(this->keyvalue_feed_vectorization_sz, sz);
+                size_t feeder_allocation_cost                   = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_keyvalue_feed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_feed_vectorization_sz, feeder_mem.get()));
+
+                for (size_t i = 0u; i < sz; ++i){
+                    size_t hashed_value     = dg::network_hash::hash_reflectible(addr_arr[i]);
+                    size_t arr_idx          = hashed_value & (this->pow2_arr_sz - 1u);
+                    auto feed_arg           = InternalGetTokenFeedArgument{};
+                    feed_arg.addr           = addr_arr[i];
+                    feed_arg.output_ptr     = std::next(output_arr, i);
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), arr_idx, std::move(feed_arg));
+                }
+            }
+        
+        private:
+            
+            struct InternalSetTokenFeedArgument{
+                Address addr;
+                Token token;
+                exception_t * exception_ptr;
+            };
+
+            struct InternalSetTokenFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalSetTokenFeedArgument>{
+
+                std::unique_ptr<TokenCacheControllerInterface> * dst;
+
+                void push(const size_t& idx, std::move_iterator<InternalSetTokenFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    InternalSetTokenFeedArgument * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<Token[]> token_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        addr_arr[i]     = std::move(base_data_arr[i].addr);
+                        token_arr[i]    = std::move(base_data_arr[i].token); 
+                    }
+
+                    this->dst[idx]->set_token(addr_arr.get(), token_arr.get(), exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            *base_data_arr[i].exception_ptr = exception_arr[i];
+                        }
+                    }
+                }
+            };
+
+            struct InternalGetTokenFeedArgument{
+                Address addr;
+                std::expected<std::optional<Token>, exception_t> * output_ptr;
+            };
+
+            struct InternalGetTokenFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalGetTokenFeedArgument>{
+
+                std::unique_ptr<TokenCacheControllerInterface> * dst;
+
+                void push(const size_t& idx, std::move_iterator<InternalGetTokenFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    InternalGetTokenFeedArgument * base_data_arr = data_arr.base();
+
+                    dg::network_stack_allocation::NoExceptAllocation<Address[]> addr_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<std::expected<std::optional<Token>, exception_t>[]> token_arr(sz);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        addr_arr[i] = std::move(base_data_arr[i].addr);
+                    }
+
+                    this->dst[idx]->get_token(addr_arr.get(), sz, token_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        *base_data_arr[i].output_ptr = std::move(token_arr[i]);
+                    }
+                }
+            };
     };
 
     class RequestAuthorizer: public virtual RequestAuthorizerInterface{
