@@ -979,22 +979,25 @@ namespace dg::network_extmemcommit_dropbox{
                                 continue;
                             }
 
+                            //we got an exception from the base, we know this radixes as not retriable
+
                             if (dg::network_exception::is_failed(response_vec[i]->base_err_code)){
                                 if (this->request_vec[i].exception_handler != nullptr){
                                     this->request_vec[i].exception_handler->update(response_vec[i]->base_err_code);
                                 }
 
-                                //we got an exception from the base, we know this radixes as not retriable
-
                                 continue;
                             }
+
+                            //we are thru, we are to notify that this was thru
 
                             if (this->request_vec[i].exception_handler != nullptr){
                                 this->request_vec[i].exception_handler->update(dg::network_exception::SUCCESS);
                             }
-
-                            //we are thru, we are to notify that this was thru
                         }
+
+                        //what we did then was a memory optimziation of re-request by using quicksort partitioning (or filtering algorithm), if you are re-requesting 1000 times, the total memory footprint is the same, there is no fragmentation
+                        //we check every request response, we notify them, and we move the not-yet-notifiable (retriable) to the front, and we deallocate the other request resources
 
                         this->request_vec.resize(retriable_sz);
 
@@ -1015,12 +1018,16 @@ namespace dg::network_extmemcommit_dropbox{
 
                     void release_and_notify(exception_t err) noexcept{
 
+                        if (this->was_sync){
+                            return;
+                        }
+
                         for (const Request& request: this->request_vec){
                             request.exception_handler->update(err);
                         }
 
-                        this->was_sync = true;
                         this->request_vec.clear();
+                        this->was_sync = true;
                     }
             };
 
@@ -1053,7 +1060,26 @@ namespace dg::network_extmemcommit_dropbox{
                     return rs;
                 }
 
+                auto get_max_latency(const dg::vector<Request>& request_vec) noexcept -> std::optional<std::chrono::nanoseconds>{
+
+                    if (request_vec.empty()){
+                        return std::nullopt;
+                    }
+
+                    std::chrono::nanoseconds rs = request_vec[0].timeout;
+
+                    for (size_t i = 1u; i < request_vec.size(); ++i){
+                        rs = std::max(rs, request_vec[i].timeout);
+                    }
+
+                    return rs;
+                } 
+
                 void push(std::move_iterator<AuthorizedRequest *> auth_request_vec, size_t sz) noexcept{
+
+                    if (sz == 0u){
+                        return;
+                    }
 
                     AuthorizedRequest * base_auth_request_vec = auth_request_vec.base(); 
                     dg::network_stack_allocation::NoExceptAllocation<dg::network_rest::ExternalMemcommitRequest[]> rest_request_arr(sz);
@@ -1094,6 +1120,15 @@ namespace dg::network_extmemcommit_dropbox{
                         return;
                     }
 
+                    std::optional<std::chrono::nanoseconds> max_latency = this->get_max_latency(base_request_vec.value());
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (!max_latency.has_value()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
                     std::expected<std::unique_ptr<InternalSynchronizer>, exception_t> synchronizable = this->make_response_synchronizable(std::move(base_request_vec.value()),
                                                                                                                                           std::move(promise.value()));
 
@@ -1107,10 +1142,10 @@ namespace dg::network_extmemcommit_dropbox{
                         return;
                     }
 
-                    exception_t err = this->synchronizable_warehouse->push(std::move(synchronizable.value()));
+                    exception_t err = this->synchronizable_warehouse->push(std::move(synchronizable.value()), max_latency.value());
 
                     if (dg::network_exception::is_failed(err)){
-                        synchronizable.value()->release_and_notify(err);
+                        synchronizable.value()->release_and_notify(err); //this might block due to promise waiting, this is expected
                     }
                 }
             };
