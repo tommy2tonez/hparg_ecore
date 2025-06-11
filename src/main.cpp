@@ -149,6 +149,15 @@ int main(){
     //as for other concerns, it should be the dg::network_rest to take care of other responsibility from the security + optimizeness of requests batching + to ontimeness of responses, to etc.
     //the dropbox responsibility is clearly cut, as for its only responsibility is to call network_rest efficiently and do proper handshakes by using auth2, and there isn't a better way to do so  
 
+    //i was thinking about the completeness of the optimal network
+    //we were writing this paper,
+    //in short, can we prove:
+    //given a neural network with a unit size of 1 bit and a neural network with a unit size of 1KB
+    //if we have found the optimal solution for the 1 bit, can we convert it to the optimal solution for 1KB
+    //this has a lot to do with input compression, such is we would want to maximize the density of input context (we are speaking in a language that is extremely dense)
+    //as the logit density grew for the input context, the uniform responsibility converges
+    //and as for the unit size, we always compress with the ratio of 2:1, 2 base operation for 1 upper operation, so there is not a problem of lost context
+    
     size_t a                    = {};
     size_t b                    = {};
     auto [aa, bb]               = std::tie(a, b); 
