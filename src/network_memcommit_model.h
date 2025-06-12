@@ -145,296 +145,199 @@ namespace dg::network_memcommit_factory{
 
     //
 
-    struct ForwardPingSignalAggregationEvent{
-        uma_ptr_t sigagg_addr;
-        ForwardPingSignalEvent event;
+    static inline constexpr size_t SIGAGG_VIRTUAL_EVENT_BUFFER_SZ = size_t{1} << 5;
 
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(sigagg_addr, event);
-        }
+    using sigagg_virtual_event_kind_t = uint8_t; 
 
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(sigagg_addr, event);
-        }
+    enum enum_sigagg_memory_event: sigagg_virtual_event_kind_t{
+        sigagg_event_kind_forward_ping_signal           = 0u,
+        sigagg_event_kind_forward_pong_request          = 1u,
+        sigagg_event_kind_forward_pingpong_request      = 2u,
+        sigagg_event_kind_forward_do_signal             = 3u,
+        sigagg_event_kind_backward_do_signal            = 4u,
     };
 
-    struct ForwardPongRequestAggregationEvent{
-        uma_ptr_t sigagg_addr;
-        ForwardPongRequestEvent event;
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(sigagg_addr, event);
-        }
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(sigagg_addr, event);
-        }
-    };
-
-    struct ForwardPingPongRequestAggregationEvent{
-        uma_ptr_t sigagg_addr;
-        ForwardPingPongRequestEvent event;
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(sigagg_addr, event);
-        }
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(sigagg_addr, event);
-        }
-    };
-
-    struct ForwardDoSignalAggregationEvent{
-        uma_ptr_t sigagg_addr;
-        ForwardDoSignalEvent event;
-
-        template <class Reflectgor>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(sigagg_addr, event);
-        }
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(sigagg_addr, event);
-        }
-    };
-
-    struct BackwardDoSignalAggregationEvent{
-        uma_ptr_t sigagg_addr;
-        BackwardDoSignalEvent event;
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(sigagg_addr, event);
-        }
-
-        template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(sigagg_addr, event);
-        }
-    };
-
-    constexpr auto make_sigagg_forward_ping_signal(uma_ptr_t sigagg_addr, 
-                                                   uma_ptr_t dst, 
-                                                   operatable_id_t operatable_id) noexcept -> ForwardPingSignalAggregationEvent{
+    struct SigaggVirtualEvent{
+        sigagg_virtual_event_kind_t event_kind;
+        std::array<char, SIGAGG_VIRTUAL_EVENT_BUFFER_SZ> content;
         
-        return ForwardPingSignalAggregationEvent{.sigagg_addr   = sigagg_addr,
-                                                 .event         = ForwardPingSignalEvent{.dst           = dst,
-                                                                                         .operatable_id = operatable_id}};
-    }
-
-    constexpr auto make_sigagg_forward_pong_request(uma_ptr_t sigagg_addr, 
-                                                    uma_ptr_t requestee, 
-                                                    uma_ptr_t requestor,
-                                                    operatable_id_t operatable_id, 
-                                                    std::optional<uma_ptr_t> notify_addr) noexcept -> ForwardPongRequestAggregationEvent{
-            
-        return ForwardPongRequestAggregationEvent{.sigagg_addr  = sigagg_addr,
-                                                  .event        = ForwardPongRequestEvent{.requestee        = requestee,
-                                                                                          .requestor        = requestor,
-                                                                                          .operatable_id    = operatable_id,
-                                                                                          .notify_addr      = notify_addr}};
-    }
-
-    constexpr auto make_sigagg_forward_pingpong_request(uma_ptr_t sigagg_addr, 
-                                                        uma_ptr_t requestee, 
-                                                        uma_ptr_t requestor, 
-                                                        operatable_id_t operatable_id, 
-                                                        std::optional<uma_ptr_t> notify_addr) noexcept -> ForwardPingPongRequestAggregationEvent{
-
-        return ForwardPingPongRequestAggregationEvent{.sigagg_addr  = sigagg_addr,
-                                                      .event        = ForwardPingPongRequestEvent{.requestee        = requestee,
-                                                                                                  .requestor        = requestor,
-                                                                                                  .operatable_id    = operatable_id,
-                                                                                                  .notify_addr      = notify_addr}};
-    }
-
-    constexpr auto make_sigagg_forward_do_signal(uma_ptr_t sigagg_addr, 
-                                                 uma_ptr_t dst, 
-                                                 operatable_id_t operatable_id) noexcept -> ForwardDoSignalAggregationEvent{
-                        
-        return ForwardDoSignalAggregationEvent{.sigagg_addr = sigagg_addr,
-                                               .event       = ForwardDoSignalEvent{.dst             = dst, 
-                                                                                   .operatable_id   = operatable_id}};
-    }
-
-    constexpr auto make_sigagg_backward_do_signal(uma_ptr_t sigagg_addr, 
-                                                  uma_ptr_t dst, 
-                                                  operatable_id_t operatable_id) noexcept -> BackwardDoSignalAggregationEvent{
-
-        return BackwardDoSignalAggregationEvent{.sigagg_addr    = sigagg_addr,
-                                                .event          = BackwardDoSignalEvent{.dst            = dst,
-                                                                                        .operatable_id  = operatable_id}};
-    }
-
-    //
-
-    static inline constexpr size_t VIRTUAL_AGGREGATION_BUFFER_SZ = size_t{1} << 5; 
-
-    using aggregation_event_kind_t = uint8_t; 
-
-    enum enum_aggregation_event: aggregation_event_kind_t{
-        aggregation_kind_forward_ping_signal        = 0u,
-        aggregation_kind_forward_pong_request       = 1u,
-        aggregation_kind_forward_pingpong_request   = 2u,
-        aggregation_kind_forward_do_signal          = 3u,
-        aggregation_kind_backward_do_signal         = 4u
-    };
-
-    struct VirtualSignalAggregationEvent{
-        aggregation_event_kind_t aggregation_kind;
-        std::array<char, VIRTUAL_AGGREGATION_BUFFER_SZ> content;
-
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(aggregation_kind, content);
+            reflector(event_kind, content);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(aggregation_kind, content);
+            reflector(event_kind, content);
         }
     };
 
-    constexpr auto virtualize_sigagg(const ForwardPingSignalAggregationEvent& event) noexcept -> VirtualSignalAggregationEvent{
+    struct SignalAggregationEvent{
+        uma_ptr_t smph_addr;
+        SigaggVirtualEvent sigagg_virtual_event;
 
-        static_assert(dg::network_trivial_serializer::size(ForwardPongSignalAggregationEvent{}) <= VIRTUAL_AGGREGATION_BUFFER_SZ);
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+            reflector(smph_addr, sigagg_virtual_event);
+        }
 
-        VirtualSignalAggregationEvent rs;
-        rs.aggregation_kind = aggregation_kind_forward_ping_signal;
+        template <class Reflector>
+        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+            reflector(smph_addr, sigagg_virtual_event);
+        }
+    };
+
+    using sigagg_event_t = SignalAggregationEvent;
+
+    constexpr auto sigagg_virtualize_event(const ForwardPingSignalEvent& event) noexcept -> SigaggVirtualEvent{
+
+        static_assert(dg::network_trivial_serializer::size(ForwardPingSignalEvent{}) <= SIGAGG_VIRTUAL_EVENT_BUFFER_SZ);
+
+        SigaggVirtualEvent rs;
+        rs.event_kind = sigagg_event_kind_forward_ping_signal;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
 
-    constexpr auto virtualize_sigagg(const ForwardPongRequestAggregationEvent& event) noexcept -> VirtualSignalAggregationEvent{
+    constexpr auto sigagg_virtualize_event(const ForwardPongRequestEvent& event) noexcept -> SigaggVirtualEvent{
 
-        static_assert(dg::network_trivial_serializer::size(ForwardPongRequestAggregationEvent{}) <= VIRTUAL_AGGREGATION_BUFFER_SZ);
+        static_assert(dg::network_trivial_serializer::size(ForwardPongRequestEvent{}) <= SIGAGG_VIRTUAL_EVENT_BUFFER_SZ);
 
-        VirtualSignalAggregationEvent rs;
-        rs.aggregation_kind = aggregation_kind_forward_pong_request;
+        SigaggVirtualEvent rs;
+        rs.event_kind = sigagg_event_kind_forward_pong_request;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
 
-    constexpr auto virtualize_sigagg(const ForwardPingPongRequestAggregationEvent& event) noexcept -> VirtualSignalAggregationEvent{
+    constexpr auto sigagg_virtualize_event(const ForwardPingPongRequestEvent& event) noexcept -> SigaggVirtualEvent{
 
-        static_assert(dg::network_trivial_serializer::size(ForwardPingPongRequestAggregationEvent{}) <= VIRTUAL_AGGREGATION_BUFFER_SZ);
+        static_assert(dg::network_trivial_serializer::size(ForwardPingPongRequestEvent{}) <= SIGAGG_VIRTUAL_EVENT_BUFFER_SZ);
 
-        VirtualSignalAggregationEvent rs;
-        rs.aggregation_kind = aggregation_kind_forward_pingpong_request;
+        SigaggVirtualEvent rs;
+        rs.event_kind = sigagg_event_kind_forward_pingpong_request;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
 
-    constexpr auto virtualize_sigagg(const ForwardDoSignalAggregationEvent& event) noexcept -> VirtualSignalAggregationEvent{
+    constexpr auto sigagg_virtualize_event(const ForwardDoSignalEvent& event) noexcept -> SigaggVirtualEvent{
 
-        static_assert(dg::network_trivial_serializer::size(ForwardDoSignalAggregationEvent{}) <= VIRTUAL_AGGREGATION_BUFFER_SZ);
+        static_assert(dg::network_trivial_serializer::size(ForwardDoSignalEvent{}) <= SIGAGG_VIRTUAL_EVENT_BUFFER_SZ);
 
-        VirtualSignalAggregationEvent rs;
-        rs.aggregation_kind = aggregation_kind_forward_do_signal;
+        SigaggVirtualEvent rs;
+        rs.event_kind = sigagg_event_kind_forward_do_signal;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
 
-    constexpr auto virtualize_sigagg(const BackwardDoSignalAggregationEvent& event) noexcept -> VirtualSignalAggregationEvent{
+    constexpr auto sigagg_virtualize_event(const BackwardDoSignalEvent& event) noexcept -> SigaggVirtualEvent{
 
-        static_assert(dg::network_trivial_serializer::size(BackwardDoSignalAggregationEvent{}) <= VIRTUAL_AGGREGATION_BUFFER_SZ);
+        static_assert(dg::network_trivial_serializer::size(BackwardDoSignalEvent{}) <= SIGAGG_VIRTUAL_EVENT_BUFFER_SZ);
 
-        VirtualSignalAggregationEvent rs;
-        rs.aggregation_kind = aggregation_kind_backward_do_signal;
+        SigaggVirtualEvent rs;
+        rs.event_kind = sigagg_event_kind_backward_do_signal;
         dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
 
         return rs;
     }
 
-    constexpr auto read_aggregation_kind(const VirtualSignalAggregationEvent& event) noexcept -> aggregation_event_kind_t{
+    static inline constexpr auto sigagg_virtualize_event_lambda = []<class ...Args>(Args&& ...args) noexcept(noexcept(sigagg_virtualize_event(std::declval<Args&&>()...))){
+        return sigagg_virtualize_event(std::forward<Args>(args)...);
+    };
 
-        return event.aggregation_kind;
-    }
-
-    constexpr auto devirtualize_forward_ping_signal_aggregation_event(const VirtualSignalAggregationEvent& event) noexcept -> ForwardPingSignalAggregationEvent{
+    constexpr auto sigagg_devirtualize_forward_ping_signal_event(const SigaggVirtualEvent& event) noexcept -> ForwardPingSignalEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
-            if (event.aggregation_kind != aggregation_kind_forward_ping_signal){
+            if (event.event_kind != sigagg_event_kind_forward_ping_signal){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
 
-        ForwardPingSignalAggregationEvent rs;
+        ForwardPingSignalEvent rs;
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;
     }
 
-    constexpr auto devirtualize_forward_pong_request_aggregation_event(const VirtualSignalAggregationEvent& event) noexcept -> ForwardPongRequestAggregationEvent{
+    constexpr auto sigagg_devirtualize_forward_pong_request_event(const SigaggVirtualEvent& event) noexcept -> ForwardPongRequestEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
-            if (event.aggregation_kind != aggregation_kind_forward_pong_request){
+            if (event.event_kind != sigagg_event_kind_forward_pong_request){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
 
-        ForwardPongRequestAggregationEvent rs;
+        ForwardPongRequestEvent rs;
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;
     }
 
-    constexpr auto devirtualize_forward_pingpong_request_aggregation_event(const VirtualSignalAggregationEvent& event) noexcept -> ForwardPingPongRequestAggregationEvent{
-    
+    constexpr auto sigagg_devirtualize_forward_pingpong_request_event(const SigaggVirtualEvent& event) noexcept -> ForwardPingPongRequestEvent{
+
         if constexpr(DEBUG_MODE_FLAG){
-            if (event.aggregation_kind != aggregation_kind_forward_pingpong_request){
+            if (event.event_kind != sigagg_event_kind_forward_pingpong_request){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
 
-        ForwardPingPongRequestAggregationEvent rs;
+        ForwardPingPongRequestEvent rs;
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;
     }
 
-    constexpr auto devirtualize_forward_do_signal_aggregation_event(const VirtualSignalAggregationEvent& event) noexcept -> ForwardDoSignalAggregationEvent{
+    constexpr auto sigagg_devirtualize_forward_do_signal_event(const SigaggVirtualEvent& event) noexcept -> ForwardDoSignalEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
-            if (event.aggregation_kind != aggregation_kind_forward_do_signal){
+            if (event.event_kind != sigagg_event_kind_forward_do_signal){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
 
-        ForwardDoSignalAggregationEvent rs;
+        ForwardDoSignalEvent rs;
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;
     }
 
-    constexpr auto devirtualize_backward_do_signal_aggregation_event(const VirtualSignalAggregationEvent& event) noexcept -> BackwardDoSignalAggregationEvent{
+    constexpr auto sigagg_devirtualize_backward_do_signal_event(const SigaggVirtualEvent& event) noexcept -> BackwardDoSignalEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
-            if (event.aggregation_kind != aggregation_kind_backward_do_signal){
+            if (event.event_kind != sigagg_event_kind_backward_do_signal){
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                 std::abort();
             }
         }
 
-        BackwardDoSignalAggregationEvent rs;
+        BackwardDoSignalEvent rs;
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;
+    }
+
+    struct SigaggVirtualEventAdaptiveContainer{
+        SigaggVirtualEvent value;
+
+        constexpr SigaggVirtualEventAdaptiveContainer() = default;
+
+        constexpr SigaggVirtualEventAdaptiveContainer(const SigaggVirtualEvent& sigagg) noexcept: value(sigagg){}
+
+        template <class T, std::enable_if_t<std::is_invocable_v<decltype(sigagg_virtualize_event_lambda), T&&>, bool> = true>
+        constexpr SigaggVirtualEventAdaptiveContainer(T&& event) noexcept: value(sigagg_virtualize_event_lambda(std::forward<T>(event))){}
+    };
+
+    constexpr auto make_sigagg(uma_ptr_t smph_addr, const SigaggVirtualEventAdaptiveContainer& event) noexcept -> SignalAggregationEvent{
+
+        return SignalAggregationEvent{.smph_addr            = smph_addr,
+                                      .signal_virtual_event = event.value};
     }
 
     //
@@ -628,6 +531,41 @@ namespace dg::network_memcommit_factory{
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;
+    }
+
+    constexpr auto to_virtual_event(const SigaggVirtualEvent& event) noexcept -> VirtualEvent{
+
+        switch (event.event_kind){
+            case sigagg_event_kind_forward_ping_signal:
+            {
+                return virtualize_event(sigagg_devirtualize_forward_ping_signal_event(event));
+            }
+            case sigagg_event_kind_forward_pong_request:
+            {
+                return virtualize_event(sigagg_devirtualize_forward_pong_request_event(event));
+            }
+            case sigagg_event_kind_forward_pingpong_request:
+            {
+                return virtualize_event(sigagg_devirtualize_forward_pingpong_request_event(event));
+            }
+            case sigagg_event_kind_forward_do_signal:
+            {
+                return virtualize_event(sigagg_devirtualize_forward_do_signal_event(event));
+            }
+            case sigagg_event_kind_backward_do_signal:
+            {
+                return virtualize_event(sigagg_devirtualize_backward_do_signal_event(event));
+            }
+            default:
+            {
+                if constexpr(DEBUG_MODE_FLAG){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                } else{
+                    std::unreachable();
+                }
+            }
+        }
     }
 }
 
