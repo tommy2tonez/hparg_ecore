@@ -64,6 +64,17 @@
 //                                                    we can pad the outbound to a certain number of bytes to thru the requests with lowest latency possible
 //                                                    we control the smph addr + cron tile to do efficient outbounds 
 
+//alright, I sound like a proud boy but this is our proudest socket achievement in recent years
+//the "optimization" is not actually hindering us from implementing an adaptive smp release size for inbound containers, that's another topic that we have yet to talk about
+//we aren't going there YET, that'd be in the backlogs
+
+//the logic we have achieved here is 1 send == max 1 recv (with lower chance of failing, higher chance of success), this is the hinge of all communication protocol
+//we built the flash_stream_x on top of this protocol, and the 1 send == max 1 response (...) with the help of REST dedicated id
+
+//the sole reason that we are doing the dg::vector<Packet> is to reduce the latency, the leftover latency, which would trigger a chain reaction for our massive P2P network
+//we are 99% relying on the cron tile to do it job punctually, hit every packet transmission possible with 99% success rate for delivery
+//we'd make sure of that
+
 namespace dg::network_kernel_mailbox_impl1::types{
 
     static_assert(sizeof(size_t) >= sizeof(uint32_t));
@@ -2742,6 +2753,280 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         if (dg::network_exception::is_failed(exception_arr[i])){
                             *base_data_arr[i].pkt_ptr       = std::move(pkt_arr[i]);
                             *base_data_arr[i].exception_ptr = exception_arr[i];
+                        }
+                    }
+                }
+            };
+    };
+
+    class NormalOutboundPacketContainer: public virtual PacketContainerInterface{
+
+        private:
+
+            dg::pow2_cyclic_queue<dg::vector<Packet>> normal_packet_queue;
+            dg::pow2_cyclic_queue<dg::vector<Packet>> ack_packet_queue;
+            dg::pow2_cyclic_queue<dg::vector<Packet>> rescue_packet_queue;
+            dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, std::binary_semaphore *>> waiting_queue;
+            dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue;
+            size_t packet_population_sz;
+            size_t packet_population_cap;
+            size_t feed_vectorization_sz;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> consume_sz_per_load;
+
+        public:
+
+            NormalOutboundPacketContainer(dg::pow2_cyclic_queue<dg::vector<Packet>> normal_packet_queue,
+                                          dg::pow2_cyclic_queue<dg::vector<Packet>> ack_packet_queue,
+                                          dg::pow2_cyclic_queue<dg::vector<Packet>> rescue_packet_queue,
+                                          dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, std::binary_semaphore *>> waiting_queue,
+                                          dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue,
+                                          size_t packet_population_sz,
+                                          size_t packet_population_cap,
+                                          size_t feed_vectorization_sz,
+                                          std::unique_ptr<std::mutex> mtx,
+                                          size_t consume_sz_per_load) noexcept: normal_packet_queue(std::move(normal_packet_queue)),
+                                                                                ack_packet_queue(std::move(ack_packet_queue)),
+                                                                                rescue_packet_queue(std::move(rescue_packet_queue)),
+                                                                                waiting_queue(std::move(waiting_queue)),
+                                                                                leftover_queue(std::move(leftover_queue)),
+                                                                                packet_population_sz(packet_population_sz),
+                                                                                packet_population_cap(packet_population_cap),
+                                                                                feed_vectorization_sz(feed_vectorization_sz),
+                                                                                mtx(std::move(mtx)),
+                                                                                consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
+
+            void push(std::move_iterator<Packet *> packet_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                Packet * base_packet_arr                = packet_arr.base();
+                auto internal_resolutor                 = InternalPushFeedResolutor{};
+
+                internal_resolutor.normal_packet_queue  = &this->normal_packet_queue; 
+                internal_resolutor.ack_packet_queue     = &this->ack_packet_queue;
+                internal_resolutor.rescue_packet_queue  = &this->rescue_packet_queue;
+                internal_resolutor.waiting_queue        = &this->waiting_queue;
+                internal_resolutor.population_sz        = &this->packet_population_sz;
+                internal_resolutor.population_cap       = &this->packet_population_cap;
+                internal_resolutor.queue_mtx            = this->mtx.get();
+
+                size_t trimmed_feed_vectorization_sz    = std::min(this->feed_vectorization_sz, sz);
+                size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_feed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                             = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_feed_vectorization_sz, feeder_mem.get()));
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+
+                //we aren't moving packets, we are moving the addresses
+
+                for (size_t i = 0u; i < sz; ++i){
+                    types::packet_polymorphic_t key = packet_service::get_packet_polymorphic_type(base_packet_arr[i]);
+                    auto feed_arg                   = InternalPushFeedArgument{.packet_ptr      = std::make_move_iterator(std::next(base_packet_arr, i)); 
+                                                                               .exception_ptr   = std::next(exception_arr, i)};
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), key, feed_arg);
+                }
+            }
+
+            void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
+
+                std::binary_semaphore smp(0);
+                std::optional<dg::vector<Packet>> pkt_vec = std::nullopt;
+                bool smp_responsibility = {};  
+
+                [&, this]() noexcept{
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->leftover_queue.empty()){
+                        pkt_vec                     = std::move(this->leftover_queue.front());
+                        this->leftover_queue.pop_front();
+                        this->packet_population_sz  -= pkt_vec.size();
+                        smp_responsibility          = false;
+
+                        return;
+                    }
+
+                    if (!this->ack_packet_queue.empty()){
+                        pkt_vec                     = std::move(this->ack_packet_queue.front());
+                        this->ack_packet_queue.pop_Front();
+                        this->packet_population_sz  -= pkt_vec.size();
+                        smp_responsibility          = false;
+
+                        return;
+                    }
+
+                    if (!this->normal_packet_queue.empty()){
+                        pkt_vec                     = std::move(this->normal_packet_queue.front());
+                        this->normal_packet_queue.pop_front();
+                        this->packet_population_sz  -= pkt_vec.size();
+                        smp_responsibility          = false;
+
+                        return;
+                    }
+
+                    if (!this->rescue_packet_queue.empty()){
+                        pkt_vec                     = std::move(this->rescue_packet_queue.front());
+                        this->rescue_packet_queue.pop_front();
+                        this->packet_population_sz  -= pkt_vec.size();
+                        smp_responsibility          = false;
+
+                        return;
+                    }
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (this->waiting_queue.capacity() == this->waiting_queue.size()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    smp_responsibility = true;
+                    dg::network_exception_handler::nothrow_log(this->waiting_queue.push_back(std::make_pair(&pkt_vec, &smp)));
+                }();
+
+                //we'll tackle the pkt_arr_cap problem by using leftover implementation
+                //the leftover size cannot exceed the number of concurrent threads accessing the container
+                //proof
+
+                //assume that the leftover size exceeds the number of concurrent threads accessing the container
+                //it must follow that there is at least one thread does two left_over commits, which is a contradiction, because it would see the previous leftover according to the pop() logic  
+
+                if (smp_responsibility){
+                    smp.acquire();
+                }
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (!pkt_vec.has_value()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                sz                  = std::min(output_pkt_arr_cap, static_cast<size_t>(pkt_vec->size()));
+                size_t remaining_sz = pkt_vec->size() - sz; 
+                std::copy(std::make_move_iterator(std::next(pkt_vec->begin()), remaining_sz), std::make_move_iterator(pkt_vec->end()), output_pkt_arr);
+                pkt_vec->resize(remaining_sz);
+
+                if (!pkt_vec->empty()){
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (this->leftover_queue.size() == this->leftover_queue.capacity()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->leftover_queue.push_back(std::move(pkt_vec.value())));
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->consume_sz_per_load.value;
+            }
+        
+        private:
+            
+            struct InternalPushFeedArgument{
+                std::move_iterator<Packet *> packet_ptr;
+                exception_t * exception_ptr;
+            };
+
+            struct InternalPushFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<types::packet_polymorphic_t, InternalPushFeedArgument>{
+
+                dg::pow2_cyclic_queue<dg::vector<Packet>> * normal_packet_queue;
+                dg::pow2_cyclic_queue<dg::vector<Packet>> * ack_packet_queue;
+                dg::pow2_cyclic_queue<dg::vector<Packet>> * rescue_packet_queue;
+                dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, std::binary_semaphore *>> * waiting_queue;
+                size_t * population_sz;
+                size_t * population_cap;
+                std::mutex * queue_mtx;
+
+                void push(const types::packet_polymorphic_t& key, std::move_iterator<InternalPushFeedArgument *> data_arr, size_t sz) noexcept{
+
+                    InternalPushFeedArgument * base_data_arr                    = data_arr.base();
+                    std::expected<dg::vector<Packet>, exception_t> inbound_vec  = dg::network_exception::cstyle_initialize<dg::vector<Packet>>(sz);
+
+                    if (!inbound_vec.has_value()){
+                        for (size_t i = 0u; i < sz; ++i){
+                            *base_data_arr[i].exception_ptr = inbound_vec.error();
+                        }
+
+                        return;
+                    }
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        inbound_vec.value()[i] = std::move(*base_data_arr[i].packet_ptr.base());
+                    }
+
+                    //I aint shitting, this is hard to write
+
+                    exception_t err = [&, this]() noexcept{
+                        stdx::xlock_guard<std::mutex> lck_grd(*this->queue_mtx);
+
+                        if (!this->waiting_queue->empty()){
+                            auto [fetching_addr, smp]   = this->waiting_queue->front();
+                            this->waiting_queue.pop_front();
+                            *fetching_addr              = std::move(inbound_vec.value());
+                            smp->release();
+
+                            return dg::network_exception::SUCCESS;
+                        }
+
+                        if (*this->population_sz + inbound_vec->size() > *this->population_cap){
+                            return dg::network_exception::RESOURCE_EXHAUSTION;
+                        }
+
+                        switch (key){
+                            case constants::request:
+                            {
+                                if (this->normal_packet_queue->size() == this->normal_packet_queue->capacity()){
+                                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                                }
+
+                                *this->population_sz += inbound_vec->size();
+                                dg::network_exception_handler::nothrow_log(this->normal_packet_queue->push_back(std::move(inbound_vec.value())));
+
+                                return dg::network_exception::SUCCESS;
+                            }
+                            case constants::ack:
+                            {
+                                if (this->ack_packet_queue->size() == this->ack_packet_queue->capacity()){
+                                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                                }
+
+                                *this->population_sz += inbound_vec->size();
+                                dg::network_exception_handler::nothrow_log(this->ack_packet_queue->push_back(std::move(inbound_vec.value())));
+
+                                return dg::network_exception::SUCCESS;
+                            }
+                            case constants::krescue:
+                            {
+                                if (this->rescue_packet_queue->size() == this->rescue_packet_queue->capacity()){
+                                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                                }
+
+                                *this->population_sz += inbound_vec->size();
+                                dg::network_exception_handler::nothrow_log(this->rescue_packet_queue->push_back(std::move(inbound_vec.value())));
+
+                                return dg::network_exception::SUCCESS;
+                            }
+                            default:
+                            {
+                                if constexpr(DEBUG_MODE_FLAG){
+                                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                    std::abort();
+                                } else[
+                                    std::unreachable();
+                                ]
+                            }
+                        }
+                    }();
+
+                    if (dg::network_exception::is_failed(err)){
+                        for (size_t i = 0u; i < sz; ++i){
+                            *base_data_arr[i].packet_ptr.base() = std::move(inbound_vec.value()[i]); 
+                            *base_data_arr[i].exception_ptr     = err;
                         }
                     }
                 }
