@@ -2100,7 +2100,6 @@ namespace dg::network_memcommit_resolutor{
                         std::optional<uma_ptr_t> signal_smph_addr   = event_arr[i].notify_addr;
                         init_status_t init_status                   = dg::network_tile_member_getsetter::get_leaf_init_status_nothrow(requestee);
                         set_operatable_id_t current_ops_id          = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(requestee);
-                        // std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_leaf_signal_smph_addr_nothrow(requestee);
 
                         switch (init_status){
                             case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
@@ -4536,7 +4535,7 @@ namespace dg::network_memcommit_resolutor{
                                     dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 }
 
-                                dg::network_tile_member_getsetter::set_tile_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
+                                dg::network_tile_member_getsetter::set_rstr_init_status_nothrow(requestee, TILE_INIT_STATUS_DECAYED);
                                 break;
                             }
                             default:
@@ -12588,7 +12587,7 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         size_t lck_region_sz                    = std::min(static_cast<size_t>(dg::network_memops_uma::memlock_region_size()), static_cast<size_t>(dg::network_uma::memregion_size()));
-                        uma_ptr_t dst_rcu_addr                  = dg::network_tile_member_getsetter::get_msgrbwd_tile_rcu_addr_nothrow(event_arr[i].dst);
+                        uma_ptr_t dst_rcu_addr                  = dg::network_tile_member_getsetter::get_msgrbwd_rcu_addr_nothrow(event_arr[i].dst);
 
                         auto resolutor_key_arg                  = ResolutorKeyArgument{};
                         resolutor_key_arg.dst_region_rcu_addr   = dg::memult::region(dst_rcu_addr, lck_region_sz);

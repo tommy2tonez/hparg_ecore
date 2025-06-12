@@ -57,6 +57,13 @@
 //we'll worry about that later
 //we'd rather build an optimization engine to tune the configurables -> certain number
 
+//alright, Mom told me to make the inbound to be adaptive and the outbound to be dg::vector<>&&
+//we are being "too dur"
+//that's probably a good idea, for the reasons being: we instantly send out the packets as soon as we get it, in nanoseconds
+//                                                    we know the dst recv threshold + virtues (when we planned things), so we can actually make the dst receives + process the pkts as soon as possible also
+//                                                    we can pad the outbound to a certain number of bytes to thru the requests with lowest latency possible
+//                                                    we control the smph addr + cron tile to do efficient outbounds 
+
 namespace dg::network_kernel_mailbox_impl1::types{
 
     static_assert(sizeof(size_t) >= sizeof(uint32_t));
