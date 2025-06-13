@@ -153,6 +153,8 @@ namespace dg::network_memcommit_factory{
 
     //
 
+    struct SiaggSelfDecayEvent{}; 
+
     static inline constexpr size_t SIGAGG_VIRTUAL_EVENT_BUFFER_SZ = size_t{1} << 5;
 
     using sigagg_virtual_event_kind_t = uint8_t; 
@@ -254,6 +256,17 @@ namespace dg::network_memcommit_factory{
         return rs;
     }
 
+    constexpr auto sigagg_virtualize_event(const SigaggSelfDecayEvent& event) noexcept -> SigaggVirtualEvent{
+
+        static_assert(dg::network_trivial_serializer::size(SigaggSelfDecayEvent{}) <= SIGAGG_VIRTUAL_EVENT_BUFFER_SZ);
+
+        SigaggVirtualEvent rs;
+        rs.event_kind = sigagg_event_kind_self_decay_signal;
+        dg::network_trivial_serializer::serialize_into(rs.content.data(), event);
+
+        return rs;
+    }
+
     static inline constexpr auto sigagg_virtualize_event_lambda = []<class ...Args>(Args&& ...args) noexcept(noexcept(sigagg_virtualize_event(std::declval<Args&&>()...))){
         return sigagg_virtualize_event(std::forward<Args>(args)...);
     };
@@ -328,6 +341,21 @@ namespace dg::network_memcommit_factory{
         }
 
         BackwardDoSignalEvent rs;
+        dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
+
+        return rs;
+    }
+
+    constexpr auto sigagg_devirtualize_self_decay_event(const SigaggVirtualEvent& event) noexcept -> SigaggSelfDecayEvent{
+
+        if constexpr(DEBUG_MODE_FLAG){
+            if (event.event.kind != sigagg_event_kind_self_decay_signal){
+                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                std::abort();
+            }
+        }
+
+        SigaggSelfDecayEvent rs;
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;
