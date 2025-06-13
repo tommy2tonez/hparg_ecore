@@ -43,7 +43,7 @@ namespace dg::network_memcommit_factory{
         uma_ptr_t requestor;
         operatable_id_t operatable_id;
         std::optional<uma_ptr_t> notify_addr;
-        operatable_id_t notify_addr_operatable_id;
+        operatable_id_t notify_addr_operatable_id; //hmm I dont like this, yet I dont want to force this to be operatable_id, this is too important to be of the responsibility
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
@@ -440,9 +440,9 @@ namespace dg::network_memcommit_factory{
         return rs;
     }
 
-    constexpr auto virtualize_event(const VirtualSignalAggregationEvent& event) noexcept -> VirtualEvent{
+    constexpr auto virtualize_event(const SignalAggregationEvent& event) noexcept -> VirtualEvent{
 
-        static_assert(dg::network_trivial_serializer::size(VirtualSignalAggregationEvent{}) <= VIRTUAL_EVENT_BUFFER_SZ);
+        static_assert(dg::network_trivial_serializer::size(SignalAggregationEvent{}) <= VIRTUAL_EVENT_BUFFER_SZ);
 
         VirtualEvent rs;
         rs.event_kind = event_kind_signal_aggregation_signal;
@@ -531,7 +531,7 @@ namespace dg::network_memcommit_factory{
         return rs;
     }
 
-    constexpr auto devirtualize_sigagg_signal_event(const VirtualEvent& event) noexcept -> VirtualSignalAggregationEvent{
+    constexpr auto devirtualize_sigagg_signal_event(const VirtualEvent& event) noexcept -> SignalAggregationEvent{
 
         if constexpr(DEBUG_MODE_FLAG){
             if (event.event_kind != event_kind_signal_aggregation_signal){
@@ -540,7 +540,7 @@ namespace dg::network_memcommit_factory{
             }
         }
 
-        VirtualSignalAggregationEvent rs;
+        SignalAggregationEvent rs;
         dg::network_trivial_serializer::deserialize_into(rs, event.content.data());
 
         return rs;

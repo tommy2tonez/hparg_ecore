@@ -211,37 +211,7 @@ namespace dg::network_memcommit_messenger{
                     }
                     case dg::network_memcommit_factory::event_kind_signal_aggregation_signal:
                     {
-                        //we dont know how to solve the problem of sigagg is a virtualized_event, and sigagg contains a virtualized event
-
-                        // virtual_sigagg_event_t sigagg_event     = dg::network_memcommit_factory::devirtualize_sigagg_signal_event(memevent);
-                        // sigagg_event_kind_t sigagg_kind         = dg::network_memcommit_factory::read_aggregation_kind(sigagg_event);
-
-                        // switch (sigagg_kind){
-                        //     case dg::network_memcommit_factory::aggregation_kind_forward_ping_signal:
-                        //     {
-                        //         return dg::network_memcommit_factory::devirtualize_forward_ping_signal_aggregation_event(sigagg_event).sigagg_addr;
-                        //     }
-                        //     case dg::network_memcommit_factory::aggregation_kind_forward_pong_request:
-                        //     {
-                        //         return dg::network_memcommit_factory::devirtualize_forward_pong_signal_aggregation_event(sigagg_event).sigagg_addr;
-                        //     }
-                        //     case dg::network_memcommit_factory::aggregation_kind_forward_pingpong_request:
-                        //     {
-                        //         return dg::network_memcommit_factory::devirtualize_forward_pingpong_request_aggregation_event(sigagg_event).sigagg_addr;
-                        //     }
-                        //     case dg::network_memcommit_factory::aggregation_kind_forward_do_signal:
-                        //     {
-                        //         return dg::network_memcommit_factory::devirtualize_forward_do_signal_aggregation_event(sigagg_event).sigagg_addr;
-                        //     }
-                        //     case dg::network_memcommit_factory::aggregation_kind_backward_do_signal:
-                        //     {
-                        //         return dg::network_memcommit_factory::devirtualize_backward_do_signal_aggregation_event(sigagg_event).sigagg_addr;
-                        //     }
-                        //     default:
-                        //     {
-                        //         std::unreachable();
-                        //     }
-                        // }
+                        return dg::network_memcommit_factory::devirtualize_sigagg_signal_event(memevent).smph_addr;
                     }
                     default:
                     {
