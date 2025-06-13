@@ -195,6 +195,11 @@ int main(){
     //we scale with cores almost linearly, because we don't miss cache, everything is within the confinement of the unit
     //unit is actually one of our proudest architect choice
 
+    //what is programming really?
+    //we keep having these abstraction, take a slice at a certain point and implement logics based on the abstractions
+    //because that's really is programming
+    //we dont really know how uint, or int or +, -, *, /, or mod work, it's an abstraction layer that requires further abstraction 
+
     size_t a                    = {};
     size_t b                    = {};
     auto [aa, bb]               = std::tie(a, b); 

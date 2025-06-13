@@ -36,20 +36,23 @@ namespace dg::network_memcommit_factory{
         }
     };
 
+    //we'll do compressions later at the virtualization phase if there are usecases, yet the semantic layer looks like this
+
     struct ForwardPongRequestEvent{
         uma_ptr_t requestee;
         uma_ptr_t requestor;
         operatable_id_t operatable_id;
         std::optional<uma_ptr_t> notify_addr;
+        operatable_id_t notify_addr_operatable_id;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(requestee, requestor, operatable_id, notify_addr);
+            reflector(requestee, requestor, operatable_id, notify_addr, notify_addr_operatable_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(requestee, requestor, operatable_id, notify_addr);
+            reflector(requestee, requestor, operatable_id, notify_addr, notify_addr_operatable_id);
         }
     };
 
@@ -58,15 +61,16 @@ namespace dg::network_memcommit_factory{
         uma_ptr_t requestor;
         operatable_id_t operatable_id;
         std::optional<uma_ptr_t> notify_addr;
+        operatable_id_t notify_addr_operatable_id; 
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(requestee, requestor, operatable_id, notify_addr);
+            reflector(requestee, requestor, operatable_id, notify_addr, notify_addr_operatable_id);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(requestee, requestor, operatable_id, notify_addr);
+            reflector(requestee, requestor, operatable_id, notify_addr, notify_addr_operatable_id);
         }
     };
 
@@ -110,23 +114,27 @@ namespace dg::network_memcommit_factory{
     constexpr auto make_event_forward_pong_request(uma_ptr_t requestee, 
                                                    uma_ptr_t requestor, 
                                                    operatable_id_t operatable_id, 
-                                                   std::optional<uma_ptr_t> notify_addr) noexcept -> ForwardPongRequestEvent{
+                                                   std::optional<uma_ptr_t> notify_addr
+                                                   operatable_id_t notify_addr_operatable_id) noexcept -> ForwardPongRequestEvent{
 
-        return ForwardPongRequestEvent{.requestee       = requestee, 
-                                       .requestor       = requestor, 
-                                       .operatable_id   = operatable_id,
-                                       .notify_addr     = notify_addr};
+        return ForwardPongRequestEvent{.requestee                   = requestee, 
+                                       .requestor                   = requestor, 
+                                       .operatable_id               = operatable_id,
+                                       .notify_addr                 = notify_addr,
+                                       .notify_addr_operatable_id   = notify_addr_operatable_id};
     }
 
     constexpr auto make_event_forward_pingpong_request(uma_ptr_t requestee, 
                                                        uma_ptr_t requestor, 
                                                        operatable_id_t operatable_id, 
-                                                       std::optional<uma_ptr_t> notify_addr) noexcept -> ForwardPingPongRequestEvent{
+                                                       std::optional<uma_ptr_t> notify_addr,
+                                                       operatable_id_t notify_addr_operatable_id) noexcept -> ForwardPingPongRequestEvent{
 
-        return ForwardPingPongRequestEvent{.requestee       = requestee, 
-                                           .requestor       = requestor, 
-                                           .operatable_id   = operatable_id,
-                                           .notify_addr     = notify_addr};
+        return ForwardPingPongRequestEvent{.requestee                   = requestee, 
+                                           .requestor                   = requestor, 
+                                           .operatable_id               = operatable_id,
+                                           .notify_addr                 = notify_addr,
+                                           .notify_addr_operatable_id   = notify_addr_operatable_id};
     }
 
     constexpr auto make_event_forward_do_signal(uma_ptr_t dst, 
@@ -155,12 +163,13 @@ namespace dg::network_memcommit_factory{
         sigagg_event_kind_forward_pingpong_request      = 2u,
         sigagg_event_kind_forward_do_signal             = 3u,
         sigagg_event_kind_backward_do_signal            = 4u,
+        sigagg_event_kind_self_decay_signal             = 5u
     };
 
     struct SigaggVirtualEvent{
         sigagg_virtual_event_kind_t event_kind;
         std::array<char, SIGAGG_VIRTUAL_EVENT_BUFFER_SZ> content;
-        
+
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
             reflector(event_kind, content);
@@ -174,16 +183,17 @@ namespace dg::network_memcommit_factory{
 
     struct SignalAggregationEvent{
         uma_ptr_t smph_addr;
+        operatable_id_t operatable_id;
         SigaggVirtualEvent sigagg_virtual_event;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept{
-            reflector(smph_addr, sigagg_virtual_event);
+            reflector(smph_addr, operatable_id, sigagg_virtual_event);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept{
-            reflector(smph_addr, sigagg_virtual_event);
+            reflector(smph_addr, operatable_id, sigagg_virtual_event);
         }
     };
 
@@ -334,9 +344,12 @@ namespace dg::network_memcommit_factory{
         constexpr SigaggVirtualEventAdaptiveContainer(T&& event) noexcept: value(sigagg_virtualize_event_lambda(std::forward<T>(event))){}
     };
 
-    constexpr auto make_sigagg(uma_ptr_t smph_addr, const SigaggVirtualEventAdaptiveContainer& event) noexcept -> SignalAggregationEvent{
+    constexpr auto make_sigagg(uma_ptr_t smph_addr,
+                               operatable_id_t operatable_id,
+                               const SigaggVirtualEventAdaptiveContainer& event) noexcept -> SignalAggregationEvent{
 
         return SignalAggregationEvent{.smph_addr            = smph_addr,
+                                      .operatable_id        = operatable_id,
                                       .signal_virtual_event = event.value};
     }
 
@@ -533,7 +546,7 @@ namespace dg::network_memcommit_factory{
         return rs;
     }
 
-    constexpr auto to_virtual_event(const SigaggVirtualEvent& event) noexcept -> VirtualEvent{
+    constexpr auto to_virtual_event(const SigaggVirtualEvent& event) noexcept -> std::expected<VirtualEvent, exception_t>{
 
         switch (event.event_kind){
             case sigagg_event_kind_forward_ping_signal:
@@ -558,12 +571,7 @@ namespace dg::network_memcommit_factory{
             }
             default:
             {
-                if constexpr(DEBUG_MODE_FLAG){
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                    std::abort();
-                } else{
-                    std::unreachable();
-                }
+                return std::unexpected(dg::network_exception::BAD_OPERATION);
             }
         }
     }
