@@ -16075,12 +16075,17 @@ namespace dg::network_memcommit_resolutor{
 
                         //
 
+                        std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_meber_getsetter::get_uacm_signal_smph_addr_nothrow(dst);
+                        operatable_id_t signal_smp_operatable_id    = dg::network_tile_meber_getsetter::get_uacm_signal_smph_addr_operatable_id_nothrow(dst); 
+
                         for (size_t j = 0u; j < UACM_ACM_SZ; ++j){
+                            auto signal = dg::network_memcommit_factory::make_event_backward_do_signal(dst_src[j], expected_ops_id);
+
                             if (!signal_smph_addr.has_value()){
-                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(dst_src[j], expected_ops_id));
+                                auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(signal);
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                             } else{
-                                auto sigagg_event               = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_backward_do_signal(signal_smph_addr.value(), dst_src[j], expected_ops_id));
+                                auto sigagg_event               = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), signal_smp_operatable_id, signal);
                                 auto decay_signal_event         = dg::network_memcommit_factory::virtualize_event(std::move(sigagg_event));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                             }
@@ -16880,16 +16885,22 @@ namespace dg::network_memcommit_resolutor{
                             }
                         }
 
+                        std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_pacm_signal_smph_addr_nothrow(dst);
+                        operatable_id_t signal_smp_operatable_id    = dg::network_tile_member_getsetter::get_pacm_signal_smph_addr_operatable_id_nothrow(dst);
+
                         for (size_t j = 0u; j < PACM_ACM_SZ; ++j){
+                            auto signal_1   = dg::network_memcommit_factory::make_event_backward_do_signal(dst_lhs[j], expected_ops_id);
+                            auto signal_2   = dg::network_memcommit_factory::make_event_backward_do_signal(dst_rhs[j], expected_ops_id);
+
                             if (!signal_smph_addr.has_value()){
-                                auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(dst_lhs[j], expected_ops_id));
-                                auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(dst_rhs[j], expected_ops_id));
+                                auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(signal_1);
+                                auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(signal_2);
 
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_1));
                                 dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event_2));
                             } else{
-                                auto sigagg_1               = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_backward_do_signal(signal_smph_addr.value(), dst_lhs[j], expected_ops_id));
-                                auto sigagg_2               = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_backward_do_signal(signal_smph_addr.value(), dst_rhs[j], expected_ops_id));
+                                auto sigagg_1               = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), signal_smp_operatable_id, decay_signal_event_1);
+                                auto sigagg_2               = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), signal_smp_operatable_id, decay_signal_event_2);
                                 auto decay_signal_event_1   = dg::network_memcommit_factory::virtualize_event(std::move(sigagg_1));
                                 auto decay_signal_event_2   = dg::network_memcommit_factory::virtualize_event(std::move(sigagg_2));
 
@@ -17266,6 +17277,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_grad_status                   = dg::network_tile_member_getsetter::get_crit_grad_status_nothrow(dst);
                         dispatch_control_t dispatch_control         = dg::network_tile_member_getsetter::get_crit_backward_dispatch_control_nothrow(dst);
                         std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_crit_signal_smph_addr_nothrow(dst);
+                        operatable_id_t signal_smp_operatable_id    = dg::network_tile_member_getsetter::get_crit_signal_smph_addr_operatable_id_nothrow(dst); 
 
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
                         std::expected<operatable_id_t, exception_t> src_bwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_backward_id(src);
@@ -17367,11 +17379,13 @@ namespace dg::network_memcommit_resolutor{
                             (void) src_gradset_err;
                         }
 
+                        auto signal = dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id);
+
                         if (!signal_smph_addr.has_value()){
-                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id));
+                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(signal);
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                         } else{
-                            auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_backward_do_signal(signal_smph_addr.value(), src, expected_ops_id));
+                            auto sigagg             = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), signal_smp_operatable_id, signal);
                             auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
@@ -17751,6 +17765,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_grad_umaptr                   = dg::network_tile_member_getsetter::get_extnsrc_grad_addr_nothrow(dst);
                         grad_status_t dst_grad_status               = dg::network_tile_member_getsetter::get_extnsrc_grad_status_nothrow(dst);
                         std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_extnsrc_signal_smph_addr_nothrow(dst);
+                        operatable_id_t signal_smp_operatable_id    = dg::network_tile_member_getsetter::get_extnsrc_signal_smph_addr_operatable_id_nothrow(dst);
 
                         std::expected<operatable_id_t, exception_t> src_bwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_backward_id(src);
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
@@ -17853,11 +17868,13 @@ namespace dg::network_memcommit_resolutor{
                             //
                         }
 
+                        auto signal = dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id);
+
                         if (!signal_smph_addr.has_value()){
-                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id));
+                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(signal);
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                         } else{
-                            auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_backward_do_signal(signal_smph_addr.value(), src, expected_ops_id));
+                            auto sigagg             = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), signal_smp_operatable_id, signal);
                             auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
@@ -18221,26 +18238,38 @@ namespace dg::network_memcommit_resolutor{
                             continue;
                         }
 
-                        auto request = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<Request<external_virtual_memory_event_t>>());
+                        auto request                                = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<Request<external_virtual_memory_event_t>>());
                         std::expected<Address, exception_t> to_addr = this->uma_ip_retriever->ip(extndsx_arr[i]->backward_shadow);
+                        std::optional<uint64_t> log_id              = extndsx_arr[i]->log_id;
 
                         if (!to_addr.has_value()){
-                            dg::network_log::log_user_tile_error(extndsx_arr[i]->user_id, extndsx_arr[i]->backward_shadow, dg::network_exception::verbose(to_addr.error()));
+                            if (log_id.has_value()){
+                                exception_t err = dg::network_log::designated_id_log(log_id.value(), dg::network_tile_error::make_tile_error_msg(extndsx_arr[i]->self_addr, to_addr.error()));
+
+                                if (dg::network_exception::is_failed(err)){
+                                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(err));
+                                }
+                            }
+
                             continue;
                         }
 
                         request.requestee           = to_addr.value(); 
-                        request.exception_handler   = dg::network_exception::make_exception_handler_from_lambda([user_id = extndsx_arr[i]->user_id, notifying_addr = extndsx_arr[i]->backward_shadow](exception_t err){
+                        request.exception_handler   = dg::network_exception::make_exception_handler_from_lambda([log_id_cpy = log_id, notifying_addr = extndsx_arr[i]->self_addr](exception_t err){
                             if (dg::network_exception::is_failed(err)){
-                                dg::network_log::log_user_tile_error(user_id, notifying_addr, dg::network_exception::verbose(err));
+                                if (log_id_cpy.has_value()){
+                                    exception_t log_err = dg::network_log::designated_id_log(log_id_cpy.value(), dg::network_tile_error::make_tile_error_msg(notifying_addr, err));
+
+                                    if (dg::network_exception::is_failed(log_err)){
+                                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(log_err));
+                                    }
+                                }
                             }
                         });
 
                         auto serialized_tile    = dg::network_compact_serializer::serialize<dg::string>(extndsx_arr[i].value()); //TODOs: optimizable - we might use inplace_buffer - we've yet to know - we'll want to have a runnable debuggable version first
                         auto inject_event       = dg::network_exception_handler::nothrow_log(dg::network_external_memcommit_factory::make_event_shadow_injection(extndsx_arr[i]->backward_shadow, TILE_KIND_EXTNDSX, std::move(serialized_tile)));
-                        auto signal_event       = dg::network_exception_handler::nothrow_log(dg::network_external_memcommit_factory::make_event_backward_do_signal(extndsx_arr[i]->backward_shadow, data_arr[i].expected_ops_id));
-                        auto event              = dg::network_exception_handler::nothrow_log(dg::network_external_memcommit_factory::make_event_sequential(std::move(inject_event), std::move(signal_event))); 
-                        request.content         = std::move(event);
+                        request.content         = std::move(inject_event);
 
                         dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(request));
                     }
@@ -18591,15 +18620,17 @@ namespace dg::network_memcommit_resolutor{
                     for (size_t i = 0u; i < sz; ++i){
                         auto [dst, src, expected_ops_id]    = std::make_tuple(data_arr[i].dst, data_arr[i].src, data_arr[i].expected_ops_id);
                         
-                        init_status_t dst_init_status       = dg::network_tile_member_getsetter::get_extndsx_init_status_nothrow(dst);
-                        uma_ptr_t dst_src                   = dg::network_tile_member_getsetter::get_extndsx_counterpart_nothrow(dst);
-                        uma_ptr_t dst_grad_umaptr           = dg::network_tile_member_getsetter::get_extndsx_grad_addr_nothrow(dst);
-                        operatable_id_t dst_operatable_id   = dg::network_tile_member_getsetter::get_extndsx_operatable_memevent_id_nothrow(dst);
-                        operatable_id_t dst_backward_ops_id = dg::network_tile_member_getsetter::get_extndsx_operatable_backward_id_nothrow(dst);
-                        grad_status_t dst_grad_status       = dg::network_tile_member_getsetter::get_extndsx_grad_status_nothrow(dst);
-                        dispatch_control_t dispatch_control = dg::network_tile_member_getsetter::get_extndsx_backward_dispatch_control_nothrow(dst);
+                        init_status_t dst_init_status                   = dg::network_tile_member_getsetter::get_extndsx_init_status_nothrow(dst);
+                        uma_ptr_t dst_src                               = dg::network_tile_member_getsetter::get_extndsx_counterpart_nothrow(dst);
+                        uma_ptr_t dst_grad_umaptr                       = dg::network_tile_member_getsetter::get_extndsx_grad_addr_nothrow(dst);
+                        operatable_id_t dst_operatable_id               = dg::network_tile_member_getsetter::get_extndsx_operatable_memevent_id_nothrow(dst);
+                        operatable_id_t dst_backward_ops_id             = dg::network_tile_member_getsetter::get_extndsx_operatable_backward_id_nothrow(dst);
+                        grad_status_t dst_grad_status                   = dg::network_tile_member_getsetter::get_extndsx_grad_status_nothrow(dst);
+                        dispatch_control_t dispatch_control             = dg::network_tile_member_getsetter::get_extndsx_backward_dispatch_control_nothrow(dst);
+                        std::optional<uma_ptr_t> signal_smph_addr       = dg::network_tile_member_getsetter::get_extndsx_signal_smph_addr_nothrow(dst);
+                        operatable_id_t signal_smp_operatable_id        = dg::network_tile_member_getsetter::get_extndsx_signal_smph_addr_operatable_id_nothrow(dst);
 
-                        std::expected<uma_ptr_t, exception_t> ptrchk = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(src);
+                        std::expected<uma_ptr_t, exception_t> ptrchk    = dg::network_tile_member_access::safecthrow_extnsrc_ptr_access(src);
 
                         if (!ptrchk.has_value()){
                             continue;
@@ -18695,7 +18726,19 @@ namespace dg::network_memcommit_resolutor{
                         dg::network_tile_member_getsetter::set_extndsx_grad_status_nothrow(dst, TILE_GRAD_STATUS_ZEROED);
                         dg::network_tile_member_getsetter::set_extnsrc_grad_status_nothrow(src, TILE_GRAD_STATUS_HAS_VALUE);
 
-                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id)));
+                        auto signal = dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id);
+
+                        if (signal_smph_addr.has_value()){
+                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(signal);
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                        } else{
+                            auto sigagg             = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), signal_smp_operatable_id, signal);
+                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(sigagg);
+
+                            dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                        }
+
+                        dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, dg::network_memcommit_factory::virtualize_event());
                     }
                 }
             };
@@ -19049,6 +19092,7 @@ namespace dg::network_memcommit_resolutor{
                         grad_status_t dst_grad_status               = dg::network_tile_member_getsetter::get_msgrfwd_grad_status_nothrow(dst);
                         dispatch_control_t dispatch_control         = dg::network_tile_member_getsetter::get_msgrfwd_backward_dispatch_control_nothrow(dst);
                         std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_msgrfwd_signal_smph_addr_nothrow(dst);
+                        operatable_id_t signal_smp_operatable_id    = dg::network_tile_member_getsetter::get_msgrfwd_signal_smph_addr_operatable_id_nothrow(dst);
 
                         std::expected<operatable_id_t, exception_t> src_bwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_backward_id(src);
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
@@ -19150,11 +19194,13 @@ namespace dg::network_memcommit_resolutor{
                             (void) src_gradset_err;
                         }
 
+                        auto signal = dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id); 
+
                         if (!signal_smph_addr.has_value())[
-                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id));
+                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(signal);
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                         ] else{
-                            auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_backward_do_signal(signal_smph_addr.value(), src, expected_ops_id));
+                            auto sigagg             = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), signal_smp_operatable_id, signal);
                             auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
@@ -19524,6 +19570,7 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t dst_grad_umaptr                   = dg::network_tile_member_getsetter::get_msgrbwd_grad_addr_nothrow(dst);
                         dispatch_control_t dispatch_control         = dg::network_tile_member_getsetter::get_msgrbwd_backward_dispatch_control_nothrow(dst);
                         std::optional<uma_ptr_t> signal_smph_addr   = dg::network_tile_member_getsetter::get_msgrbwd_signal_smph_addr_nothrow(dst);
+                        operatable_id_t signal_smp_operatable_id    = dg::network_tile_member_getsetter::get_msgrbwd_signal_smph_addr_operatable_id_nothrow(dst);
 
                         std::expected<operatable_id_t, exception_t> src_bwd_operatable_id   = dg::network_tile_member_getsetter::get_tile_operatable_backward_id(src);
                         std::expected<init_status_t, exception_t> src_init_status           = dg::network_tile_member_getsetter::get_tile_init_status(src);
@@ -19625,11 +19672,13 @@ namespace dg::network_memcommit_resolutor{
                             (void) descendant_set_err; //
                         }
 
+                        auto signal = dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id); 
+
                         if (!signal_smph_addr.has_value()){
-                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(dg::network_memcommit_factory::make_event_backward_do_signal(src, expected_ops_id));
+                            auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(signal);
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                         } else{
-                            auto sigagg             = dg::network_memcommit_factory::virtualize_sigagg(dg::network_memcommit_factory::make_sigagg_backward_do_signal(signal_smph_addr.value(), src, expected_ops_id));
+                            auto sigagg             = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), signal_smp_operatable_id, signal);
                             auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
@@ -19645,6 +19694,8 @@ namespace dg::network_memcommit_resolutor{
                         if (!msgrbwd_outbound_vec[i].has_value()){
                             continue;
                         }
+
+                        //do requests
 
                         EndUserPacket eu_packet = {};
                         eu_packet_kind          = EUPACKET_MSGRBWD;
