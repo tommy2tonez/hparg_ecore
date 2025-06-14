@@ -25,8 +25,8 @@ namespace dg::network_mempress_impl1{
 
     struct BatchBucket{
         dg::pow2_cyclic_queue<dg::vector<event_t>> event_container;
-        stdx::inplace_hdi_container<std::atomic_flag> lck;
-        stdx::inplace_hdi_container<std::atomic_flag> is_empty_concurrent_var;
+        std::unique_ptr<std::atomic_flag> lck; //we'd have to use std::unique_ptr<> for now, for etc. reasons, we dont wanna talk about this
+        std::unique_ptr<std::atomic_flag> is_empty_concurrent_var;
     };
 
     //this is precisely why we would want to rewrite our container literally everytime
@@ -82,7 +82,7 @@ namespace dg::network_mempress_impl1{
                     }
                 }
 
-                return this->region_vec[bucket_idx].lck.value.test(std::memory_order_relaxed);
+                return this->region_vec[bucket_idx].lck->test(std::memory_order_relaxed);
             } 
 
             auto push(uma_ptr_t ptr, dg::vector<event_t>&& event_vec) noexcept -> std::expected<bool, exception_t>{
@@ -104,7 +104,7 @@ namespace dg::network_mempress_impl1{
                     }
                 }
 
-                stdx::xlock_guard<std::atomic_flag> lck_grd(this->region_vec[bucket_idx].lck.value);
+                stdx::xlock_guard<std::atomic_flag> lck_grd(*this->region_vec[bucket_idx].lck);
 
                 if (this->region_vec[bucket_idx].event_container.size() == this->region_vec[bucket_idx].event_container.capacity()){
                     return false;
@@ -168,14 +168,14 @@ namespace dg::network_mempress_impl1{
                     }
                 }
 
-                if (!stdx::try_lock(this->region_vec[bucket_idx].lck.value, std::memory_order_relaxed)){
+                if (!stdx::try_lock(*this->region_vec[bucket_idx].lck, std::memory_order_relaxed)){
                     return false;
                 }
 
                 dg::sensitive_vector<dg::vector<event_t>> tmp_vec = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::sensitive_vector<dg::vector<event_t>>>());
 
                 {
-                    stdx::unlock_guard<std::atomic_flag> lck_grd(this->region_vec[bucket_idx].lck.value);
+                    stdx::unlock_guard<std::atomic_flag> lck_grd(*this->region_vec[bucket_idx].lck);
                     this->unsafe_do_collect(bucket_idx, tmp_vec, dst_cap);
                 }
 
@@ -215,7 +215,7 @@ namespace dg::network_mempress_impl1{
                 dg::sensitive_vector<dg::vector<event_t>> tmp_vec = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::sensitive_vector<dg::vector<event_t>>>());
 
                 {
-                    stdx::xlock_guard<std::atomic_flag> lck_grd(this->region_vec[bucket_idx].lck.value);
+                    stdx::xlock_guard<std::atomic_flag> lck_grd(*this->region_vec[bucket_idx].lck);
                     this->unsafe_do_collect(bucket_idx, tmp_vec, dst_cap);
                 }
 
@@ -272,8 +272,8 @@ namespace dg::network_mempress_impl1{
 
     struct PressBucket{
         dg::pow2_cyclic_queue<event_t> event_container;
-        stdx::inplace_hdi_container<std::atomic_flag> lck;
-        stdx::inplace_hdi_container<std::atomic_flag> is_empty_concurrent_var;
+        std::unique_ptr<std::atomic_flag> lck;
+        std::unique_ptr<std::atomic_flag> is_empty_concurrent_var;
     };
 
     class MemoryPress: public virtual dg::network_mempress::MemoryPressInterface{
@@ -324,7 +324,7 @@ namespace dg::network_mempress_impl1{
                     }
                 }
 
-                return this->region_vec[bucket_idx].lck.value.test(std::memory_order_relaxed);
+                return this->region_vec[bucket_idx].lck->test(std::memory_order_relaxed);
             }
 
             void push(uma_ptr_t ptr, std::move_iterator<event_t *> event_arr, size_t event_arr_sz, exception_t * exception_arr){
@@ -339,7 +339,7 @@ namespace dg::network_mempress_impl1{
                     }
                 }
 
-                stdx::xlock_guard<std::atomic_flag> lck_grd(this->region_vec[bucket_idx].lck.value);
+                stdx::xlock_guard<std::atomic_flag> lck_grd(*this->region_vec[bucket_idx].lck);
 
                 size_t app_cap  = this->region_vec[bucket_idx].event_container.capacity() - this->region_vec[bucket_idx].event_container.size();
                 size_t push_sz  = std::min(event_arr_sz, app_cap);
@@ -367,11 +367,11 @@ namespace dg::network_mempress_impl1{
                     }                    
                 }
 
-                if (!stdx::try_lock(this->region_vec[bucket_idx].lck.value, std::memory_order_relaxed)){
+                if (!stdx::try_lock(*this->region_vec[bucket_idx].lck, std::memory_order_relaxed)){
                     return false;
                 }
 
-                stdx::unlock_guard<std::atomic_flag> lck_grd(this->region_vec[bucket_idx].lck.value);
+                stdx::unlock_guard<std::atomic_flag> lck_grd(*this->region_vec[bucket_idx].lck);
 
                 dst_sz = std::min(dst_cap, static_cast<size_t>(this->region_vec[bucket_idx].event_container.size()));
 
@@ -412,7 +412,7 @@ namespace dg::network_mempress_impl1{
                     }
                 }
 
-                stdx::lock_guard<std::atomic_flag> lck_grd(this->region_vec[bucket_idx].lck.value);
+                stdx::lock_guard<std::atomic_flag> lck_grd(*this->region_vec[bucket_idx].lck);
 
                 dst_sz = std::min(dst_cap, static_cast<size_t>(this->region_vec[bucket_idx].event_container.size()));
 
@@ -587,6 +587,8 @@ namespace dg::network_mempress_impl1{
             }
     };
 
+    //I guess the exhaustion controlled is the connector problem, not the memory press problem, we'd just have it here
+
     class ExhaustionControlledMemoryPress: public virtual MemoryPressInterface{
 
         private:
@@ -694,8 +696,61 @@ namespace dg::network_mempress_impl1{
     struct Factory{
 
         static auto spawn_batchpress(uma_ptr_t first, uma_ptr_t last,
-                                     size_t submit_cap, size_t region_cap, size_t memregion_sz) -> std::unique_ptr<dg::network_mempress::MemoryPressInterface>{
+                                     size_t submit_cap, 
+                                     size_t region_vec_cap, 
+                                     size_t memregion_sz) -> std::unique_ptr<dg::network_mempress::MemoryPressInterface>{
 
+            const size_t MIN_SUBMIT_CAP     = 1u;
+            const size_t MAX_SUBMIT_CAP     = size_t{1} << 30;
+            const size_t MIN_REGION_VEC_CAP = 1u;
+            const size_t MAX_REGION_VEC_CAP = size_t{1} << 30;
+            
+            using uptr_t    = typename dg::ptr_info<uma_ptr_t>::unsigned_t;
+            uptr_t ufirst   = dg::pointer_cast<uptr_t>(first);
+            uptr_t ulast    = dg::pointer_cast<uptr_t>(last);
+
+            if (ulast < ufirst){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (!stdx::is_pow2(memregion_sz)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (ufirst % memregion_sz != 0u){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (ulast % memregion_sz != 0u){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(submit_cap, MIN_SUBMIT_CAP, MAX_SUBMIT_CAP) != submit_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(region_vec_cap, MIN_REGION_VEC_CAP, MAX_REGION_VEC_CAP) != region_vec_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (!stdx::is_pow2(region_vec_cap)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t vec_sz   = (ulast - ufirst) / memregion_sz;
+            auto vec        = dg::vector<BatchBucket>(vec_sz);
+
+            for (BatchBucket& bucket: vec){
+                bucket.event_container          = dg::pow2_cyclic_queue<dg::vector<event_t>>(stdx::ulog2(region_vec_cap));
+                bucket.lck                      = std::make_unique<std::atomic_flag>(false); //TODOs: hdi
+                bucket.is_empty_concurrent_var  = std::make_unique<std::atomic_flag>(true); //TODOs: hdi
+            }
+
+            return std::make_unique<BatchPress>(stdx::ulog2(memregion_sz),
+                                                first,
+                                                last,
+                                                submit_cap,
+                                                std::move(vec));
         }
 
         static auto spawn_mempress(uma_ptr_t first, uma_ptr_t last,
@@ -706,7 +761,7 @@ namespace dg::network_mempress_impl1{
             const size_t MIN_REGION_CAP = 1u;
             const size_t MAX_REGION_CAP = size_t{1} << 30;
 
-            using uptr_t    = typename dg::ptr_info<>::max_unsigned_t;
+            using uptr_t    = typename dg::ptr_info<uma_ptr_t>::unsigned_t;
             uptr_t ufirst   = dg::pointer_cast<uptr_t>(first);
             uptr_t ulast    = dg::pointer_cast<uptr_t>(last);
 
@@ -714,7 +769,7 @@ namespace dg::network_mempress_impl1{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (!dg::memult::is_pow2(memregion_sz)){
+            if (!stdx::is_pow2(memregion_sz)){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -738,24 +793,35 @@ namespace dg::network_mempress_impl1{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (executor == nullptr){
+            if (!stdx::is_pow2(region_cap)){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t region_vec_len   = (ulast - ufirst) / memregion_sz;
-            auto region_vec         = std::vector<RegionBucket<stdx::spin_lock_t>>(region_vec_len);
+            size_t vec_sz   = (ulast - ufirst) / memregion_sz;
+            auto vec        = std::vector<PressBucket>(vec_sz);
 
-            for (size_t i = 0u; i < region_vec_len; ++i){
-                region_vec[i].event_container.reserve(region_cap);
+            for (PressBucket& bucket: vec){
+                bucket.event_container          = dg::pow2_cyclic_queue<event_t>(stdx::ulog2(region_cap));
+                bucket.lck                      = std::make_unique<std::atomic_flag>(false); //TODOs: hdi
+                bucket.is_empty_concurrent_var  = std::make_unique<std::atomic_flag>(true); //TODOs: hdi
             }
 
-            return std::make_unique<MemoryPress<stdx::spin_lock_t>>(stdx::ulog2(memregion_sz), first, last, submit_cap, std::move(region_vec), std::move(executor));
+            return std::make_unique<MemoryPress>(stdx::ulog2(memregion_sz),
+                                                 first,
+                                                 last,
+                                                 submit_cap,
+                                                 std::move(vec));
         }
 
         static auto spawn_fastpress(uma_ptr_t first, uma_ptr_t last,
-                                    size_t submit_cap, size_t region_cap, size_t memregion_sz,
+                                    size_t submit_cap, size_t region_cap,
+                                    size_t region_vec_cap,
+                                    size_t memregion_sz,
                                     size_t batch_trigger_threshold) -> std::unique_ptr<dg::network_mempress::MemoryPressInterface>{
 
+            return std::make_unique<FastPress>(spawn_batchpress(first, last, submit_cap, region_vec_cap, memregion_sz),
+                                               spwan_mempress(first, last, submit_cap, region_cap, memregion_sz),
+                                               batch_trigger_threshold);
         }
     };
 }

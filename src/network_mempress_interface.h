@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "network_exception.h"
+#include <iterator>
 
 namespace dg::network_mempress{
 
