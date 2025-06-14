@@ -1,6 +1,7 @@
-#ifndef __DG_NETWORK_MEMPRESS_H__
-#define __DG_NETWORK_MEMPRESS_H__
+#ifndef __DG_NETWORK_MEMPRESS_IMPL1_H__
+#define __DG_NETWORK_MEMPRESS_IMPL1_H__
 
+#include "network_mempress_interface.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -17,32 +18,10 @@
 #include "stdx.h"
 #include <new>
 
-namespace dg::network_mempress{
+namespace dg::network_mempress_impl1{
 
     using uma_ptr_t = dg::network_pointer::uma_ptr_t;
     using event_t   = uint64_t;
-
-    //this is a very tough component to write correctly
-    //I'm telling yall that I have rewritten this the 20th time already
-    //we'll settle with what we have for now
-
-    struct MemoryPressInterface{
-        virtual ~MemoryPressInterface() noexcept = default;
-        virtual auto first() const noexcept -> uma_ptr_t = 0;
-        virtual auto last() const noexcept -> uma_ptr_t = 0;
-        virtual auto memregion_size() const noexcept -> size_t = 0;
-        virtual auto is_busy(uma_ptr_t) noexcept -> bool = 0; 
-
-        virtual void push(uma_ptr_t, std::move_iterator<event_t *>, size_t, exception_t *) noexcept = 0; //the problem is here, yet I think this is the right decision in terms of resolutor, not the interface,
-                                                                                                         //we cant really log the exhaustion (-> user_id) due to performance + technical constraints
-                                                                                                         //yet we could log the exhaustion as a global error (because that's not a performance contraint)
-
-        virtual auto try_collect(uma_ptr_t, event_t *, size_t&, size_t) noexcept -> bool = 0;
-        virtual void collect(uma_ptr_t, event_t *, size_t&, size_t) noexcept = 0;
-        virtual auto is_collectable(uma_ptr_t) noexcept -> bool = 0;
-        virtual auto max_consume_size() noexcept -> size_t = 0;
-        virtual auto minimum_collect_cap() noexcept -> size_t = 0;
-    };
 
     struct BatchBucket{
         dg::pow2_cyclic_queue<dg::vector<event_t>> event_container;
@@ -55,7 +34,7 @@ namespace dg::network_mempress{
     //we'd want to implement two mempress, one with dg::vector<> and one without
     //because our client is very strict about this
 
-    class BatchPress: public virtual MemoryPressInterface{
+    class BatchPress: public virtual dg::network_mempress::MemoryPressInterface{
 
         private:
 
@@ -297,7 +276,7 @@ namespace dg::network_mempress{
         stdx::inplace_hdi_container<std::atomic_flag> is_empty_concurrent_var;
     };
 
-    class MemoryPress: public virtual MemoryPressInterface{
+    class MemoryPress: public virtual dg::network_mempress::MemoryPressInterface{
 
         private:
 
@@ -461,24 +440,24 @@ namespace dg::network_mempress{
             }
     };
 
-    class FastPress: public virtual MemoryPressInterface{
+    //we have desperately trying to "reduce" the time spending in the mutex, by using an aggregation technique of batch press
+    //this is "proven" to be faster than the normal_press alone, not the optimal optimal that we are talking about, we'll see about that
+
+    class FastPress: public virtual dg::network_mempress::MemoryPressInterface{
 
         private:
 
-            std::unique_ptr<MmeoryPressInterface> batch_press;
-            std::unique_ptr<MemoryPressInterface> normal_press;
+            std::unique_ptr<dg::network_mempress::MemoryPressInterface> batch_press;
+            std::unique_ptr<dg::network_mempress::MemoryPressInterface> normal_press;
             size_t batch_trigger_threshold;
-            size_t normal_press_collect_cap;
 
         public:
 
-            FastPress(std::unique_ptr<MemoryPressInterface> batch_press,
-                      std::unique_ptr<MemoryPressInterface> normal_press,
-                      size_t batch_trigger_threshold,
-                      size_t normal_press_collect_cap) noexcept: batch_press(std::move(batch_press)),
-                                                                 normal_press(std::move(normal_press)),
-                                                                 batch_trigger_threshold(batch_trigger_threshold),
-                                                                 normal_press_collect_cap(normal_press_collect_cap){
+            FastPress(std::unique_ptr<dg::network_mempress::MemoryPressInterface> batch_press,
+                      std::unique_ptr<dg::network_mempress::MemoryPressInterface> normal_press,
+                      size_t batch_trigger_threshold) noexcept: batch_press(std::move(batch_press)),
+                                                                normal_press(std::move(normal_press)),
+                                                                batch_trigger_threshold(batch_trigger_threshold){
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (this->batch_press == nullptr){
@@ -548,28 +527,31 @@ namespace dg::network_mempress{
 
                 //attempt to collect the batch_press
 
+                dst_sz                  = 0u;
+
                 event_t * batch_dst     = dst;
                 size_t batch_dst_sz     = 0u;
                 size_t batch_dst_cap    = dst_cap; 
 
-                bool batch_try_result   = this->batch_press->try_collect(ptr, batch_dst, batch_dst_sz, batch_dst_cap);
-
-                if (batch_try_result && batch_dst_sz != 0u){
-                    dst_sz = batch_dst_sz;
-                    return true;
-                }
-
                 event_t * normal_dst    = dst;
                 size_t normal_dst_sz    = 0u;
-                size_t normal_dst_cap   = std::min(dst_cap, this->normal_press_collect_cap);
+                size_t normal_dst_cap   = dst_cap;
+
+                bool batch_try_result   = this->batch_press->try_collect(ptr, batch_dst, batch_dst_sz, batch_dst_cap);
+
+                if (batch_try_result){
+                    dst_sz          += batch_dst_sz;
+                    std::advance(normal_dst, batch_dst_sz);
+                    normal_dst_cap  -= batch_dst_sz;
+                }
+
                 bool normal_try_result  = this->normal_press->try_collect(ptr, normal_dst, normal_dst_sz, normal_dst_cap);
 
                 if (normal_try_result){
-                    dst_sz = normal_dst_sz;
-                    return true;
+                    dst_sz          += normal_dst_sz;
                 }
 
-                return false;
+                return batch_try_result || normal_try_result;
             }
 
             void collect(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
@@ -580,16 +562,13 @@ namespace dg::network_mempress{
 
                 this->batch_press->collect(ptr, batch_dst, batch_dst_sz, batch_dst_cap);
 
-                if (batch_dst_sz != 0u){
-                    dst_sz = batch_dst_sz;
-                    return;
-                }
-
-                event_t * normal_dst    = dst;
+                event_t * normal_dst    = std::next(dst, batch_dst_sz);
                 size_t normal_dst_sz    = 0u;
-                size_t normal_dst_cap   = std::min(dst_cap, this->normal_press_collect_cap);
+                size_t normal_dst_cap   = dst_cap - batch_dst_sz;
+
                 this->normal_press->collect(normal_dst, normal_dst_sz, normal_dst_cap);
-                dst_sz                  = normal_dst_sz;
+
+                dst_sz                  = batch_dst_sz + normal_dst_sz;
             }
 
             auto is_collectable(uma_ptr_t ptr) noexcept -> bool{
@@ -710,11 +689,17 @@ namespace dg::network_mempress{
             }
     };
 
+    //I'll be right back, wait a second
+
     struct Factory{
 
+        static auto spawn_batchpress(uma_ptr_t first, uma_ptr_t last,
+                                     size_t submit_cap, size_t region_cap, size_t memregion_sz) -> std::unique_ptr<dg::network_mempress::MemoryPressInterface>{
+
+        }
+
         static auto spawn_mempress(uma_ptr_t first, uma_ptr_t last,
-                                   size_t submit_cap, size_t region_cap, size_t memregion_sz, 
-                                   std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) -> std::unique_ptr<MemoryPressInterface>{
+                                   size_t submit_cap, size_t region_cap, size_t memregion_sz) -> std::unique_ptr<dg::network_mempress::MemoryPressInterface>{
 
             const size_t MIN_SUBMIT_CAP = 1u;
             const size_t MAX_SUBMIT_CAP = size_t{1} << 30;
@@ -765,6 +750,12 @@ namespace dg::network_mempress{
             }
 
             return std::make_unique<MemoryPress<stdx::spin_lock_t>>(stdx::ulog2(memregion_sz), first, last, submit_cap, std::move(region_vec), std::move(executor));
+        }
+
+        static auto spawn_fastpress(uma_ptr_t first, uma_ptr_t last,
+                                    size_t submit_cap, size_t region_cap, size_t memregion_sz,
+                                    size_t batch_trigger_threshold) -> std::unique_ptr<dg::network_mempress::MemoryPressInterface>{
+
         }
     };
 }
