@@ -17,11 +17,11 @@ namespace dg::network_mempress{
         virtual auto first() const noexcept -> uma_ptr_t = 0;
         virtual auto last() const noexcept -> uma_ptr_t = 0;
         virtual auto memregion_size() const noexcept -> size_t = 0;
-        virtual auto is_busy(uma_ptr_t) noexcept -> bool = 0;
-        virtual void push(uma_ptr_t, std::move_iterator<event_t *>, size_t, exception_t *) noexcept = 0;
-        virtual auto try_collect(uma_ptr_t, event_t *, size_t&, size_t) noexcept -> bool = 0;
-        virtual void collect(uma_ptr_t, event_t *, size_t&, size_t) noexcept = 0;
-        virtual auto is_collectable(uma_ptr_t) noexcept -> bool = 0;
+        virtual auto is_busy(uma_ptr_t ptr) noexcept -> bool = 0;
+        virtual void push(uma_ptr_t ptr, std::move_iterator<event_t *> event_arr, size_t event_arr_sz, exception_t * exception_arr) noexcept = 0;
+        virtual auto try_collect(uma_ptr_t ptr, event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept -> bool = 0;
+        virtual void collect(uma_ptr_t ptr, event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept = 0;
+        virtual auto is_collectable(uma_ptr_t ptr) noexcept -> bool = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
         virtual auto minimum_collect_cap() noexcept -> size_t = 0;
     };
