@@ -38,10 +38,6 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
 
             auto push(dg::vector<event_t>&& event_vec) noexcept -> std::expected<bool, exception_t>{
 
-                if (event_vec.size() == 0u){
-                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
-                }
-
                 if (event_vec.size() > this->max_consume_size()){
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
@@ -160,53 +156,20 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
 
             std::unique_ptr<std::unique_ptr<dg::network_mempress_dispatch_warehouse::NormalWareHouse>[]> warehouse_arr;
             size_t pow2_warehouse_arr_sz;
-            dg::unordered_unstable_map<size_t, size_t> dedicated_thread_to_warehouse_consumption_map;
             size_t event_consume_sz;
-            size_t notempty_curious_push_sz;
             size_t empty_curious_pop_sz;
 
         public:
 
             HybridAffinedWareHouse(std::unique_ptr<std::unique_ptr<dg::network_mempress_dispatch_warehouse::NormalWareHouse>[]> warehouse_arr,
                                    size_t pow2_warehouse_arr_sz,
-                                   dg::unordered_unstable_map<size_t, size_t> dedicated_thread_to_warehouse_consumption_map,
                                    size_t event_consume_sz,
-                                   size_t notempty_curious_push_sz,
                                    size_t empty_curious_pop_sz) noexcept: warehouse_arr(std::move(warehouse_arr)),
                                                                           pow2_warehouse_arr_sz(pow2_warehouse_arr_sz),
-                                                                          dedicated_thread_to_warehouse_consumption_map(std::move(dedicated_thread_to_warehouse_consumption_map)),
                                                                           event_consume_sz(event_consume_sz),
-                                                                          notempty_curious_push_sz(notempty_curious_push_sz),
                                                                           empty_curious_pop_sz(empty_curious_pop_sz){}
 
             auto push(dg::vector<event_t>&& event_vec) noexcept -> std::expected<bool, exception_t>{
-
-                std::optional<size_t> clue_idx  = std::nullopt;
-                size_t clue_sz                  = {};
-
-                for (size_t i = 0u; i < this->notempty_curious_push_sz; ++i){
-                    size_t random_value     = dg::network_randomizer::randomize_int<size_t>();
-                    size_t idx              = random_value & (this->pow2_warehouse_arr_sz - 1u); 
-                    size_t cur_sz           = this->warehouse_arr[idx]->size();
-
-                    if (cur_sz == 0u){
-                        return this->warehouse_arr[idx]->push(std::move(event_vec));
-                    }
-
-                    if (!clue_idx.has_value()){
-                        clue_idx    = i;
-                        clue_sz     = cur_sz;
-                    }
-
-                    if (cur_sz < clue_sz){
-                        clue_idx    = i;
-                        clue_sz     = cur_sz;
-                    }
-                }
-
-                if (clue_idx.has_value()){
-                    return this->warehouse_arr[clue_idx.value()]->push(std::move(event_vec));                  
-                }
 
                 size_t random_value = dg::network_randomizer::randomize_int<size_t>();
                 size_t idx          = random_value & (this->pow2_warehouse_arr_sz - 1u);
@@ -215,12 +178,6 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
             }
 
             auto pop() noexcept -> dg::vector<event_t>{
-
-                auto map_ptr = std::as_const(this->dedicated_thread_to_warehouse_consumption_map).find(dg::network_concurrency::this_thread_idx());
-
-                if (map_ptr != std::as_const(this->dedicated_thread_to_warehouse_consumption_map).end()){
-                    return this->warehouse_arr[map_ptr->second]->pop();
-                }
 
                 for (size_t i = 0u; i < this->empty_curious_pop_sz; ++i){
                     size_t random_value     = dg::network_randomizer::randomize_int<size_t>();
@@ -247,6 +204,19 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
                 return this->event_consume_sz;
             }
     };
+
+    //I have never once seen an as tough problem, we still need to implement a rescue worker to break up the waiting patterns 
+    //empty_curious_pop_sz would actually reduce the vector size by 100 folds, but we can't guarantee that we are waiting on a uniform distributed range
+    //we can actually guarantee that, by using induction, but time is not on our favor
+
+    //this is precisely the problem with uniform distribution
+    //such is we can prove, by using induction that if the state (waiting list) is uniform distributed, the next state is gonna be "probably" uniform distributed
+    //but if the state is skewed, the next state is not converging to the uniform distribution case
+
+    //we need to add that balancing factor of skewness -> uniform distribution
+    //by using a rescue worker to "rest" queue
+
+    //we can safely say that the problem is solved if we could reduce the waiting_sz -> 0 for every interval
 
     struct Factory{
 
@@ -292,15 +262,11 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
                                                        size_t base_unit_consumption_sz,
                                                        size_t max_concurrency_sz,
                                                        size_t warehouse_concurrency_sz,
-                                                       size_t notempty_curious_push_sz,
-                                                       size_t empty_curious_pop_sz,
-                                                       const std::unordered_map<size_t, size_t>& dedicated_thread_id_to_warehouse_idx_map) -> std::unique_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface>{
+                                                       size_t empty_curious_pop_sz) -> std::unique_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface>{
 
             const size_t MIN_WAREHOUSE_CONCURRENCY_SZ   = 1u;
             const size_t MAX_WAREHOUSE_CONCURRENCY_SZ   = size_t{1} << 20;
             
-            const size_t MIN_NOTEMPTY_CURIOUS_PUSH_SZ   = 0u;
-            const size_t MAX_NOTEMPTY_CURIOUS_PUSH_SZ   = size_t{1} << 20;
             
             const size_t MIN_EMPTY_CURIOUS_POP_SZ       = 0u;
             const size_t MAX_EMPTY_CURIOUS_POP_SZ       = size_t{1} << 20;
@@ -313,20 +279,8 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(notempty_curious_push_sz, MIN_NOTEMPTY_CURIOUS_PUSH_SZ, MAX_NOTEMPTY_CURIOUS_PUSH_SZ) != notempty_curious_push_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
             if (std::clamp(empty_curious_pop_sz, MIN_EMPTY_CURIOUS_POP_SZ, MAX_EMPTY_CURIOUS_POP_SZ) != empty_curious_pop_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            dg::unordered_unstable_map<size_t, size_t> internal_map(dedicated_thread_id_to_warehouse_idx_map.begin(), dedicated_thread_id_to_warehouse_idx_map.end(), 1u);
-
-            for (const auto& _map_pair: internal_map){
-                if (_map_pair.second >= this->warehouse_concurrency_sz){
-                    dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-                }
             }
 
             std::unique_ptr<std::unique_ptr<NormalWareHouse>[]> warehouse_arr = std::make_unique<std::unique_ptr<NormalWareHouse>[]>(warehouse_concurrency_sz);
@@ -339,9 +293,7 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
 
             return std::make_unique<HybridAffinedWareHouse>(std::move(warehouse_arr),
                                                             warehouse_concurrency_sz,
-                                                            std::move(internal_map),
                                                             base_unit_consumption_sz,
-                                                            notempty_curious_push_sz,
                                                             empty_curious_pop_sz);
         }
     };
