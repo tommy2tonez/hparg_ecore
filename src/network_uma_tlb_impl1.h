@@ -21,6 +21,11 @@
 
 namespace dg::network_uma_tlb_impl1::interface{
 
+    //there is a possibility that we are having a forever waiting to change memregion
+    //yet we are "on the plan"
+    //so it's very up to the planner to make their plan
+    //even though I don't want to implement an escalation, (reference -> locked_reference), it seems like we have to do so ...
+
     template <class T>
     struct ProxyTLBInterface{
 
