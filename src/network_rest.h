@@ -8,6 +8,39 @@ namespace dg::network_rest{
     
     //Mom said to reconsider the API
 
+    //this is the sole comm -> client -> p2p -> etc., we'll definitely have to implement a liason on client side to talk to this
+    //what do we need?
+
+    //log_extraction:
+    //  dedicated_log_id extraction
+    //  system_log extraction
+
+    //external stable tile operations
+    //  public interfaces:
+    //      init (in interpretable uint32_t uint64_t)
+    //      deinit
+    //      orphan
+    //      ping tiles
+
+    //system stats:
+        //uma memregion size
+        //memlock region size
+        //uma -> vma_ptr -> fsys -> etc.
+        //CPU, GPU, clock, speed, status, etc.
+        //memregion frequencies
+        //available forward dispatch codes, backward dispatch codes in interpretable strings
+
+    //authentication:
+        //register p2p auth
+        //register system auth
+        //permissions + friends
+
+    //network:
+        //blacklist ip
+        //greenlist ip
+        //set ips max flux
+        //set global memregion segments mapping 
+
     struct TokenGenerateBaseRequest{
         dg::string auth_payload;
 

@@ -3056,7 +3056,7 @@ namespace dg::network_memcommit_resolutor{
 
                                 if (!signal_smph_addr.has_value()){
                                     auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(signal);
-                                    dg::network_producer_consumer::devlrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
+                                    dg::network_producer_consumer::delvrsrv_deliver(this->request_delivery_handle, std::move(decay_signal_event));
                                 } else{
                                     auto sigagg             = dg::network_memcommit_factory::make_sigagg(signal_smph_addr.value(), smp_operatable_id, signal);
                                     auto decay_signal_event = dg::network_memcommit_factory::virtualize_event(std::move(sigagg));

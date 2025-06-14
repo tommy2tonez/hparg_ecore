@@ -31,7 +31,7 @@ namespace stdx{
                                                                                uint64_t,
                                                                                void>>; 
 
-    inline __attribute__((always_inline)) auto try_lock(std::atomic_flag& mtx, std::memory_order order = std::memory_order_relaxed) noexcept -> bool{
+    inline __attribute__((always_inline)) auto try_lock(std::atomic_flag& mtx, std::memory_order order = std::memory_order_seq_cst) noexcept -> bool{
         return mtx.test_and_set(order) == false;
     }
 

@@ -97,69 +97,13 @@ namespace dg::network_mempress_collector{
             }
     };
 
-    //let's try to be realistic
-    //we have 256 concurrent memory_press_region
-    //we are scanning 1 microsecond/ region
-    //=> 1000 cmpexch/millisecond
-
-    //=> 1.000.000 cmpexch per second (this is fairly expensive)
-    //=> 256.000.000 cmpexch per second (this is very expensive)
-    //to my understanding, it is possible in modern atomic arch of CPUs (Intel moved to all atomics in 2022, so it's not surprising that cores across different NUMA clusters can scale linearly with the atomic_relaxed operations)
-
-    //now think very clearly
-    //we have semaphore tile to increase locality of dispatch, the contention at the semaphore region is very high
-    //we'd want to increase the scanning frequency for the semaphore regions (-> 1ms or 100us per scan, accumulating roughly 1024 -> 16K pingpong + ping + pong + forward + backward signals)
-    //everything is OK up to this point
-
-    //we'd want to offload this to the warehouse, connected to another connector -> the resolutor -> the mempress again (this cycle is literally endless in the backward loop)
-    //OK, who is responsible for logging the errors in this while (true) loop, it seems like the blaming stack is indeterministic (we can't take a slice at a stack and says this guy is responsible for this error without introducing tons of overheads (think about 1 allocation / pingpong signal, it's ridiculous)) 
-
-    //the warehouse is very fast, responsible for bouncing roughly 1 << 30 memevents/ second
-
-    //how do we mimic the cron job again?
-    //by bouncing in the high latency regions (a signal in a high frequency region stucks in the high frequency region until it is expired)
-
-    //what's wrong?
-    //our connector workload is too heavy (we cant really hit the frequency requirements if we are doing a lot of extra workloads)
-    //we are in a tight_loop of scanning 1024 suffix array, then there comes a ton of memory event, and we are also responsible for packaging the memory events before offloading that to the warehouse !!!
-    //we can't really optimize that YET, it would look very ridiculous to return dg::vector<event_t> * dst, size_t& dst_sz, size_t dst_cap, because essentially, that's what we want (we are trading maintainability for the gains which we can't really quantify)
-    //that is something that we consider the collector problem, we need to increase more collector to do the job, because ... someone has to do the job eventually ... frequency wise ... not good, but arrival time wise ... it's about the same
-
-    //why would we want to introduce so much headaches? can we just do a normal synchronized forward + backward
-    //well ...
-
-    //we want to introduce the problem, the leetcode problem of "most efficient forward + backward schedules", it's a tree with cron jobs + extn tiles + internal tiles + memory_access, memory fetch + locality of those
-    //it's simple, it has rules, it has languages, it's optimizable, and most importantly, it can run on a billion devices at a time with no contention or socket problem !!! of coursce IF you AC the problem 
-
-    //how about memevents that we really dont want to latencize, alright, it's directly moved from the producer -> the dispatch_warehouse
-    //it seems to me like the mempress is only for the semaphore tiles, where we'd intentionally hold things back on a bonsaied + frequencized schedule to increase locality of dispatches
-    //it's incredibly complicated, we dont really wanna talk about the latency + friends for now
-
-    //to be honest Son
-    //it's already incredibly complicated to write these
-    //it's a miracle that we could quantify the components, build a filesystem, have a compile-time allocator (which would guarantee to be in the confine of memregions)
-    //we altered the semantic of memlocks (which is supposed to be tile lock), which I would consider a bad move
-    //we made the region scanning possible, the semaphore tiles, the immediate forward + backward
-
-    //our clients really just want to do forward + backward on all cores + wait on the msgrfwd + msgrbwd to "hopefully" get something from the system, once in a bluemoon read the log files to see what's going on
-    //delete + reinstall the core to make it work again
-    //apart from that, they dont want to know the low level implementations
-
-    //we tried our best to make it "not spaghetti"
-    //in the sense of each component is not heavily polymorphised, nor circular referencing
-    //each component can be unplugged and plugged for performance tuning 
-
-    //I know what yall thinking, I wish the tile size is not static
-    //I wish the dispatch can be this can be that
-    //I wish the system does not have to be so rigid
-    //that's precisely where we failed
-
-    //alright, if you have done it better, we must be at the search + navigation implementation + logit saturation problem
-    //its about the two sum, two tile -> one tile problem
-    //how precisely do we solve the problem?
-    //that's actually leetcode easy problem
-    //how precisely do we solve the self-generated synthetic data problem?
-    //OK, I'm sorry that you can't comprehend the logics, it's undoubtably hard
+    //after the 1024th implementations, we realized that this is still too heavy
+    //we actually want a dg::vector<event_t> for both the mempress and the mempress collector, surprisingly
+    //we dont go there yet because we can't actually guarantee the worst case for event_t == dg::vector<event_t>, which must be considred when building systems like this 
+    //our client has a stingent constraint on the memregion scanning + friends
+    //we can't offload too many responsibility -> the scanner
+    //it must involve somewhat a dg::vector<event_t> to achieve the magic
+    //I guess we just "scale" the numeber of collector then
 
     class WareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
 
