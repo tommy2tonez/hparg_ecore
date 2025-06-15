@@ -30,7 +30,7 @@ namespace dg::network_mempress_collector{
         virtual ~RangePressInterface() noexcept = default;
         virtual auto size() const noexcept -> size_t = 0;
         virtual auto try_get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool = 0;
-        virtual auto is_gettable(size_t idx) noexcept -> bool = 0;
+        virtual auto is_empty(size_t idx) noexcept -> bool = 0;
         virtual auto is_busy(size_t idx) noexcept -> bool = 0;
         virtual void get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;
     };
@@ -72,7 +72,7 @@ namespace dg::network_mempress_collector{
                 return this->mempress->try_collect(region, dst, dst_sz, dst_cap);
             } 
 
-            auto is_gettable(size_t idx) noexcept -> bool{
+            auto is_empty(size_t idx) noexcept -> bool{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (idx >= this->region_table.size()){
@@ -82,7 +82,7 @@ namespace dg::network_mempress_collector{
                 }
 
                 uma_ptr_t region = std::as_const(this->region_table)[idx];
-                return this->mempress->is_collectable(region);
+                return !this->mempress->is_collectable(region);
             }
 
             auto is_busy(size_t idx) noexcept -> bool{
@@ -345,7 +345,7 @@ namespace dg::network_mempress_collector{
                 size_t range_sz             = this->range_press->size();
 
                 for (size_t i = 0u; i < range_sz; ++i){
-                    if (!this->range_press->is_gettable(i)){
+                    if (this->range_press->is_empty(i)){
                         continue;
                     }
 
@@ -424,7 +424,7 @@ namespace dg::network_mempress_collector{
                         size_t region_idx   = this->suffix_array[j]; 
                         size_t event_arr_sz = {};
 
-                        if (!this->range_press->is_gettable(region_idx)){
+                        if (this->range_press->is_empty(region_idx)){
                             continue;
                         }
 
@@ -595,7 +595,7 @@ namespace dg::network_mempress_collector{
                         }
                     }
 
-                    if (!this->range_press->is_gettable(i)){
+                    if (this->range_press->is_empty(i)){
                         this->clock_data_table[i].last_updated = clock.get();    
                         continue;
                     }
@@ -700,7 +700,7 @@ namespace dg::network_mempress_collector{
                             }
                         }
 
-                        if (!this->range_press->is_gettable(region_idx)){
+                        if (this->range_press->is_empty(region_idx)){
                             this->clock_data_table[j].last_updated = clock.get();
                             continue;
                         }
@@ -831,7 +831,7 @@ namespace dg::network_mempress_collector{
             return std::make_unique<WareHouseConnector>(std::move(warehouse), warehouse_ingestion_sz);
         }
 
-        static auto spawn_exhaustion_controlled_warehouse_connector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseConnector> warehouse,
+        static auto spawn_exhaustion_controlled_warehouse_connector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
                                                                     std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device,
                                                                     size_t warehouse_ingestion_sz) -> std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>>{
                         
@@ -946,18 +946,22 @@ namespace dg::network_mempress_collector{
 
         static auto spawn_clock_collector(std::shared_ptr<RangePressInterface> range_press,
                                           std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
-                                          std::vector<std::chrono::nanoseconds> update_interval_table,
+                                          const std::vector<std::chrono::nanoseconds>& update_interval_table,
                                           size_t ops_clock_resolution,
                                           size_t collect_cap,
                                           size_t delivery_cap,
                                           uint32_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
 
             const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
-            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::days(1));
+            const size_t MIN_OPS_CLOCK_RESOLUTION               = 0u;
+            const size_t MAX_OPS_CLOCK_RESOLUTION               = std::numeric_limits<size_t>::max();
             const size_t MIN_COLLECT_CAP                        = 1u;
             const size_t MAX_COLLECT_CAP                        = size_t{1} << 30;
             const size_t MIN_DELIVERY_CAP                       = 1u;
             const size_t MAX_DELIVERY_CAP                       = size_t{1} << 30; 
+            const uint32_t MIN_SCAN_FREQUENCY                   = 1u;
+            const uint32_t MAX_SCAN_FREQUENCY                   = 1000000000UL; 
 
             if (range_press == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -967,11 +971,11 @@ namespace dg::network_mempress_collector{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(update_interval, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval){
+            if (range_press->size() != update_interval_table.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (range_press->size() != update_interval_table.size()){
+            if (std::clamp(ops_clock_resolution, MIN_OPS_CLOCK_RESOLUTION, MAX_OPS_CLOCK_RESOLUTION) != ops_clock_resolution){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -983,34 +987,117 @@ namespace dg::network_mempress_collector{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(scan_frequency, MIN_SCAN_FREQUENCY, MAX_SCAN_FREQUENCY)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             std::vector<ClockData> clock_data_table{};
 
             for (std::chrono::nanoseconds update_interval_entry: update_interval_table){
-                clock_data_table.push_back(ClockData{stdx::unix_low_resolution_timestamp(), update_interval_entry});
+                if (std::clamp(update_interval_entry, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval_entry){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);                    
+                }
+
+                clock_data_table.push_back(ClockData{.last_updated      = std::nullopt,
+                                                     .update_interval   = update_interval_entry});
             }
 
             return std::make_unique<ClockCollector>(std::move(range_press),
                                                     std::move(consumer),
-                                                    stdx::unix_timestamp(),
-                                                    update_interval,
+                                                    spawn_bonsai_frequencizer(),
                                                     std::move(clock_data_table),
+                                                    ops_clock_resolution,
                                                     collect_cap,
-                                                    delivery_cap);
+                                                    delivery_cap,
+                                                    scan_frequency);
         }
-        
-        static auto spawn_revolution_collector(std::shared_ptr<RangePressInterface> range_press,
-                                               std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
-                                               std::chrono::nanoseconds update_interval,
-                                               std::vector<uint32_t> update_revolution_table,
-                                               size_t collect_cap,
-                                               size_t delivery_cap) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
 
+        static auto spawn_clock_try_collector(std::shared_ptr<RangePressInterface> range_press,
+                                              std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                                              const std::vector<std::chrono::nanoseconds>& update_interval_table,
+                                              size_t ops_clock_resolution,
+                                              size_t collect_cap,
+                                              size_t delivery_cap,
+                                              uint32_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+            
             const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
-            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::days(1));
+            const size_t MIN_OPS_CLOCK_RESOLUTION               = 0u;
+            const size_t MAX_OPS_CLOCK_RESOLUTION               = std::numeric_limits<size_t>::max();
             const size_t MIN_COLLECT_CAP                        = 1u;
             const size_t MAX_COLLECT_CAP                        = size_t{1} << 30;
             const size_t MIN_DELIVERY_CAP                       = 1u;
             const size_t MAX_DELIVERY_CAP                       = size_t{1} << 30;
+            const uint32_t MIN_SCAN_FREQUENCY                   = 1u;
+            const uint32_t MAX_SCAN_FREQUENCY                   = 1000000000UL; 
+
+            if (range_press == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (consumer == nullptr){
+                dg::networK_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (range_press->size() != update_interval_table.size()){
+                dg::networK_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ops_clock_resolution, MIN_OPS_CLOCK_RESOLUTION, MAX_OPS_CLOCK_RESOLUTION) != ops_clock_resolution){
+                dg::networK_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(collect_cap, MIN_COLLECT_CAP, MAX_COLLECT_CAP) != collect_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(delivery_cap, MIN_DELIVERY_CAP, MAX_DELIVERY_CAP) != delivery_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(scan_frequency, MIN_SCAN_FREQUENCY, MAX_SCAN_FREQUENCY) != scan_frequency){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::vector<ClockData> clock_data_table{};
+
+            for (std::chrono::nanoseconds update_interval_entry: update_interval_table){
+                if (std::clamp(update_interval_entry, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval_entry){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                clock_data_table.push_back(ClockData{.last_updated      = std::nullopt,
+                                                     .update_interval   = update_interval_entry});
+            }
+
+            return std::make_unique<ClockTryCollector>(std::move(range_press),
+                                                       std::move(consumer),
+                                                       spawn_bonsai_frequencizer(),
+                                                       std::move(clock_data_table),
+                                                       ops_clock_resolution,
+                                                       collect_cap,
+                                                       delivery_cap,
+                                                       scan_frequency);
+        }
+
+        static auto spawn_competitive_try_collector(std::shared_ptr<RangePressInterface> range_press,
+                                                    std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                                                    const std::vector<std::chrono::nanoseconds>& update_interval_table,
+                                                    size_t ops_clock_resolution,
+                                                    size_t collect_cap,
+                                                    size_t delivery_cap,
+                                                    uint32_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+                                
+            const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
+            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::days(1));
+            const size_t MIN_OPS_CLOCK_RESOLUTION               = 0u;
+            const size_t MAX_OPS_CLOCK_RESOLUTION               = std::numeric_limits<size_t>::max();
+            const size_t MIN_COLLECT_CAP                        = 1u;
+            const size_t MAX_COLLECT_CAP                        = size_t{1} << 30;
+            const size_t MIN_DELIVERY_CAP                       = 1u;
+            const size_t MAX_DELIVERY_CAP                       = size_t{1} << 30;
+            const uint32_t MIN_SCAN_FREQUENCY                   = 1u;
+            const uint32_t MAX_SCAN_FREQUENCY                   = 1000000000UL;
 
             if (range_press == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -1020,7 +1107,67 @@ namespace dg::network_mempress_collector{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(update_interval, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval){
+            if (range_press->size() != update_interval_table.size()){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ops_clock_resolution, MIN_OPS_CLOCK_RESOLUTION, MAX_OPS_CLOCK_RESOLUTION) != ops_clock_resolution){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(collect_cap, MIN_COLLECT_CAP, MAX_COLLECT_CAP) != collect_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(delivery_cap, MIN_DELIVERY_CAP, MAX_DELIVERY_CAP) != delivery_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(scan_frequency, MIN_SCAN_FREQUENCY, MAX_SCAN_FREQUENCY) != scan_frequency){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::vector<ClockSuffixData> clock_data_table{};
+
+            for (std::chrono::nanoseconds update_interval_entry: update_interval_table){
+                if (std::clamp(update_interval_entry, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval_entry){
+                    dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+                }
+
+                clock_data_table.push_back(ClockSuffixData{.last_updated    = std::nullopt,
+                                                           .update_interval = update_interval_entry,
+                                                           .suffix_idx      = clock_data_table.size()});
+            }
+
+            return std::make_unique<ClockCompetitiveTryCollector>(std::move(range_press),
+                                                                  std::move(consumer),
+                                                                  spawn_bonsai_frequencizer(),
+                                                                  std::move(clock_data_table),
+                                                                  ops_clock_resolution,
+                                                                  collect_cap,
+                                                                  delivery_cap,
+                                                                  scan_frequency);
+        } 
+
+        static auto spawn_revolution_collector(std::shared_ptr<RangePressInterface> range_press,
+                                               std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                                               const std::vector<uint32_t>& update_revolution_table,
+                                               size_t collect_cap,
+                                               size_t delivery_cap,
+                                               uint32_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+
+            const size_t MIN_COLLECT_CAP        = 1u;
+            const size_t MAX_COLLECT_CAP        = size_t{1} << 30;
+            const size_t MIN_DELIVERY_CAP       = 1u;
+            const size_t MAX_DELIVERY_CAP       = size_t{1} << 30;
+            const uint32_t MIN_SCAN_FREQUENCY   = 1u;
+            const uint32_t MAX_SCAN_FREQUENCY   = 1000000000UL;
+
+            if (range_press == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (consumer == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -1036,25 +1183,24 @@ namespace dg::network_mempress_collector{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            for (uint32_t update_revolution: update_revolution_table){
-                if (!stdx::is_pow2(update_revolution)){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
+            if (std::clamp(scan_frequency, MIN_SCAN_FREQUENCY, MAX_SCAN_FREQUENCY) != scan_frequency){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             std::vector<RevolutionData> revolution_table{};
 
             for (uint32_t update_revolution: update_revolution_table){
-                revolution_table.push_back(RevolutionData{0u, update_revolution});
+                revolution_table.push_back(RevolutionData{.current_revolution           = 0u, 
+                                                          .revolution_update_threshold  = update_revolution});
             }
 
             return std::make_unique<RevolutionCollector>(std::move(range_press), 
                                                          std::move(consumer), 
-                                                         stdx::unix_timestamp(), 
-                                                         update_interval, 
+                                                         spawn_bonsai_frequencizer(),  
                                                          std::move(revolution_table), 
                                                          collect_cap, 
-                                                         delivery_cap);
+                                                         delivery_cap,
+                                                         scan_frequency);
         }
     };
 }

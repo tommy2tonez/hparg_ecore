@@ -526,6 +526,49 @@ namespace dg::network_mempress_impl1{
             auto try_collect(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool{
 
                 //attempt to collect the batch_press
+                //we are not being "fair"
+
+                bool random_value = dg::network_randomizer::randomize_int<bool>();
+                
+                if (random_value){
+                    return this->try_collect_1(ptr, dst, dst_sz, dst_cap);
+                } else{
+                    return this->try_collect_2(ptr, dst, dst_sz, dst_cap);
+                }
+            }
+
+            void collect(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
+
+                //attempt to collect the batch_press
+                //we are not being "fair"
+
+                bool random_value = dg::network_randomizer::randomize_int<bool>();
+
+                if (random_value){
+                    this->collect_1(ptr, dst, dst_sz, dst_cap);
+                } else{
+                    this->collect_2(ptr, dst, dst_sz, dst_cap);
+                }
+            }
+
+            auto is_collectable(uma_ptr_t ptr) noexcept -> bool{
+
+                return this->normal_press->is_collectable(ptr) || this->batch_press->is_collectable(ptr);
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->normal_press->max_consume_size();
+            }
+
+            auto minimum_collect_cap() noexcept -> size_t{
+
+                return std::max(this->normal_press->minimum_collect_cap(), this->batch_press->minimum_collect_cap()); //escalation
+            }
+        
+        private:
+            
+            auto try_collect_1(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool{
 
                 dst_sz                  = 0u;
 
@@ -554,7 +597,40 @@ namespace dg::network_mempress_impl1{
                 return batch_try_result || normal_try_result;
             }
 
-            void collect(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
+            auto try_collect_2(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool{
+
+                dst_sz                  = 0u;
+
+                event_t * normal_dst    = dst;
+                size_t normal_dst_sz    = 0u;
+                size_t normal_dst_cap   = dst_cap;
+
+                event_t * batch_dst     = dst;
+                size_t batch_dst_sz     = 0u;
+                size_t batch_dst_cap    = dst_cap; 
+
+                bool normal_try_result  = this->normal_press->try_collect(ptr, normal_dst, normal_dst_sz, normal_dst_cap);
+
+                if (normal_try_result){
+                    dst_sz          += normal_dst_sz;
+                    std::advance(batch_dst, normal_dst_sz);
+                    batch_dst_cap   -= normal_dst_sz;
+                }
+
+                if (batch_dst_cap < this->batch_press->minimum_collect_cap()){
+                    return normal_try_result;
+                }
+
+                bool batch_try_result   = this->batch_press->try_collect(ptr, batch_dst, batch_dst_sz, batch_dst_cap);
+
+                if (batch_try_result){
+                    dst_sz          += batch_dst_sz;
+                }
+
+                return batch_try_result || normal_try_result;
+            }
+
+            void collect_1(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
 
                 event_t * batch_dst     = dst;
                 size_t batch_dst_sz     = 0u;
@@ -571,19 +647,27 @@ namespace dg::network_mempress_impl1{
                 dst_sz                  = batch_dst_sz + normal_dst_sz;
             }
 
-            auto is_collectable(uma_ptr_t ptr) noexcept -> bool{
+            void collect_2(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
 
-                return this->normal_press->is_collectable(ptr) || this->batch_press->is_collectable(ptr);
-            }
+                event_t * normal_dst    = dst;
+                size_t normal_dst_sz    = 0u;
+                size_t normal_dst_cap   = dst_cap;
 
-            auto max_consume_size() noexcept -> size_t{
+                this->normal_press->collect(ptr, normal_dst, normal_dst_sz, normal_dst_cap);
 
-                return this->normal_press->max_consume_size();
-            }
+                event_t * batch_dst     = std::next(dst, normal_dst_sz);
+                size_t batch_dst_sz     = 0u;
+                size_t batch_dst_cap    = dst_cap - normal_dst_sz;
 
-            auto minimum_collect_cap() noexcept -> size_t{
+                if (batch_dst_cap < this->batch_press->minimum_collect_cap()){
+                    dst_sz = normal_dst_sz;
+                    return;
+                }
 
-                return std::max(this->normal_press->minimum_collect_cap(), this->batch_press->minimum_collect_cap()); //escalation
+                this->batch_press->collect(ptr, batch_dst, batch_dst_sz, batch_dst_cap);
+
+                dst_sz                  = batch_dst_sz + normal_dst_sz;
+
             }
     };
 

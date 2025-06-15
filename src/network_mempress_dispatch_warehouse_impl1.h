@@ -109,6 +109,20 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
                 return dg::vector<event_t>(std::move(fetching_data.value()));
             }
 
+            auto pop_nowait() noexcept -> std::optional<dg::vector<event_t>>{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                if (this->production_queue.empty()){
+                    return std::nullopt;
+                }
+
+                auto rs = std::move(this->production_queue.front());
+                this->production_queue.pop_front();
+
+                return std::optional<dg::vector<event_t>>(std::move(rs));
+            }
+
             auto size() noexcept -> size_t{
 
                 return this->sz_concurrent_var.value.load(std::memory_order_relaxed);
@@ -132,6 +146,55 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
 
     //in order for this to work, we have to make sure that the empty_curious_pop_sz has to empty the queue before doing actual waiting, so our waiting state is not skewed 
     //this is probably very hard to write
+
+    //we'd have to implement that, even though we'd not use that if there are not indicated performance contraints
+
+    class DistributedWareHouse: public virtual dg::network_mempress_dispatch_warehouse::WareHouseInterface{
+
+        private:
+
+            std::unique_ptr<std::unique_ptr<NormalWareHouse>[]> warehouse_arr;
+            size_t pow2_warehouse_arr_sz;
+            size_t empty_curious_pop_sz;
+
+        public:
+
+            DistributedWareHouse(std::unique_ptr<std::unique_ptr<NormalWareHouse>[]> warehouse_arr,
+                                 size_t pow2_warehouse_arr_sz,
+                                 size_t empty_curious_pop_sz): warehouse_arr(std::move(warehouse_arr)),
+                                                               pow2_warehouse_arr_sz(pow2_warehouse_arr_sz),
+                                                               empty_curious_pop_sz(empty_curious_pop_sz){}
+
+            auto push(dg::vector<event_t>&& event_vec) noexcept -> std::expected<bool, exception_t>{
+
+                size_t random_value = dg::network_randomizer::randomize_int<size_t>();
+                size_t idx          = random_value & (this->pow2_warehouse_arr_sz - 1u);
+
+                return this->warehouse_arr[idx]->push(std::move(event_vec));
+            }
+
+            auto pop() noexcept -> dg::vector<event_t>{
+
+                for (size_t i = 0u; i < this->empty_curious_pop_sz; ++i){
+                    size_t random_value = dg::network_randomizer::randomize_int<size_t>();
+                    size_t idx          = random_value & (this->pow2_warehouse_arr_sz - 1u);
+
+                    std::optional<dg::vector<event_t>> rs = this->warehouse_arr[idx]->pop_nowait();
+
+                    if (rs.has_value()){
+                        return dg::vector<event_t>(std::move(rs.value()));
+                    }
+                }
+
+                //can we prove that this is uniformly distributed, yes, because the next operation is "likely" to be waiting after a sufficient number of iterations (or samplings)
+                //so we can prove our likelyhood of uniform distribution of subscripted waiting threads (random_value is uniformly distributed => waiting_queue is uniformly distributed by using induction of previous state being already uniformly distributed)
+
+                size_t random_value = dg::network_randomizer::randomize_int<size_t>();
+                size_t idx          = random_value & (this->pow2_warehouse_arr_sz - 1u);
+
+                return this->warehouse_arr[idx]->pop();
+            }
+    };
 
     struct Factory{
 
@@ -171,6 +234,38 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
                                                      std::make_unique<std::mutex>(),
                                                      unit_consumption_sz,
                                                      0u);
+        }
+
+        static auto spawn_distributed_warehouse(size_t production_queue_cap,
+                                                size_t max_concurrency_sz,
+                                                size_t unit_consumption_sz,
+                                                size_t warehouse_concurrency,
+                                                size_t empty_curious_pop_sz) -> std::unique_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface>{
+                    
+            const size_t MIN_WAREHOUSE_CONCURRENCY  = 1u;
+            const size_t MAX_WAREHOUSE_CONCURRENCY  = size_t{1} << 30;
+            const size_t MIN_EMPTY_CURIOUS_POP_SZ   = 0u;
+            const size_t MAX_EMPTY_CURIOUS_POP_SZ   = size_t{1} << 30;
+            
+            if (std::clamp(warehouse_concurrency, MIN_WAREHOUSE_CONCURRENCY, MAX_WAREHOUSE_CONCURRENCY) != warehouse_concurrency){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (!stdx::is_pow2(warehouse_concurrency)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(empty_curious_pop_sz, MIN_EMPTY_CURIOUS_POP_SZ, MAX_EMPTY_CURIOUS_POP_SZ) != empty_curious_pop_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::unique_ptr<std::unique_ptr<NormalWareHouse>[]> warehouse_arr = std::make_unique<std::unique_ptr<NormalWareHouse>[]>(warehouse_concurrency);
+
+            for (size_t i = 0u; i < warehouse_concurrency; ++i){
+                warehouse_arr[i] = spawn_warehouse(production_queue_cap, max_concurrency_sz, unit_consumption_sz);
+            }
+
+            return std::make_unique<DistributedWareHouse>(std::move(warehouse_arr), warehouse_concurrency, empty_curious_pop_sz);
         }
     };
 }
