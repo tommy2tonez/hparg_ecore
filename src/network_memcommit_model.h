@@ -393,7 +393,7 @@ namespace dg::network_memcommit_factory{
         event_kind_forward_pingpong_request     = 2u,
         event_kind_forward_do_signal            = 3u,
         event_kind_backward_do_signal           = 4u,
-        event_kind_signal_aggregation_signal    = 5u
+        event_kind_signal_aggregation_signal    = 5u,
     };
 
     struct VirtualEvent{

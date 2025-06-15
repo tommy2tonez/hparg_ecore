@@ -38,6 +38,10 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
 
             auto push(dg::vector<event_t>&& event_vec) noexcept -> std::expected<bool, exception_t>{
 
+                if (event_vec.empty()){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
                 if (event_vec.size() > this->max_consume_size()){
                     return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
                 }
@@ -105,21 +109,6 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
                 return dg::vector<event_t>(std::move(fetching_data.value()));
             }
 
-            auto pop_nowait() noexcept -> std::optional<dg::vector<event_t>>{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                if (this->production_queue.empty()){
-                    return std::nullopt;
-                }
-
-                auto rs = std::move(this->production_queue.front());
-                this->production_queue.pop_front();
-                this->sz_concurrent_var.value.fetch_sub(1u, std::memory_order_relaxed);
-
-                return rs;
-            }
-
             auto size() noexcept -> size_t{
 
                 return this->sz_concurrent_var.value.load(std::memory_order_relaxed);
@@ -131,92 +120,18 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
             }
     };
 
-    //As I was considering every possible approach for how this could work
-    //This is the best approach in terms of no forever waiting + affinity + latency + etc
-    //the unordered_map rendered useless if it is not affined + const which defeats the initial purpose of doing distributed warehouse (we are synchronizing accesses, which is the NormalWareHouse responsibility)
+    //the only and sole problem that we are looking forward to solve is the waiting queue distribution
 
-    //this is not the socket problem where we could use complex reactor to force all of the waiting queue to be less than a certain size and use a forward cut every interval to make sure that we aren't missing out the bottom guys
-    //we didn't aim for latency in that case
-    //we aim for absolute latency in this case
+    //we can prove that by using induction, if the queue is uniformly distributed, a probably uniformly distributed move would put it in a probably uniformly distributed state
+    //it is missing an equilibrium factor, which is, despite my sincerest efforts, I have been unable to eliminate from, what is, otherwise the perfection of mathematical harmony
+    //alright, we'll have a periodic transmissioner to bring the number of waiting threads -> 0
+    //every 100 seconds for example
 
-    //we made the resolutor such that its only responsibility is to dispatch to asynchronous devices
-    //so we dont have to worry about the "worklife balance" of those guys
-    //except for some simple get/setters or ping pong which is "in the acceptable range"
-    //we however, could implement an empty_curious to partly solve that
+    //how could we prove that if we exhaust the waiting queue at a certain point (rescue_packet_sz = warehouse_concurrency_sz * actual_concurrency_sz), it is guaranteed that the waiting state is uniformly distributed 
+    //we are back to the "probably" uniformly distributed again, we aren't certain, we are playing with random statistics, and adding an "equilibrium factor" to make sure that our induction is complete
 
-    //we'd want to solve two problems: 
-    //the problem of pushing into an empty container -> OK, thru
-    //the problem of popping a not empty container -> OK, thru
-
-    //otherwise, we'd need empty_curious 
-
-    class HybridAffinedWareHouse: public virtual dg::network_mempress_dispatch_warehouse::WareHouseInterface{
-
-        private:
-
-            std::unique_ptr<std::unique_ptr<dg::network_mempress_dispatch_warehouse::NormalWareHouse>[]> warehouse_arr;
-            size_t pow2_warehouse_arr_sz;
-            size_t event_consume_sz;
-            size_t empty_curious_pop_sz;
-
-        public:
-
-            HybridAffinedWareHouse(std::unique_ptr<std::unique_ptr<dg::network_mempress_dispatch_warehouse::NormalWareHouse>[]> warehouse_arr,
-                                   size_t pow2_warehouse_arr_sz,
-                                   size_t event_consume_sz,
-                                   size_t empty_curious_pop_sz) noexcept: warehouse_arr(std::move(warehouse_arr)),
-                                                                          pow2_warehouse_arr_sz(pow2_warehouse_arr_sz),
-                                                                          event_consume_sz(event_consume_sz),
-                                                                          empty_curious_pop_sz(empty_curious_pop_sz){}
-
-            auto push(dg::vector<event_t>&& event_vec) noexcept -> std::expected<bool, exception_t>{
-
-                size_t random_value = dg::network_randomizer::randomize_int<size_t>();
-                size_t idx          = random_value & (this->pow2_warehouse_arr_sz - 1u);
-
-                return this->warehouse_arr[idx]->push(std::move(event_vec));
-            }
-
-            auto pop() noexcept -> dg::vector<event_t>{
-
-                for (size_t i = 0u; i < this->empty_curious_pop_sz; ++i){
-                    size_t random_value     = dg::network_randomizer::randomize_int<size_t>();
-                    size_t idx              = random_value & (this->pow2_warehouse_arr_sz - 1u);
-                    size_t cur_sz           = this->warehouse_arr[idx]->size();
-
-                    if (cur_sz != 0u){
-                        std::optional<dg::vector<event_t>> rs = this->warehouse_arr[idx]->pop_nowait();
-
-                        if (rs.has_value()){
-                            return dg::vector<event_t>(std::move(rs.value()));
-                        }
-                    }
-                }
-
-                size_t random_value = dg::network_randomizer::randomize_int<size_t>();
-                size_t idx          = random_value & (this->pow2_warehouse_arr_sz - 1u);
-
-                return this->warehouse_arr[idx]->pop();
-            }
-
-            auto max_consume_size() noexcept -> size_t{
-
-                return this->event_consume_sz;
-            }
-    };
-
-    //I have never once seen an as tough problem, we still need to implement a rescue worker to break up the waiting patterns 
-    //empty_curious_pop_sz would actually reduce the vector size by 100 folds, but we can't guarantee that we are waiting on a uniform distributed range
-    //we can actually guarantee that, by using induction, but time is not on our favor
-
-    //this is precisely the problem with uniform distribution
-    //such is we can prove, by using induction that if the state (waiting list) is uniform distributed, the next state is gonna be "probably" uniform distributed
-    //but if the state is skewed, the next state is not converging to the uniform distribution case
-
-    //we need to add that balancing factor of skewness -> uniform distribution
-    //by using a rescue worker to "rest" queue
-
-    //we can safely say that the problem is solved if we could reduce the waiting_sz -> 0 for every interval
+    //in order for this to work, we have to make sure that the empty_curious_pop_sz has to empty the queue before doing actual waiting, so our waiting state is not skewed 
+    //this is probably very hard to write
 
     struct Factory{
 
@@ -256,45 +171,6 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
                                                      std::make_unique<std::mutex>(),
                                                      unit_consumption_sz,
                                                      0u);
-        }
-
-        static auto spawn_hybrid_distributed_warehouse(size_t base_production_warehouse_cap,
-                                                       size_t base_unit_consumption_sz,
-                                                       size_t max_concurrency_sz,
-                                                       size_t warehouse_concurrency_sz,
-                                                       size_t empty_curious_pop_sz) -> std::unique_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface>{
-
-            const size_t MIN_WAREHOUSE_CONCURRENCY_SZ   = 1u;
-            const size_t MAX_WAREHOUSE_CONCURRENCY_SZ   = size_t{1} << 20;
-            
-            
-            const size_t MIN_EMPTY_CURIOUS_POP_SZ       = 0u;
-            const size_t MAX_EMPTY_CURIOUS_POP_SZ       = size_t{1} << 20;
-
-            if (std::clamp(warehouse_concurrency_sz, MIN_WAREHOUSE_CONCURRENCY_SZ, MAX_WAREHOUSE_CONCURRENCY_SZ) != warehouse_concurrency_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (!stdx::is_pow2(warehouse_concurrency_sz)){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (std::clamp(empty_curious_pop_sz, MIN_EMPTY_CURIOUS_POP_SZ, MAX_EMPTY_CURIOUS_POP_SZ) != empty_curious_pop_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            std::unique_ptr<std::unique_ptr<NormalWareHouse>[]> warehouse_arr = std::make_unique<std::unique_ptr<NormalWareHouse>[]>(warehouse_concurrency_sz);
-
-            for (size_t i = 0u; warehouse_concurrency_sz; ++i){
-                warehouse_arr[i] = spawn_warehouse(base_production_warehouse_cap,
-                                                   max_concurrency_sz,
-                                                   base_unit_consumption_sz);
-            }
-
-            return std::make_unique<HybridAffinedWareHouse>(std::move(warehouse_arr),
-                                                            warehouse_concurrency_sz,
-                                                            base_unit_consumption_sz,
-                                                            empty_curious_pop_sz);
         }
     };
 }

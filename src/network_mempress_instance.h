@@ -3,6 +3,7 @@
 
 #include "network_mempress_interface.h"
 #include "network_mempress_impl1.h"
+#include "stdx.h"
 
 namespace dg::network_mempress_instance{
 

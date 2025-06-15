@@ -31,12 +31,14 @@ namespace dg::network_mempress_collector{
         virtual auto size() const noexcept -> size_t = 0;
         virtual auto try_get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool = 0;
         virtual auto is_gettable(size_t idx) noexcept -> bool = 0;
+        virtual auto is_busy(size_t idx) noexcept -> bool = 0;
         virtual void get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept = 0;
     };
 
     struct BonsaiFrequencierInterface{
         virtual ~BonsaiFrequencierInterface() noexcept = default;
-        virtual void frequencize(uint32_t) noexcept = 0;
+        virtual auto frequencize(uint32_t) noexcept -> exception_t = 0;
+        virtual void reset() noexcept = 0;
     };
 
     class MemoryRangePress: public virtual RangePressInterface{
@@ -66,7 +68,7 @@ namespace dg::network_mempress_collector{
                     }
                 }
 
-                uma_ptr_t region = stdx::to_const_reference(this->region_table)[idx];
+                uma_ptr_t region = std::as_const(this->region_table)[idx];
                 return this->mempress->try_collect(region, dst, dst_sz, dst_cap);
             } 
 
@@ -79,9 +81,22 @@ namespace dg::network_mempress_collector{
                     }
                 }
 
-                uma_ptr_t region = stdx::to_const_reference(this->region_table)[idx];
+                uma_ptr_t region = std::as_const(this->region_table)[idx];
                 return this->mempress->is_collectable(region);
-            } 
+            }
+
+            auto is_busy(size_t idx) noexcept -> bool{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->region_table.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                uma_ptr_t region = std::as_const(this->region_table)[idx];
+                return this->mempress->is_busy(region);
+            }
 
             void get(size_t idx, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept{
 
@@ -92,18 +107,10 @@ namespace dg::network_mempress_collector{
                     }
                 }
 
-                uma_ptr_t region = stdx::to_const_reference(this->region_table)[idx];
+                uma_ptr_t region = std::as_const(this->region_table)[idx];
                 this->mempress->collect(region, dst, dst_sz, dst_cap);
             }
     };
-
-    //after the 1024th implementations, we realized that this is still too heavy
-    //we actually want a dg::vector<event_t> for both the mempress and the mempress collector, surprisingly
-    //we dont go there yet because we can't actually guarantee the worst case for event_t == dg::vector<event_t>, which must be considred when building systems like this 
-    //our client has a stingent constraint on the memregion scanning + friends
-    //we can't offload too many responsibility -> the scanner
-    //it must involve somewhat a dg::vector<event_t> to achieve the magic
-    //I guess we just "scale" the numeber of collector then
 
     class WareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
 
@@ -118,23 +125,30 @@ namespace dg::network_mempress_collector{
                                size_t warehouse_ingestion_sz): warehouse(std::move(warehouse)),
                                                                warehouse_ingestion_sz(warehouse_ingestion_sz){}
 
-            void push(std::move_iterator<event_t *> event_arr, size_t event_arr_sz) noexcept[
+            void push(std::move_iterator<event_t *> event_arr, size_t event_arr_sz) noexcept{
 
                 event_t * base_event_arr                = event_arr.base();
                 size_t trimmed_warehouse_ingestion_sz   = std::min(this->warehouse_ingestion_sz, this->warehouse->max_consume_size());
                 size_t discretization_sz                = trimmed_warehouse_ingestion_sz;
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (discretization_sz == 0u){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
                 size_t iterable_sz                      = event_arr_sz / discretization_sz + size_t{event_arr_sz % discretization_sz != 0u};  
 
                 for (size_t i = 0u; i < iterable_sz; ++i){
-                    size_t first    = i * discretization_sz;
-                    size_t last     = std::min((i + 1) * discretization_sz, event_arr_sz);
-                    size_t vec_sz   = last - first; 
+                    size_t first    = discretization_sz * i;
+                    size_t last     = std::min(static_cast<size_t>(discretization_sz * (i + 1)), event_arr_sz);
+                    size_t vec_sz   = last - first;
 
                     std::expected<dg::vector<event_t>, exception_t> vec = dg::network_exception::cstyle_initialize<dg::vector<event_t>>(vec_sz);
 
                     if (!vec.has_value()){
-                        //leaks
-                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(vec.error()));
+                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(vec.error()));
                         continue;
                     }
 
@@ -142,21 +156,19 @@ namespace dg::network_mempress_collector{
                     std::expected<bool, exception_t> push_err = this->warehouse->push(std::move(vec.value()));
 
                     if (!push_err.has_value()){
-                        //leaks
-                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(push_err.error()));
+                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(push_err.error()));
                         continue;
                     }
 
                     if (!push_err.value()){
-                        //leaks;
-                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(dg::network_exception::QUEUE_FULL));
+                        dg::network_log_stackdump::error_fast(dg::network_exception::verbose(dg::network_exception::QUEUE_FULL));
                         continue;
                     }
                 }
-            ]
+            }
     };
 
-    class WareHouseExhaustionControlledConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
+    class ExhaustionControllerWareHouseConnector: public virtual dg::network_producer_consumer::ConsumerInterface<event_t>{
 
         private:
 
@@ -166,7 +178,7 @@ namespace dg::network_mempress_collector{
 
         public:
 
-            WareHouseExhaustionControlledConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
+            ExhaustionControllerWareHouseConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
                                                    std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device,
                                                    size_t warehouse_ingestion_sz) noexcept: warehouse(std::move(warehouse)),
                                                                                             infretry_device(std::move(infretry_device)),
@@ -180,17 +192,24 @@ namespace dg::network_mempress_collector{
                 event_t * base_event_arr                = event_arr.base();
                 size_t trimmed_warehouse_ingestion_sz   = std::min(this->warehouse_ingestion_sz, this->warehouse->max_consume_size());
                 size_t discretization_sz                = trimmed_warehouse_ingestion_sz;
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (discretization_sz == 0u){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
                 size_t iterable_sz                      = event_arr_sz / discretization_sz + size_t{event_arr_sz % discretization_sz != 0u};
 
                 for (size_t i = 0u; i < iterable_sz; ++i){
-                    size_t first    = i * discretization_sz;
-                    size_t last     = std::min((i + 1) * discretization_sz, event_arr_sz);
+                    size_t first    = discretization_sz * i;
+                    size_t last     = std::min(static_cast<size_t>(discretization_sz * (i + 1)), event_arr_sz);
                     size_t vec_sz   = last - first;
 
                     std::expected<dg::vector<event_t>, exception_t> vec = dg::network_exception::cstyle_initialize<dg::vector<event_t>>(vec_sz);
 
                     if (!vec.has_value()){
-                        //leaks
                         dg::network_log_stackdump::error(dg::network_exception::verbose(vec.error())); //serious error
                         continue;
                     }
@@ -198,13 +217,24 @@ namespace dg::network_mempress_collector{
                     std::copy(std::make_move_iterator(std::next(base_event_arr, first)), std::make_move_iterator(std::next(base_event_arr, last)), vec->begin());
                     std::expected<bool, exception_t> push_err = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
 
-                    auto task = [&]() noexcept{
+                    auto task = [&, this]() noexcept{
                         push_err = this->warehouse->push(std::move(vec.value()));                       
-                        return !push_err.has_value() || push_err.value() == true;
+
+                        if (!push_err.has_value()){
+                            return true;
+                        }
+
+                        return push_err.value();
                     };
 
                     dg::network_concurrency_infretry_x::ExecutableWrapper virtual_task(task);
                     this->infretry_device->exec(virtual_task);
+
+                    //there are a lot of stuffs could happen
+                    //we are on finite retriables or infinite retriables
+                    //upon exit, it's possibly thru, excepted, or not thru due to producer-consumer exhaustion or finite retriables ran out
+                    //we can only clue our transactional push_err, which is guaranteed to be correct
+                    //yet we could guarantee one thing, that if it hits push_err.error() or thru, it would not continue to retry
 
                     if (!push_err.has_value()){
                         dg::network_log_stackdump::error(dg::network_exception::verbose(push_err.error())); //serious error
@@ -216,6 +246,64 @@ namespace dg::network_mempress_collector{
                         continue;
                     }
                 }
+            }
+    };
+
+    class BonsaiFrequencier: public virtual BonsaiFrequencierInterface{
+
+        private:
+
+            std::optional<std::chrono::time_point<std::chrono::steady_clock>> last_tick;
+
+        public:
+
+            BonsaiFrequencier() noexcept: last_tick(std::nullopt){}
+
+            auto frequencize(uint32_t frequency) noexcept -> exception_t{
+
+                if (frequency == 0u){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                if (!this->last_tick.has_value()){
+                    this->last_tick = std::chrono::steady_clock::now();
+                    return;
+                }
+
+                std::chrono::nanoseconds period                             = this->frequency_to_period(frequency);
+                std::chrono::time_point<std::chrono::steady_clock> expiry   = this->last_tick.value() + period;
+                std::chrono::time_point<std::chrono::steady_clock> now      = std::chrono::steady_clock::now();
+
+                if (now >= expiry){
+                    this->last_tick = now;
+                    return;
+                }
+
+                std::chrono::nanoseconds diff   = std::chrono::duration_cast<std::chrono::nanoseconds>(expiry - now);
+                stdx::high_resolution_sleep(diff);
+                this->last_tick                 = std::chrono::steady_clock::now();
+            }
+
+            void reset() noexcept{
+
+                this->last_tick = std::nullopt;
+            }
+
+        private:
+
+            static constexpr auto frequency_to_period(uint32_t frequency) noexcept -> std::chrono::nanoseconds{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (frequency == 0u){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                uint32_t SECOND_NANOSECONDS = 1000000000UL;
+                uint32_t round_period       = SECOND_NANOSECONDS / frequency;
+
+                return std::chrono::nanoseconds(round_period);
             }
     };
 
@@ -246,7 +334,7 @@ namespace dg::network_mempress_collector{
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->frequencize(this->scan_frequency);
+                dg::network_exception_handler::nothrow_log(this->frequencizer->frequencize(this->scan_frequency));
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost); 
@@ -257,14 +345,19 @@ namespace dg::network_mempress_collector{
                 size_t range_sz             = this->range_press->size();
 
                 for (size_t i = 0u; i < range_sz; ++i){
-                    size_t event_arr_sz = {};
-
                     if (!this->range_press->is_gettable(i)){
                         continue;
                     }
 
-                    if (this->range_press->try_get(i, event_arr.get(), event_arr_sz, this->collect_cap)){
-                        std::for_each(event_arr.get(), std::next(event_arr.get(), event_arr_sz), std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
+                    size_t event_arr_sz = {};
+                    bool get_rs         = this->range_press->try_get(i, event_arr.get(), event_arr_sz, this->collect_cap);
+
+                    if (!get_rs){
+                        continue;
+                    }
+
+                    for (size_t j = 0u; j < event_arr_sz; ++j){
+                        dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(event_arr[j]));
                     }
                 }
 
@@ -287,7 +380,7 @@ namespace dg::network_mempress_collector{
         public:
 
             CompetitiveTryCollector(std::shared_ptr<RangePressInterface> range_press,
-                                    std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_>> consumer,
+                                    std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
                                     std::shared_ptr<BonsaiFrequencierInterface> frequencizer,
                                     std::vector<size_t> suffix_array,
                                     size_t collect_cap,
@@ -302,11 +395,7 @@ namespace dg::network_mempress_collector{
             
             auto run_one_epoch() noexcept -> bool{
 
-                //strategize
-                //1 -> log2 == 0
-                //iterable_sz == [0, 0 + 1)
-
-                this->frequencizer->tick(this->scan_frequency);
+                dg::network_exception_handler::nothrow_log(this->frequencizer->frequencize(this->scan_frequency));
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
@@ -328,12 +417,8 @@ namespace dg::network_mempress_collector{
 
                 for (size_t i = 0u; i < iterable_log2_sz; ++i){
                     size_t first        = 0u;
-                    size_t last         = std::min(size_t{1} << i, static_cast<size_t>(this->suffix_array.size())); 
-                    size_t failed_sz    = 0u; 
-
-                    //this is complicated, we'd want to try_collect once every run_one_epoch
-                    //do we ?
-                    //I dont really know
+                    size_t last         = std::min(size_t{1} << i, static_cast<size_t>(this->suffix_array.size()));
+                    size_t failed_sz    = 0u;
 
                     for (size_t j = first; j < last; ++j){
                         size_t region_idx   = this->suffix_array[j]; 
@@ -343,11 +428,16 @@ namespace dg::network_mempress_collector{
                             continue;
                         }
 
-                        if (this->range_press->try_get(region_idx, event_arr.get(), event_arr_sz, this->collect_cap)){
-                            std::for_each(event_arr.get(), std::next(event_arr.get(), event_arr_sz), std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
-                        } else{
+                        bool get_rs = this->range_press->try_get(region_idx, event_arr.get(), event_arr_sz, this->collect_cap);
+
+                        if (!get_rs){
                             std::swap(this->suffix_array[j], this->suffix_array[first + failed_sz]);
-                            failed_sz += 1;
+                            failed_sz += 1u;
+                            continue;
+                        }
+
+                        for (size_t z = 0u; z < event_arr_sz; ++z){
+                            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(event_arr[z]));
                         }
                     }
                 }
@@ -357,7 +447,7 @@ namespace dg::network_mempress_collector{
     };
 
     struct ClockData{
-        std::chrono::time_point<std::chrono::steady_clock> last_updated;
+        std::optional<std::chrono::time_point<std::chrono::steady_clock>> last_updated;
         std::chrono::nanoseconds update_interval;
     };
 
@@ -394,15 +484,15 @@ namespace dg::network_mempress_collector{
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->frequencize(this->scan_frequency);
+                dg::network_exception_handler::nothrow_log(this->frequencizer->frequencize(this->scan_frequency));
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
                 auto delivery_handle        = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->consumer.get(), this->delivery_cap, dh_mem.get()));
 
                 dg::network_stack_allocation::NoExceptAllocation<event_t[]> event_arr(this->collect_cap);
-                size_t range_sz             = this->range_press->size(); 
-                auto ticking_steady_clock   = dg::ticking_steady_clock(this->ticking_clock_resolution); 
+                size_t range_sz             = this->range_press->size();
+                auto ticking_steady_clock   = dg::ticking_clock<std::chrono::steady_clock>(this->ticking_clock_resolution); 
 
                 for (size_t i = 0u; i < range_sz; ++i){
                     std::chrono::time_point<std::chrono::steady_clock> local_now = ticking_steady_clock.get();
@@ -414,15 +504,22 @@ namespace dg::network_mempress_collector{
                         }
                     }
 
-                    std::chrono::nanoseconds lifetime = local_now - this->clock_data_table[i].last_updated;
+                    std::optional<std::chrono::time_point<std::chrono::steady_clock>> last_updated = this->clock_data_table[i].last_updated;
 
-                    if (lifetime < this->clock_data_table[i].update_interval){ //not expired
-                        continue;
+                    if (last_updated.has_value()){
+                        std::chrono::nanoseconds lifetime = std::chrono::duration_cast<std::chrono::nanoseconds>(local_now - last_updated.value());
+
+                        if (lifetime < this->clock_data_table[i].update_interval){ //not expired
+                            continue;
+                        }
                     }
 
                     size_t event_arr_sz = {};
-                    this->range_press->get(i, event_arr.get(), event_arr_sz, this->collect_cap); //
-                    std::for_each(event_arr.get(), std::next(event_arr.get(), event_arr_sz), std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
+                    this->range_press->get(i, event_arr.get(), event_arr_sz, this->collect_cap);
+
+                    for (size_t j = 0u; j < event_arr_sz; ++j){
+                        dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(event_arr[j]));
+                    }
 
                     this->clock_data_table[i].last_updated = ticking_steady_clock.get();
                 }
@@ -468,7 +565,7 @@ namespace dg::network_mempress_collector{
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->frequencize(this->scan_frequency);
+                dg::network_exception_handler::nothrow_log(this->frequencizer->frequencize(this->scan_frequency));
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
@@ -476,7 +573,7 @@ namespace dg::network_mempress_collector{
 
                 dg::network_stack_allocation::NoExceptAllocation<event_t[]> event_arr(this->collect_cap);
                 size_t range_sz             = this->range_press->size(); 
-                auto clock                  = dg::ticking_steady_clock(this->ticking_clock_resolution); 
+                auto clock                  = dg::ticking_clock<std::chrono::steady_clock>(this->ticking_clock_resolution);
 
                 for (size_t i = 0u; i < range_sz; ++i){
                     std::chrono::time_point<std::chrono::steady_clock> local_now = clock.get();
@@ -488,10 +585,14 @@ namespace dg::network_mempress_collector{
                         }
                     }
 
-                    std::chrono::nanoseconds lifetime = local_now - this->clock_data_table[i].last_updated;
+                    std::optional<std::chrono::time_point<std::chrono::steady_clock>> last_updated = this->clock_data_table[i].last_updated;
 
-                    if (lifetime < this->clock_data_table[i].update_interval){ //not expired
-                        continue;
+                    if (last_updated.has_value()){
+                        std::chrono::nanoseconds lifetime = local_now - last_updated.value();
+
+                        if (lifetime < this->clock_data_table[i].update_interval){ //not expired
+                            continue;
+                        }
                     }
 
                     if (!this->range_press->is_gettable(i)){
@@ -500,11 +601,17 @@ namespace dg::network_mempress_collector{
                     }
 
                     size_t event_arr_sz = {};
+                    bool get_rs         = this->range_press->try_get(i, event_arr.get(), event_arr_sz, this->collect_cap);
 
-                    if (this->range_press->try_get(i, event_arr.get(), event_arr_sz, this->collect_cap)){
-                        std::for_each(event_arr.get(), std::next(event_arr.get(), event_arr_sz), std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
-                        this->clock_data_table[i].last_updated = clock.get();    
+                    if (!get_rs){
+                        continue;
                     }
+
+                    for (size_t j = 0u; j < event_arr_sz; ++j){
+                        dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(event_arr[j]));
+                    }
+
+                    this->clock_data_table[i].last_updated = clock.get();    
                 }
 
                 return true;
@@ -512,11 +619,12 @@ namespace dg::network_mempress_collector{
     };
 
     class ClockSuffixData{
-        std::chrono::time_point<std::chrono::steady_clock> last_updated;
+        std::optional<std::chrono::time_point<std::chrono::steady_clock>> last_updated;
         std::chrono::nanoseconds update_interval;
         uint32_t suffix_idx;
     };
 
+    //
     class ClockCompetitiveTryCollector: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -550,7 +658,7 @@ namespace dg::network_mempress_collector{
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->frequencize(this->scan_frequency);
+                dg::network_exception_handler::nothrow_log(this->frequencizer->frequencize(this->scan_frequency));
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
@@ -567,25 +675,29 @@ namespace dg::network_mempress_collector{
                     }
                 }
 
-                auto clock              = dg::ticking_steady_clock(this->ticking_clock_resolution); 
+                auto clock              = dg::ticking_clock<std::chrono::steady_clock>(this->ticking_clock_resolution); 
 
                 size_t max_log2_exp     = stdx::ulog2(stdx::ceil2(this->clock_data_table.size()));
                 size_t iterable_sz      = max_log2_exp + 1u;
-                
+
                 for (size_t i = 0u; i < iterable_sz; ++i){
                     size_t first        = 0u;
-                    size_t last         = std::min(size_t{1} << i, static_cast<size_t>(this->clock_data_table.size()));  
-                    size_t failed_sz    = 0u; 
+                    size_t last         = std::min(size_t{1} << i, static_cast<size_t>(this->clock_data_table.size()));
+                    size_t failed_sz    = 0u;
 
                     for (size_t j = first; j < last; ++j){
-                        size_t region_idx                                               = this->clock_data_table[j].suffix_idx; 
-                        std::chrono::nanoseconds update_interval                        = this->clock_data_table[j].update_interval; //this is very expensive
-                        std::chrono::time_point<std::chrono::steady_clock> last_updated = this->clock_data_table[j].last_updated;
-                        std::chrono::time_point<std::chrono::steady_clock> now          = clock.get();
-                        std::chrono::nanoseconds lifetime                               = now - last_updated;
+                        size_t region_idx                                       = this->clock_data_table[j].suffix_idx; 
+                        std::chrono::nanoseconds update_interval                = this->clock_data_table[j].update_interval; //this is very expensive
+                        std::chrono::time_point<std::chrono::steady_clock> now  = clock.get();
 
-                        if (lifetime < update_interval){
-                            continue;
+                        std::optional<std::chrono::time_point<std::chrono::steady_clock>> last_updated = this->clock_data_table[j].last_updated;
+
+                        if (last_updated.has_value()){
+                            std::chrono::nanoseconds lifetime   = now - last_updated;
+
+                            if (lifetime < update_interval){
+                                continue;
+                            }
                         }
 
                         if (!this->range_press->is_gettable(region_idx)){
@@ -594,14 +706,19 @@ namespace dg::network_mempress_collector{
                         }
 
                         size_t event_arr_sz = {};
+                        bool get_rs         = this->range_press->try_get(region_idx, event_arr.get(), event_arr_sz, this->collect_cap);  
 
-                        if (this->range_press->try_get(region_idx, event_arr.get(), event_arr_sz, this->collect_cap)){
-                            std::for_each(event_arr.get(), std::next(event_arr.get(), event_arr_sz), std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
-                            this->clock_data_table[j].last_updated = clock.get();        
-                        } else{
+                        if (!get_rs){
                             std::swap(this->clock_data_table[j], this->clock_data_table[first + failed_sz]);
                             failed_sz += 1;
+                            continue;
                         }
+
+                        for (size_t z = 0u; z < event_arr_sz; ++z){
+                            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(event_arr[z]));
+                        }
+
+                        this->clock_data_table[j].last_updated = clock.get();
                     }
                 }
             }
@@ -610,7 +727,7 @@ namespace dg::network_mempress_collector{
     //we have yet want to abstract this -> ClockCollector
     struct RevolutionData{
         uint32_t current_revolution;
-        uint32_t update_sz_pow2_exp; 
+        uint32_t revolution_update_threshold;
     };
 
     class RevolutionCollector: public virtual dg::network_concurrency::WorkerInterface{
@@ -643,7 +760,7 @@ namespace dg::network_mempress_collector{
 
             auto run_one_epoch() noexcept -> bool{
 
-                this->frequencizer->frequencize(this->scan_frequency);
+                dg::networK_exception_handler::nothrow_log(this->frequencizer->frequencize(this->scan_frequency));
 
                 size_t dh_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(this->consumer.get(), this->delivery_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
@@ -661,13 +778,17 @@ namespace dg::network_mempress_collector{
                     }
 
                     size_t& current_revolution  = this->revolution_table[i].current_revolution;
-                    size_t update_revolution    = size_t{1} << this->revolution_table[i].update_sz_pow2_exp; 
+                    size_t update_revolution    = this->revolution_table[i].revolution_update_threshold; 
                     current_revolution          += 1;
 
                     if (current_revolution == update_revolution){
                         size_t event_arr_sz = {};
                         this->range_press->get(i, event_arr.get(), event_arr_sz, this->collect_cap);
-                        std::for_each(event_arr.get(), std::next(event_arr.get(), event_arr_sz), std::bind_front(dg::network_producer_consumer::delvrsrv_deliver_lambda, delivery_handle->get()));
+
+                        for (size_t j = 0u; j < event_arr_sz; ++j){
+                            dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(event_arr[j]));
+                        }
+                        
                         current_revolution  = 0u;
                     }
                 }
@@ -692,29 +813,69 @@ namespace dg::network_mempress_collector{
 
             return std::make_unique<MemoryRangePress>(std::move(region_vec), std::move(mem_press));
         }
- 
+
+        static auto spawn_warehouse_connector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
+                                              size_t warehouse_ingestion_sz) -> std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>>{
+
+            if (warehouse == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            const size_t MIN_WAREHOUSE_INGESTION_SZ     = 1u;
+            const size_t MAX_WAREHOUSE_INGESTION_SZ     = warehouse->max_consume_size(); 
+
+            if (std::clamp(warehouse_ingestion_sz, MIN_WAREHOUSE_INGESTION_SZ, MAX_WAREHOUSE_INGESTION_SZ) != warehouse_ingestion_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<WareHouseConnector>(std::move(warehouse), warehouse_ingestion_sz);
+        }
+
+        static auto spawn_exhaustion_controlled_warehouse_connector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseConnector> warehouse,
+                                                                    std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device,
+                                                                    size_t warehouse_ingestion_sz) -> std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>>{
+                        
+            if (warehouse == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (infretry_device == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            const size_t MIN_WAREHOUSE_INGESTION_SZ     = 1u;
+            const size_t MAX_WAREHOUSE_INGESTION_SZ     = warehouse->max_consume_size();
+
+            if (std::clamp(warehouse_ingestion_sz, MIN_WAREHOUSE_INGESTION_SZ, MAX_WAREHOUSE_INGESTION_SZ) != warehouse_ingestion_sz){
+                dg::network_exception::throw_exception(dg::networK_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ExhaustionControllerWareHouseConnector>(std::move(warehouse), std::move(infretry_device), warehouse_ingestion_sz);
+        }
+
+        static auto spawn_bonsai_frequencizer() -> std::unique_ptr<BonsaiFrequencierInterface>{
+
+            return std::make_unique<BonsaiFrequencier>();
+        }
+
         static auto spawn_try_collector(std::shared_ptr<RangePressInterface> range_press, 
                                         std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
-                                        std::chrono::nanoseconds update_interval,
                                         size_t collect_cap,
-                                        size_t delivery_cap) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+                                        size_t delivery_cap,
+                                        uint32_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
 
-            const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
-            const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
-            const size_t MIN_COLLECT_CAP                        = 1u;
-            const size_t MAX_COLLECT_CAP                        = size_t{1} << 30;
-            const size_t MIN_DELIVERY_CAP                       = 1u;
-            const size_t MAX_DELIVERY_CAP                       = size_t{1} << 30;
+            const size_t MIN_COLLECT_CAP        = 1u;
+            const size_t MAX_COLLECT_CAP        = size_t{1} << 30;
+            const size_t MIN_DELIVERY_CAP       = 1u;
+            const size_t MAX_DELIVERY_CAP       = size_t{1} << 30;
+            const uint32_t MIN_SCAN_FREQUENCY   = 1u;
+            const uint32_t MAX_SCAN_FREQUENCY   = 1000000000UL; 
 
             if (range_press == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             if (consumer == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (std::clamp(update_interval, MIN_UPDATE_INTERVAL, MAX_UPDATE_INTERVAL) != update_interval){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -726,20 +887,70 @@ namespace dg::network_mempress_collector{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(scan_frequency, MIN_SCAN_FREQUENCY, MAX_SCAN_FREQUENCY) != scan_frequency){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             return std::make_unique<TryCollector>(std::move(range_press),
                                                   std::move(consumer),
-                                                  stdx::unix_timestamp(),
-                                                  update_interval,
+                                                  spawn_bonsai_frequencizer(),
                                                   collect_cap,
-                                                  delivery_cap);
+                                                  delivery_cap,
+                                                  scan_frequency);
         }
 
-        static auto spawn_clock_collector(std::shared_ptr<RangePressInterface> range_press, 
+        static auto spawn_competitive_try_collector(std::shared_ptr<RangePressInterface> range_press,
+                                                    std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                                                    size_t collect_cap,
+                                                    size_t delivery_cap,
+                                                    size_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+            
+            const size_t MIN_COLLECT_CAP        = 1u;
+            const size_t MAX_COLLECT_CAP        = size_t{1} << 30;
+            const size_t MIN_DELIVERY_CAP       = 1u;
+            const size_t MAX_DELIVERY_CAP       = size_t{1} << 30;
+            const uint32_t MIN_SCAN_FREQUENCY   = 1u;
+            const uint32_t MAX_SCAN_FREQUENCY   = 1000000000UL;
+
+            if (range_press == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (consumer == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(collect_cap, MIN_COLLECT_CAP, MAX_COLLECT_CAP) != collect_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(delivery_cap, MIN_DELIVERY_CAP, MAX_DELIVERY_CAP) != delivery_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(scan_frequency, MIN_SCAN_FREQUENCY, MAX_SCAN_FREQUENCY) != scan_frequency){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::vector<size_t> suffix_array(range_press->size());
+            std::iota(suffix_array.begin(), suffix_array.end(), 0u);
+
+            return std::make_unique<CompetitiveTryCollector>(std::move(range_press),
+                                                             std::move(consumer),
+                                                             spawn_bonsai_frequencizer(),
+                                                             std::move(suffix_array),
+                                                             collect_cap,
+                                                             delivery_cap,
+                                                             scan_frequency);
+        } 
+
+        static auto spawn_clock_collector(std::shared_ptr<RangePressInterface> range_press,
                                           std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
-                                          std::chrono::nanoseconds update_interval,
                                           std::vector<std::chrono::nanoseconds> update_interval_table,
+                                          size_t ops_clock_resolution,
                                           size_t collect_cap,
-                                          size_t delivery_cap) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+                                          size_t delivery_cap,
+                                          uint32_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
 
             const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
             const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
