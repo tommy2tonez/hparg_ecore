@@ -201,7 +201,7 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
         static auto spawn_warehouse(size_t production_queue_cap,
                                     size_t max_concurrency_sz,
                                     size_t unit_consumption_sz) -> std::unique_ptr<NormalWareHouse>{
-        
+
             const size_t MIN_PRODUCTION_QUEUE_CAP   = 1u;
             const size_t MAX_PRODUCTION_QUEUE_CAP   = size_t{1} << 30;
             const size_t MIN_MAX_CONCURRENCY_SZ     = 1u;

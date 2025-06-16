@@ -128,77 +128,29 @@ class KeyValueTest: public virtual dg::network_producer_consumer::KVConsumerInte
 
 int main(){
 
-    //alright, we'll try to have a demo soon guys
-    //remember, the driver is very important
+    //alright, is machine learning 10 folds better if we replace the + operation by the two sum operation and matrix multiplication row x column by advanced column dimensional reduction rule (2 sum, 3 sum, 4 sum)
 
-    //well Son, I might not be coding within a year or two but I'll make sure my legacy lives on
-    //until then, we have to thru the lectures
-    //remember, the backprop driver is the most important driver in the history of mankind
-    //we need to find that driver by using randomization (THERE IS NO OTHER WAY)
+    //essentially, when we are doing the row dimensional reduction, we are hitting the base case of multi variate projection
+    //is there the best dimensional reduction rule that just involes the 2 sum 3 sum and 4 sum?
 
-    //the request was done correctly by using a loop of synchronization
-    //we thru the requests almost instantly, and push the promise to the synchronizable warehouse which then would be delivered to synchronization worker who would check for the result and do another requests
+    //we have talked yesterday about how the finite conscious buffer (called the mind buffer) is only required for the sub-optimal case of projection (the human case)
+    //our goal is to overcome that suboptimal and become optimal by projecting all the possible context without "confining" the context -> the finite buffer
+    //the "soul" is the actionable, which we'd want to project the mind buffer to retrieve
 
-    //the synchronizable waiter is simply a worker waiting on an ascending order of timeout
-    //we'd want that to be in an ascending order because we dont want to not notify people on time, which would "hinder the warehouse exhaustability" + "hinder the ontimeness of user-requests hooked responses"
-    //we reckoned that a simple dg::network_exception::ExceptionHandlerInterface is sufficient, because people can actually build a synchronization protocol on top of that
-    //says using a binary semaphore to block the response
+    //we have talked about every possible way to do this, it all comes down to square 0, square 1, square 2, square 4, square 8 with fixed population size (dynamic datatype), this is the sufficient rule to approximate literally everything
 
-    //we'd want that "detached" for various reasons, we dont want to be forcy for tasks that are not memory dangerous like cuda_asynchronous_device or host_asynchronous_device
+    //we can only overcome that suboptimal if we "plug" in the suboptimal to the machine, essentially a "mind buffer" on every machine to communicate + drive this engine backward, we are responsible for the forward construction
 
-    //as for other concerns, it should be the dg::network_rest to take care of other responsibility from the security + optimizeness of requests batching + to ontimeness of responses, to etc.
-    //the dropbox responsibility is clearly cut, as for its only responsibility is to call network_rest efficiently and do proper handshakes by using auth2, and there isn't a better way to do so  
+    //as you could see, we have collected 6 infinity stones:
 
-    //i was thinking about the completeness of the optimal network
-    //we were writing this paper,
-    //in short, can we prove:
-    //given a neural network with a unit size of 1 bit and a neural network with a unit size of 1KB
-    //if we have found the optimal solution for the 1 bit, can we convert it to the optimal solution for 1KB
-    //this has a lot to do with input compression, such is we would want to maximize the density of input context (we are speaking in a language that is extremely dense)
-    //as the logit density grew for the input context, the uniform responsibility converges
-    //and as for the unit size, we always compress with the ratio of 2:1, 2 base operation for 1 upper operation, so there is not a problem of lost context
+    //the reality   (virtual machine L1 + L2 + L3 cache data)
+    //the mind      (finite storage buffer)
+    //the soul      (finite storage buffer projection -> immediate actionables)
+    //the power     (parallel computing)
+    //the space     (deviation space of instrument, and the actual projection by using dense hash map)
+    //the time      (Wanted, by Jolie)
 
-    //no, literally no one cares about how you bind your internal components or how your component is written
-    //people care about if your component does the job
-    //how to use your component
-    //how to reset your component
-    //and how to spawn your component
-
-    //if you keep thinking in terms of that, a.k.a. client perspective, we call it software engineering
-    //the engineering is the interfaces, the components, the responsibility of those components, not the low level implementation or your coding virtues
-
-    //if we look at the dropbox responsibility, it's to call the network_rest to make requests + wait (we might or might not want to improve the latency)
-    //if we look at the network_rest, it's to make a batch request + implement a Promise, this promise is not like other promises, it's called right after the return of the promise, and get() is simply a synchronization protocol
-    //alright, why don't we use the Promise<etc.> again? because it would be languagely incorrect, this is precisely why I said human being is terrible terrible at designing things that they think are reusable
-
-    //if we look at the kernel_map responsibility, it's to provide an interface of memory mapping, and the "border" of those memory maps are guaranteed by the allocator awaring of those boundaries
-    //this kernel_map is differnt from other cudamap or etc. map, why? because it's just different, we can't implement a generic version for these guys because those "different" parameters are our clue to optimization, why would we want to polymorphic the solution there?
-    //may or maybe the memory mapping will attempt to do "segmentation" mapping, we dont really care, the mapped memory must be IN BOUND
-
-    //the C++ language is very beautiful if we keep using unique_ptr<> + shared_ptr<>
-    //literally
-
-    //the problem with C++ is too many people are being too serious about the constructors move + copy, operator move + copy
-    //it's not that hard fellas
-
-    //stick to the number one rule, for the datastructure + semantic containers, we'd want to use those move + copy, operator move + copy, std::move_iterator<> + etc
-    //for other logic handler components, we'd want to use std::unique_ptr<> + std::shared_ptr<>, period, call a factory, get the component, and get on with it  
-
-    //we are doing tile forward dispatches roughly 10000x faster just by staying on CPU, imagine that we use the power of GPU + let CPU do all the kernel things
-    //this is thanks to our magical asynchronous device
-    //we split the workorders into two categories: the RAM_HEAVY and the CPU_HEAVY
-
-    //the CPU_HEAVY simply just loads everything into the cache and does linear-liked operations
-    //the RAM_HEAVY is intentionally bottlenecked by the hyperthreading + same-core affinity, we are "sacrificing" the cores to save the RAM bus 
-    //best yet, we just have 1 dedicated RAM worker to do the RAM_HEAVY, such would sacrifice the latency, we'll see about the options
-
-    //we scale with cores almost linearly, because we don't miss cache, everything is within the confinement of the unit
-    //unit is actually one of our proudest architect choice
-
-    //what is programming really?
-    //we keep having these abstraction, take a slice at a certain point and implement logics based on the abstractions
-    //because that's really is programming
-    //we dont really know how uint, or int or +, -, *, /, or mod work, it's an abstraction layer that requires further abstraction 
+    //we'll make the mystery gauntlet (we wont snap)
 
     size_t a                    = {};
     size_t b                    = {};
