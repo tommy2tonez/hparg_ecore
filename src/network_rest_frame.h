@@ -734,7 +734,79 @@ namespace dg::network_rest_frame::server_impl1{
                 this->operating_side            = !this->operating_side;
                 this->switch_population_counter = 0u;
             }
-    }; 
+    };
+
+    template <class Hasher>
+    class AdvancedInfiniteCacheController: public virtual InfiniteCacheControllerInterface{
+
+        private:
+
+            dg::cyclic_unordered_unstable_map<cache_id_t, Response, Hasher> cache_map;
+            size_t max_response_sz;
+            size_t max_consume_per_load;
+
+        public:
+
+            AdvancedInfiniteCacheController(dg::cyclic_unordered_unstable_map<cache_id_t, Response, Hasher> cache_map,
+                                            size_t max_response_sz,
+                                            size_t max_consume_per_load) noexcept: cache_map(std::move(cache_map)),
+                                                                                   max_response_sz(max_response_sz),
+                                                                                   max_consume_per_load(max_consume_per_load){}
+
+            void get_cache(cache_id_t * cache_id_arr, size_t sz, std::expected<std::optional<Response>, exception_t> * response_arr) noexcept{
+
+                for (size_t i = 0u; i < sz; ++i){
+                    auto map_ptr = this->cache_map.find(cache_id_arr[i]);
+
+                    if (map_ptr == this->cache_map.end()){
+                        response_arr[i] = std::optional<Response>(std::nullopt);
+                        continue;
+                    }
+
+                    std::expected<Response, exception_t> response_cpy = dg::network_exception::cstyle_initialize<Response>(map_ptr->second);
+
+                    if (!response_cpy.has_value()){
+                        response_arr[i] = std::unexpected(response_cpy.error());
+                        continue;
+                    }
+
+                    response_arr[i] = std::optional<Response>(std::move(response_cpy.value()));
+                }
+            }
+
+            void insert_cache(cache_id_t * cache_id_arr, std::move_iterator<Response *> response_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                Response * base_response_arr = response_arr.base();
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (base_response_arr[i].response.size() > this->max_response_size()){
+                        rs_arr[i] = std::unexpected(dg::network_exception::REST_CACHE_MAX_RESPONSE_SIZE_REACHED);
+                        continue;
+                    }
+
+                    auto insert_token   = std::make_pair(cache_id_arr[i], std::move(base_response_arr[i]));
+                    auto [_, status]    = this->cache_map.insert(std::move(insert_token));
+                    rs_arr[i]           = status;
+                }
+            }
+
+            auto max_response_size() const noexcept -> size_t{
+
+                return this->max_response_sz;
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load;
+            }
+    };
 
     //clear
     class MutexControlledInfiniteCacheController: public virtual InfiniteCacheControllerInterface{
@@ -1200,6 +1272,49 @@ namespace dg::network_rest_frame::server_impl1{
 
                 this->operating_side            = !this->operating_side;
                 this->switch_population_counter = 0u;
+            }
+    };
+
+    template <class Hasher>
+    class AdvancedInfiniteCacheUniqueWriteController: public virtual InfiniteCacheUniqueWriteControllerInterface{
+
+        private:
+
+            dg::cyclic_unordered_unstable_set<cache_id_t, Hasher> cache_id_set;
+            size_t max_consume_per_load;
+
+        public:
+
+            AdvancedInfiniteCacheUniqueWriteController(dg::cyclic_unordered_unstable_set<cache_id_t, Hasher> cache_id_set,
+                                                       size_t max_consume_per_load) noexcept: cache_id_set(std::move(cache_id_set)),
+                                                                                              max_consume_per_load(max_consume_per_load){}
+            
+            void thru(cache_id_t * cache_id_arr, size_t sz, std::expected<bool, exception_t> * rs_arr) noexcept{
+    
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                for (size_t i = 0u; i < sz; ++i){
+                    auto set_ptr = this->cache_id_set.find(cache_id_arr[i]);
+
+                    if (set_ptr != this->cache_id_set.end()){
+                        rs_arr[i] = false;
+                        continue;
+                    }
+
+                    auto [_, status] = this->cache_id_set.insert(cache_id_arr[i]);
+                    dg::network_exception_handler::dg_assert(status);
+                    rs_arr[i] = true;
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->max_consume_per_load;
             }
     };
 

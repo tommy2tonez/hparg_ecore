@@ -1887,7 +1887,7 @@ namespace dg::network_datastructure::unordered_map_variants{
     }
 
     template <class Key, class Mapped, class Hasher = std::hash<Key>, class VirtualAddrType = std::size_t, class HasStructureReordering = std::integral_constant<bool, true>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
-    class finite_unordered_node_map{
+    class cyclic_unordered_node_map{
 
         private:
 
@@ -1914,7 +1914,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             using const_iterator                = decltype(virtual_storage_vec)::const_iterator;
             using size_type                     = std::size_t;
             using difference_type               = std::intmax_t;
-            using self                          = finite_unordered_node_map;
+            using self                          = cyclic_unordered_node_map;
             using load_factor_ratio             = typename LoadFactor::type;
             using virtual_addr_t                = get_virtual_addr_t<VirtualAddrType>;
             using node_t                        = Node<HasStructureReordering, Key, Mapped, VirtualAddrType>;
@@ -1928,7 +1928,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             static_assert(std::disjunction_v<std::is_same<typename std::ratio<4, 8>::type, load_factor_ratio>,
                                              std::is_same<typename std::ratio<8, 8>::type, load_factor_ratio>>);
 
-            constexpr explicit finite_unordered_node_map(size_type bucket_count,
+            constexpr explicit cyclic_unordered_node_map(size_type bucket_count,
                                                          const Hasher& _hasher = Hasher(),
                                                          const Pred& pred = Pred(),
                                                          const Allocator& allocator = Allocator()): virtual_storage_vec(unordered_map_variants::ulog2(self::capacity_to_size(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<size_t>(self::max_capacity())))), allocator),
@@ -1938,34 +1938,34 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                                                                     pred(pred),
                                                                                                     allocator(allocator){}
  
-            constexpr finite_unordered_node_map(size_type bucket_count,
+            constexpr cyclic_unordered_node_map(size_type bucket_count,
                                                 const Hasher& _hasher,
-                                                const Allocator& allocator): finite_unordered_node_map(bucket_count, _hasher, Pred(), allocator){}
+                                                const Allocator& allocator): cyclic_unordered_node_map(bucket_count, _hasher, Pred(), allocator){}
 
-            constexpr finite_unordered_node_map(size_type bucket_count,
-                                                const Allocator& allocator): finite_unordered_node_map(bucket_count, Hahser(), allocator){}
+            constexpr cyclic_unordered_node_map(size_type bucket_count,
+                                                const Allocator& allocator): cyclic_unordered_node_map(bucket_count, Hahser(), allocator){}
 
-            constexpr explicit finite_unordered_node_map(const Allocator& allocator): finite_unordered_node_map(self::min_capacity(), allocator){}
+            constexpr explicit cyclic_unordered_node_map(const Allocator& allocator): cyclic_unordered_node_map(self::min_capacity(), allocator){}
 
-            constexpr finite_unordered_node_map(): finite_unordered_node_map(Allocator()){}
+            constexpr cyclic_unordered_node_map(): cyclic_unordered_node_map(Allocator()){}
 
             template <class InputIt>
-            constexpr finite_unordered_node_map(InputIt first,
+            constexpr cyclic_unordered_node_map(InputIt first,
                                                 InputIt last,
                                                 size_type bucket_count,
-                                                const Allocator& allocator): finite_unordered_node_map(bucket_count, _hasher, pred, allocator){
+                                                const Allocator& allocator): cyclic_unordered_node_map(bucket_count, _hasher, pred, allocator){
                             
                 this->insert(first, last);
             }
 
-            constexpr finite_unordered_node_map(std::initializer_list<std::pair<const Key, Mapped>> init_list,
+            constexpr cyclic_unordered_node_map(std::initializer_list<std::pair<const Key, Mapped>> init_list,
                                                 size_type bucket_count,
                                                 const Hasher& _hasher,
-                                                const Allocator& allocator): finite_unordered_node_map(init_list.begin(), init_list.end(), bucket_count, _hasher, Pred(), allocator){}
+                                                const Allocator& allocator): cyclic_unordered_node_map(init_list.begin(), init_list.end(), bucket_count, _hasher, Pred(), allocator){}
             
-            constexpr finite_unordered_node_map(std::initializer_list<std::pair<const Key, Mapped>> init_list,
+            constexpr cyclic_unordered_node_map(std::initializer_list<std::pair<const Key, Mapped>> init_list,
                                                 size_type bucket_count,
-                                                const Allocator& allocator): finite_unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), allocator){}
+                                                const Allocator& allocator): cyclic_unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), allocator){}
             
             template <class KeyLike, class ...Args>
             constexpr auto try_emplace(KeyLike&& key, Arg&& ...args) -> std::pair<iterator, bool>{
@@ -2063,7 +2063,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 auto ptr = this->find(key);
 
                 if (ptr == this->end()){
-                    throw std::out_of_range("finite_unordered_node_map bad access");
+                    throw std::out_of_range("cyclic_unordered_node_map bad access");
                 }
 
                 return ptr->second;
@@ -2075,7 +2075,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 auto ptr = this->find(key);
 
                 if (ptr == this->end()){
-                    throw std::out_of_range("finite_unordered_node_map bad access");
+                    throw std::out_of_range("cyclic_unordered_node_map bad access");
                 }
 
                 return ptr->second;

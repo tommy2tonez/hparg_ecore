@@ -25,6 +25,8 @@ namespace dg::network_uma_tlb_impl1::interface{
     //yet we are "on the plan"
     //so it's very up to the planner to make their plan
     //even though I don't want to implement an escalation, (reference -> locked_reference), it seems like we have to do so ...
+    //that can only be implemented via timeout wait + escalation
+    //this is hard to implement
 
     template <class T>
     struct ProxyTLBInterface{
