@@ -152,6 +152,9 @@ int main(){
 
     //we'll make the mystery gauntlet (we wont snap)
 
+    //it's extremely hard to build component bridges, it requires a significant level of designing to actually singleton a component
+    //because that's where we draw the bridges of instance connections
+
     size_t a                    = {};
     size_t b                    = {};
     auto [aa, bb]               = std::tie(a, b); 

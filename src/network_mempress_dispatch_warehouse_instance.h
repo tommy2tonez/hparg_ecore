@@ -9,19 +9,30 @@ namespace dg::network_mempress_dispatch_warehouse_instance{
 
     struct DispatchWareHouseSignature{};
 
-    using warehouse_singleton = stdx::singleton<DispatchWareHouseSignature, std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface>>;
+    using warehouse_singleton = stdx::singleton<DispatchWareHouseSignature, std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface>>; 
 
     struct Config{
         size_t production_queue_cap;
         size_t max_concurrency_sz;
         size_t unit_consumption_sz;
+        bool has_distributed_warehouse;
+        size_t distributed_warehouse_concurrency_sz;
+        size_t distributed_warehouse_empty_curious_pop_sz;
     };
 
     void init(Config config){
 
-        warehouse_singleton::get() = dg::network_mempress_dispatch_warehouse_impl1::Factory::spawn_warehouse(config.production_queue_cap,
-                                                                                                             config.max_concurrency_sz,
-                                                                                                             config.unit_consumption_sz);
+        if (!config.has_distributed_warehouse){
+            warehouse_singleton::get() = dg::network_mempress_dispatch_warehouse_impl1::Factory::spawn_warehouse(config.production_queue_cap,
+                                                                                                                 config.max_concurrency_sz,
+                                                                                                                 config.unit_consumption_sz);
+        } else{
+            warehouse_singleton::get() = dg::network_mempress_dispatch_warehouse_impl1::Factory::spawn_distributed_warehouse(config.production_queue_cap,
+                                                                                                                             config.max_concurrency_sz,
+                                                                                                                             config.unit_consumption_sz,
+                                                                                                                             config.distributed_warehouse_concurrency_sz,
+                                                                                                                             config.distributed_warehouse_empty_curious_pop_sz);
+        }
     }
 
     void deinit() noexcept{

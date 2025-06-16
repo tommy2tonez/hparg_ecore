@@ -148,6 +148,8 @@ namespace dg::network_mempress_dispatch_warehouse_impl1{
     //this is probably very hard to write
 
     //we'd have to implement that, even though we'd not use that if there are not indicated performance contraints
+    //we'd do a "forever self decay" to solve this problem, such would not actually overload the warehouse like the rescue worker, yet we'd have an infinite loop of self decay signals forever running in the engine to degrease the components
+    //alright, you could argue that there is a 1 << 100 chance the self decay would all be stuck at etc., we won't be there
 
     class DistributedWareHouse: public virtual dg::network_mempress_dispatch_warehouse::WareHouseInterface{
 

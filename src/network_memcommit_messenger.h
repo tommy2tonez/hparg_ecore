@@ -7,6 +7,8 @@
 
 namespace dg::network_memcommit_messenger{
 
+    using virtual_memory_event_t = dg::network_memcommit_factory::virtual_memory_event_t; 
+
     class MemregionRadixerInterface{
 
         public:
@@ -31,6 +33,41 @@ namespace dg::network_memcommit_messenger{
 
     //the problem with software is that we just keep writing literally, build abstraction, keep writing
     //we dont really have time to ask why this why that
+
+    class MemregionRadixer: public virtual MemregionRadixerInterface{
+
+        private:
+
+            dg::unordered_unstable_map<uma_ptr_t, MemregionRadixerInterface::memregion_kind_t> region_kind_map;
+            size_t pow2_memregion_sz;
+        
+        public:
+
+            MemregionRadixer(dg::unordered_unstable_map<uma_ptr_t, MemregionRadixerInterface::memregion_kind_t> region_kind_map,
+                             size_t pow2_memregion_sz) noexcept: region_kind_map(std::move(region_kind_map)),
+                                                                 pow2_memregion_sz(pow2_memregion_sz){}
+
+            auto radix(uma_ptr_t ptr) noexcept -> std::expected<MemregionRadixerInterface::memregion_kind_t, exception_t>{
+
+                uma_ptr_t ptr_region    = dg::memult::region(ptr, this->pow2_memregion_sz);
+                auto map_ptr            = std::as_const(this->region_kind_map).find(ptr_region);
+
+                if (map_ptr == std::as_const(this->region_kind_map).end()){
+                    return std::unexpected(dg::network_exception::OUT_OF_BOUND_ACCESS);
+                }
+
+                MemregionRadixerInterface::memregion_kind_t memregion_kind = map_ptr->second;
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (memregion_kind != MemregionRadixerInterface::EXPRESS_REGION && memregion_kind != MemregionRadixerInterface::NOMRAL_REGION){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                return memregion_kind;
+            }
+    };
 
     class NormalWareHouseConnector: public virtual WareHouseIngestionConnectorInterface{
 
@@ -99,55 +136,50 @@ namespace dg::network_memcommit_messenger{
             std::shared_ptr<MemregionRadixerInterface> memregion_express_radixer;
             std::shared_ptr<dg::network_mempress::MemoryPressInterface> press;
             size_t press_vectorization_sz;
-            std::unique_ptr<WareHouseIngestionConnectorInterface> warehouse_connector;
-            size_t warehouse_connector_feed_cap;
+            std::shared_ptr<WareHouseIngestionConnectorInterface> warehouse_connector;
+            size_t warehouse_aggregation_sz;
 
         public:
 
             MemeventMessenger(std::shared_ptr<MemregionRadixerInterface> memregion_express_radixer,
                               std::shared_ptr<dg::network_mempress::MemoryPressInterface> press,
                               size_t press_vectorization_sz,
-                              std::unique_ptr<WareHouseIngestionConnectorInterface> warehouse_connector,
-                              size_t warehouse_connector_feed_cap) noexcept: memregion_express_radixer(std::move(memregion_express_radixer)),
-                                                                             press(std::move(press)),
-                                                                             press_vectorization_sz(press_vectorization_sz),
-                                                                             warehouse_connector(std::move(warehouse_connector)),
-                                                                             warehouse_connector_feed_cap(warehouse_connector_feed_cap){}
+                              std::shared_ptr<WareHouseIngestionConnectorInterface> warehouse_connector,
+                              size_t warehouse_aggregation_sz) noexcept: memregion_express_radixer(std::move(memregion_express_radixer)),
+                                                                         press(std::move(press)),
+                                                                         press_vectorization_sz(press_vectorization_sz),
+                                                                         warehouse_connector(std::move(warehouse_connector)),
+                                                                         warehouse_aggregation_sz(warehouse_aggregation_sz){}
 
             void push(std::move_iterator<virtual_memory_event_t *> data_arr, size_t sz) noexcept{
 
-                //despite my sincerest effort, we decide to devirtualize the memory events here, we wont be using the tricks, because the branching prediction is pretty decent for these guys (we'll be evaluating the performance later)
-                //the structure is too heavy to be moved around
-                //we are expecting a structure of size 24 - 32, to leverage cache fetch + friends
-                //the problem is that the messenger can't really notify the customers about their packages going missing or not delivered, this is expected in real-life, because the overhead of doing so exceeds the benefits of doing so
+                virtual_memory_event_t * base_data_arr  = data_arr.base();
 
-                virtual_memory_event_t * base_data_arr = data_arr.base();
+                auto press_feed_resolutor               = InternalPressFeedResolutor{};
+                press_feed_resolutor.dst                = this->press.get();
 
-                auto press_feed_resolutor                               = InternalPressFeedResolutor{};
-                press_feed_resolutor.dst                                = this->press.get();
-                
-                size_t trimmed_press_vectorization_sz                   = std::min(std::min(this->press_vectorization_sz, this->press->max_consume_size()), sz);
-                size_t press_feeder_allocation_cost                     = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&press_feed_resolutor, trimmed_press_vectorization_sz);
+                size_t trimmed_press_vectorization_sz   = std::min(std::min(this->press_vectorization_sz, this->press->max_consume_size()), sz);
+                size_t press_feeder_allocation_cost     = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&press_feed_resolutor, trimmed_press_vectorization_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> press_feeder_mem(press_feeder_allocation_cost);
-                auto press_feeder                                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&press_feed_resolutor,
-                                                                                                                                                                                             trimmed_press_vectorization_sz,
-                                                                                                                                                                                             press_feeder_mem.get()));
+                auto press_feeder                       = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_kv_preallocated_raiihandle(&press_feed_resolutor,
+                                                                                                                                                                             trimmed_press_vectorization_sz,
+                                                                                                                                                                             press_feeder_mem.get()));
 
                 //------------------------
 
-                auto warehouse_feed_resolutor                           = InternalWareHouseFeedResolutor{};
-                warehoues_feed_resolutor.dst                            = this->warehouse_connector.get();
+                auto warehouse_feed_resolutor           = InternalWareHouseFeedResolutor{};
+                warehoues_feed_resolutor.dst            = this->warehouse_connector.get();
 
-                size_t trimmed_warehouse_feed_cap                       = std::min(std::min(this->warehouse_connector_feed_cap, this->high_latency_warehouse->max_consume_size()), sz);
-                size_t high_latency_warehouse_feeder_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&warehouse_feed_resolutor, trimmed_warehouse_feed_cap);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> warehouse_feeder_mem(high_latency_warehouse_feeder_allocation_cost);
-                auto warehouse_feeder                                   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&warehouse_feed_resolutor, 
-                                                                                                                                                                                          trimmed_warehouse_feed_cap,
-                                                                                                                                                                                          warehouse_feeder_mem.get()));
+                size_t trimmed_warehouse_feed_cap       = std::min(std::min(this->warehouse_aggregation_sz, this->warehouse_connector->max_consume_size()), sz);
+                size_t warehouse_feeder_allocation_cost = dg::network_producer_consumer::delvrsrv_allocation_cost(&warehouse_feed_resolutor, trimmed_warehouse_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> warehouse_feeder_mem(warehouse_feeder_allocation_cost);
+                auto warehouse_feeder                   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&warehouse_feed_resolutor, 
+                                                                                                                                                                          trimmed_warehouse_feed_cap,
+                                                                                                                                                                          warehouse_feeder_mem.get()));
 
                 for (size_t i = 0u; i < sz; ++i){
                     uma_ptr_t notifying_addr = this->extract_notifying_addr(base_data_arr[i]);
-                    std::expected<MemregionLatencyRadixerInterface::memregion_kind_t, exception_t> memregion_kind = this->memregion_express_radixer->radix(notifying_addr);
+                    std::expected<MemregionRadixerInterface::memregion_kind_t, exception_t> memregion_kind = this->memregion_express_radixer->radix(notifying_addr);
 
                     if (!memregion_kind.has_value()){
                         dg::network_log_stackdump::error_fast(dg::network_exception::verbose(memregion_kind.error()));
@@ -155,12 +187,12 @@ namespace dg::network_memcommit_messenger{
                     }
 
                     switch (memregion_kind.value()){
-                        case MemregionLatencyRadixerInterface::EXPRESS_REGION:
+                        case MemregionRadixerInterface::EXPRESS_REGION:
                         {
                             dg::network_producer_consumer::delvrsrv_deliver(warehouse_feeder.get(), std::move(base_data_arr[i]));
                             break;
                         }
-                        case MemregionLatencyRadixerInterface::NOMRAL_REGION:
+                        case MemregionRadixerInterface::NOMRAL_REGION:
                         {
                             uma_ptr_t notifying_region = dg::memult::region(notifying_addr, this->press->memregion_size());
                             dg::network_producer_consumer::delvrsrv_kv_deliver(press_feeder.get(), notifying_region, std::move(base_data_arr[i]));
@@ -184,9 +216,6 @@ namespace dg::network_memcommit_messenger{
             static constexpr auto extract_notifying_addr(const virtual_memory_event_t& memevent) noexcept -> uma_ptr_t{
 
                 memory_event_kind_t event_kind = dg::network_memcommit_factory::read_virtual_event_kind(memevent);
-
-                //switch case branch prediction is really good because of the locality of msgr context
-                //
 
                 switch (event_kind){
                     case dg::network_memcommit_factory::event_kind_forward_ping_signal:
@@ -255,6 +284,10 @@ namespace dg::network_memcommit_messenger{
 
                 void push(std::move_iterator<virtual_emmory_event_t *> event_arr, size_t sz) noexcept{
 
+                    if (sz == 0u){
+                        return;
+                    }
+
                     if constexpr(DEBUG_MODE_FLAG){
                         if (sz > this->dst->max_consume_size()){
                             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
@@ -283,6 +316,106 @@ namespace dg::network_memcommit_messenger{
                     }
                 }
             };
+    };
+
+    struct Factory{
+
+        static auto spawn_memregion_radixer(const std::vector<uma_ptr_t>& express_region_vec,
+                                            const std::vector<uma_ptr_t>& normal_region_vec,
+                                            size_t memregion_sz) -> std::unique_ptr<MemregionRadixerInterface>{
+                
+            if (!stdx::is_pow2(memregion_sz)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            using uptr_t = dg::ptr_info<uma_ptr_t>::max_unsigned_t; 
+
+            dg::unordered_unstable_map<uma_ptr_t, MemregionRadixerInterface::memregion_kind_t> region_kind_map{};
+
+            for (uma_ptr_t normal_region: normal_region_vec){
+                uptr_t uptr = dg::pointer_cast<uptr_t>(normal_region); 
+
+                if (uptr % memregion_sz != 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                region_kind_map[normal_region] = MemregionRadixerInterface::NOMRAL_REGION;
+            }
+
+            for (uma_ptr_t express_region: express_region_vec){
+                uptr_t uptr = dg::pointer_cast<uptr_t>(express_region);
+
+                if (uptr % memregion_sz != 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                region_kind_map[express_region] = MemregionRadixerInterface::EXPRESS_REGION;
+            }
+
+            return std::make_unique<MemregionRadixer>(std::move(region_kind_map), memregion_sz);
+        }
+
+        static auto spawn_warehouse_connector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse) -> std::unique_ptr<WareHouseIngestionConnectorInterface>{
+
+            if (warehouse == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<NormalWareHouseConnector>(std::move(warehouse));
+        }
+
+        static auto spawn_exhaustion_controlled_warehouse_connector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
+                                                                    std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device) -> std::unique_ptr<WareHouseIngestionConnectorInterface>{
+                        
+            if (warehouse == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (infretry_device == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ExhaustionControlledWareHouseConnector>(std::move(warehouse), std::move(infretry_device));
+        }
+
+        static auto spawn_memevent_messenger(std::shared_ptr<MemregionRadixerInterface> memregion_radixer,
+                                             std::shared_ptr<dg::network_mempress::MemoryPressInterface> press,
+                                             size_t press_vectorization_sz,
+                                             std::shared_ptr<WareHouseIngestionConnectorInterface> warehouse_connector,
+                                             size_t warehouse_aggregation_sz) -> std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_emmory_event_st>>{
+            
+            if (memregion_radixer == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (press == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (warehouse_connector == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            const size_t MIN_PRESS_VECTORIZATION_SZ     = 1u;
+            const size_t MAX_PRESS_VECTORIZATION_SZ     = press->max_consume_size();
+
+            const size_t MIN_WAREHOUSE_AGGREGATION_SZ   = 1u;
+            const size_t MAX_WAREHOUSE_AGGREGATION_SZ   = warehouse_connector->max_consume_size();
+            
+            if (std::clamp(press_vectorization_sz, MIN_PRESS_VECTORIZATION_SZ, MAX_PRESS_VECTORIZATION_SZ) != press_vectorization_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(warehouse_aggregation_sz, MIN_WAREHOUSE_AGGREGATION_SZ, MAX_WAREHOUSE_AGGREGATION_SZ)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<MemeventMessenger>(std::move(memregion_radixer),
+                                                       std::move(press),
+                                                       press_vectorization_sz,
+                                                       std::move(warehouse_connector),
+                                                       warehouse_aggregation_sz);
+        }
     };
 } 
 

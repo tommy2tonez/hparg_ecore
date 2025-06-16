@@ -799,7 +799,38 @@ namespace dg::network_mempress_collector{
 
     struct Factory{
 
-        static auto spawn_range_press(std::shared_ptr<dg::network_mempress::MemoryPressInterface> mem_press) -> std::unique_ptr<RangePressInterface>{
+        static auto spawn_range_press(std::shared_ptr<dg::network_mempress::MemoryPressInterface> mempress,
+                                      const std::vector<uma_ptr_t>& region_table) -> std::unique_ptr<RangePressInterface>{
+
+            if (mempress == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            using uptr_t = dg::ptr_info<uma_ptr_t>::max_unsigned_t;
+
+            for (uma_ptr_t region: region_table){
+                uptr_t uptr         = dg::pointer_cast<uptr_t>(region);
+                size_t memregion_sz = mempress->memregion_size();
+                uptr_t ufirst       = dg::pointer_cast<uptr_t>(mempress->first());
+                uptr_t ulast        = dg::pointer_cast<uptr_t>(mempress->last()); 
+
+                if (uptr % memregion_sz != 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (uptr < ufirst){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (uptr >= ulast){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+            }
+
+            return std::make_unique<MemoryRangePress>(region_table, std::move(mempress));
+        }
+
+        static auto spawn_range_press(std::shared_ptr<dg::network_mempress::MemoryPressInterface> mempress) -> std::unique_ptr<RangePressInterface>{
 
             if (mem_press == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -807,11 +838,11 @@ namespace dg::network_mempress_collector{
 
             std::vector<uma_ptr_t> region_vec{};
 
-            for (auto region = mem_press->first(); region != mem_press->last(); region = dg::memult::advance(region, mem_press->memregion_size())){
+            for (uma_ptr_t region = mem_press->first(); region != mem_press->last(); region = dg::memult::next(region, mem_press->memregion_size())){
                 region_vec.push_back(region);
             }
 
-            return std::make_unique<MemoryRangePress>(std::move(region_vec), std::move(mem_press));
+            return spawn_range_press(mempress, region_vec);
         }
 
         static auto spawn_warehouse_connector(std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface> warehouse,
@@ -1080,14 +1111,14 @@ namespace dg::network_mempress_collector{
                                                        scan_frequency);
         }
 
-        static auto spawn_competitive_try_collector(std::shared_ptr<RangePressInterface> range_press,
-                                                    std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
-                                                    const std::vector<std::chrono::nanoseconds>& update_interval_table,
-                                                    size_t ops_clock_resolution,
-                                                    size_t collect_cap,
-                                                    size_t delivery_cap,
-                                                    uint32_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
-                                
+        static auto spawn_clock_competitive_try_collector(std::shared_ptr<RangePressInterface> range_press,
+                                                          std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> consumer,
+                                                          const std::vector<std::chrono::nanoseconds>& update_interval_table,
+                                                          size_t ops_clock_resolution,
+                                                          size_t collect_cap,
+                                                          size_t delivery_cap,
+                                                          uint32_t scan_frequency) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+
             const std::chrono::nanoseconds MIN_UPDATE_INTERVAL  = std::chrono::nanoseconds(1);
             const std::chrono::nanoseconds MAX_UPDATE_INTERVAL  = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::days(1));
             const size_t MIN_OPS_CLOCK_RESOLUTION               = 0u;

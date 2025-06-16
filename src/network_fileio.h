@@ -21,18 +21,10 @@
 
 namespace dg::network_fileio{
 
-    //alright, we are to implement a virtual file path
-    //this introduces so many problems, let's see
-
-    //alright, I dont know about Linux, but Windows does lock the operating folder for concurrent writing | reading
-    //we dont really know unless we run some advisory calibration (there is not an official API to deal with this kind of stuff, and you probably dont want to mess with the internal API
-    //                                                             the calibration would kind of extract the optimal writing + reading patterns (this is SSDs + kernel specifics) and give the users the data)
-
-    //improve error_code return - convert the errors -> RUNTIME_FILEIO_ERROR for generic purpose 
-
     static constexpr inline auto DG_FILEIO_MODE                 = S_IRWXU; //user-configurable - compile-payload
     static constexpr inline size_t DG_LEAST_DIRECTIO_BLK_SZ     = size_t{1} << 12; //user-configurable - compile-payload
     static constexpr inline bool NO_KERNEL_FSYS_CACHE_FLAG      = true;
+    static constexpr inline bool HAS_STRICT_FCLOSE              = false; 
 
     constexpr auto is_met_direct_dgio_blksz_requirement(size_t blk_sz) noexcept -> bool{
 
@@ -55,9 +47,15 @@ namespace dg::network_fileio{
         }
 
         auto destructor = [](int fd_arg) noexcept{
-            if (close(fd_arg) == -1){
-                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_error(errno)));
-                std::abort();
+            if constexpr(HAS_STRICT_FCLOSE){
+                if (close(fd_arg) == -1){
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_kernel_error(errno)));
+                    std::abort();
+                }
+            } else{
+                if (close(fd_arg) == -1){
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(dg::network_exception::wrap_kernel_error(errno)));
+                }
             }
         };
 
