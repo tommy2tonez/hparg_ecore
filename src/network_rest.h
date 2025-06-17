@@ -41,66 +41,42 @@ namespace dg::network_rest{
         //set ips max flux
         //set global memregion segments mapping 
 
-    struct TokenGenerateBaseRequest{
-        dg::string auth_payload;
+    //----------api-version-----------
+
+    struct RESTAPIVersionRequest{};
+
+    struct RESTAPIVersionResponse{
+        dg::string response;
+        exception_t err;
+    };
+
+    struct ExceptionVersionRequest{};
+
+    struct ExceptionVersionResponse{
+        dg::string response;
+        exception_t err;
+    };
+
+    //--------------------------------
+
+    //---------authentication---------
+
+    struct Auth2UserNamePasswordPayLoad{
+        dg::string username;
+        dg::string password;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(auth_payload);
+            reflector(username, password);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(auth_payload);
+            reflector(username, password);
         }
     };
 
-    struct TokenGenerateRequest: TokenGenerateBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TokenGenerateBaseRequest&>(*this), uri, requestor, timeout);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TokenGenerateBaseRequest&>(*this), uri, requestor, timeout);
-        }
-    };
-
-    struct TokenGenerateBaseResponse{
-        dg::string token;
-        exception_t token_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(token, token_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(token, token_err_code);
-        }
-    };
-
-    struct TokenGenerateResponse: TokenGenerateBaseResponse{
-        exception_t server_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TokenGenerateBaseResponse&>(*this), server_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TokenGenerateBaseResponse>(*this), server_err_code);
-        }
-    };
-
-    struct TokenRefreshBaseRequest{
+    struct Auth2TokenPayLoad{
         dg::string token;
 
         template <class Reflector>
@@ -112,474 +88,763 @@ namespace dg::network_rest{
         void dg_reflect(const Reflector& reflector){
             reflector(token);
         }
-     };
+    };
 
-    struct TokenRefreshRequest: TokenRefreshBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
+    struct GenericTokenGenerateAuth2Request{
+        std::variant<Auth2UserNamePasswordPayLoad, Auth2TokenPayLoad> payload;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TokenRefreshBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(payload);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TokenRefreshBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(payload);
         }
     };
 
-    struct TokenRefreshBaseResponse{
+    struct GenericTokenGenerateAuth2Response{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    struct ProtectedTokenGenerateAuth2Request{
+        std::variant<Auth2UserNamePasswordPayLoad, Auth2TokenPayLoad> payload;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(payload);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(payload);
+        }
+    };
+
+    struct ProtectedTokenGenerateAuth2Response{
         dg::string token;
-        exception_t token_err_code;
+        std::chrono::time_point<std::chrono::utc_clock> expiry;
+        exception_t err;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(token, token_err_code);
+            reflector(token, expiry, err);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(token, token_err_code);
+            reflector(token, expiry, err);
         }
     };
 
-    struct TokenRefreshResponse: TokenRefreshBaseResponse{
-        exception_t server_err_code;
+    struct Auth2UserNamePasswordRegistrationPayLoad{
+        dg::string sys_token;
+        dg::string username;
+        dg::string password;
+        dg::string permission_level;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TokenRefreshBaseResponse&>(*this), server_err_code);
+            reflector(sys_token, username, password, permission_level);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TokenRefreshBaseResponse&>(*this), server_err_code);
+            reflector(sys_token, username, password, permission_level);
         }
     };
 
-    struct TileInitBaseRequest{
+    struct Auth2DedicatedTokenRegistrationPayLoad{
+        dg::string sys_token;
         dg::string token;
-        dg::network_tile_init::virtual_payload_t payload;
+        dg::string permission_level;
+        std::chrono::time_point<std::chrono::utc_clock> expiry;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(token, payload);
+            reflector(sys_token, token, permission_level, expiry);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(token, payload);
+            reflector(sys_token, token, permission_level, expiry);
         }
     };
 
-    struct TileInitRequest: TileInitBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
-
+    struct Auth2RegistrationRequest{
+        std::variant<Auth2UserNamePasswordRegistrationPayLoad, Auth2DedicatedTokenRegistrationPayLoad> payload;
+        
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileInitBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(payload);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileInitBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(payload);
         }
     };
 
-    struct TileInitBaseResponse{
-        exception_t init_err_code;
+    struct Auth2RegistrationResponse{
+        exception_t err;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(err_code);
-        }
-
-        template <class Reflector>\
-        void dg_reflect(const Reflector& reflector){
-            reflector(err_code);
-        }
-    };
-
-    struct TileInitResponse: TileInitBaseResponse{
-        exception_t server_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileInitBaseResponse&>(*this), server_err_code);
+            reflector(err);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileInitBaseResponse&>(*this), server_err_code);
+            reflector(err);
         }
     };
 
-    struct TileInjectBaseRequest{
+    struct Auth2UserNamePasswordDeregistrationPayLoad{
+        dg::string sys_token;
+        dg::string username;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, username);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, username);
+        }
+    };
+
+    struct Auth2TokenDeregistrationPayLoad{
+        dg::string sys_token;
         dg::string token;
-        dg::network_tile_inject::virtual_payload_t payload;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(token, payload);_
+            reflector(sys_token, token);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(token, payload);
+            reflector(sys_token, token);
         }
     };
 
-    struct TileInjectRequest: TileInjectBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
+    struct Auth2DeregistrationRequest{
+        std::variant<Auth2UserNamePasswordDeregistrationPayLoad, Auth2TokenDeregistrationPayLoad> payload;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileInjectBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(payload);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileInjectBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(payload);
         }
     };
 
-    struct TileInjectBaseResponse{
-        exception_t inject_err_code;
+    struct Auth2DeregistrationResponse{
+        exception_t err;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(inject_err_code);
+            reflector(err);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(inject_err_code);
+            reflector(err);
         }
     };
 
-    struct TileInjectResponse: TileInjectBaseResponse{
-        exception_t server_err_code;
+    //--------------------------------
 
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileInjectBaseResponse&>(*this), server_err_code);
-        }
+    //---------log-retrieval----------
 
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileInjectBaseResponse&>(*this), server_err_code);
-        }
-    };
-
-    struct TileSignalBaseRequest{
-        dg::string token;
-        dg::network_tile_signal::virtual_payload_t payload;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(token, payload);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(token, payload);
-        }
-    };
-
-    struct TileSignalRequest: TileSignalBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileSignalBaseRequest&>(*this), uri, requestor, timeout);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileSignalBaseRequest&>(*this), uri, requestor, timeout);
-        }
-    };
-
-    struct TileSignalBaseResponse{
-        exception_t signal_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(signal_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(signal_err_code);
-        }
-    };
-
-    struct TileSignalResponse: TileSignalBaseResponse{
-        exception_t server_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileSignalBaseResponse&>(*this), server_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileSignalBaseResponse&>(*this), server_err_code);
-        }
-    };
-
-    struct TileCondInjectBaseRequest{
-        dg::string token;
-        dg::network_tile_condinject::virtual_payload_t payload;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(token, payload);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(token, payload);
-        }
-    };
-
-    struct TileCondInjectRequest: TileCondInjectBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileCondInjectBaseRequest&>(*this), uri, requestor, timeout);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileCondInjectBaseRequest&>(*this), uri, requestor, timeout);
-        }
-    };
-
-    struct TileCondInjectBaseResponse{
-        exception_t inject_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(inject_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(inject_err_code);
-        }
-    }; 
-
-    struct TileCondInjectResponse: TileCondInjectBaseResponse{
-        exception_t server_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileCondInjectBaseResponse&>(*this), server_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileCondInjectBaseResponse&>(*this), server_err_code);
-        }
-    };
-
-    struct TileMemcommitBaseRequest{
-        dg::string token;
-        dg::network_tile_seqmemcommit::virtual_payload_t payload;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(token, payload);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(token, payload);
-        }
-    };
-
-    struct TileMemcommitRequest: TileMemcommitBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileMemcommitBaseRequest&>(*this), uri, requestor, timeout);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileMemcommitBaseRequest&>(*this), uri, requestor, timeout);
-        }
-    };
-
-    struct TileMemcommitBaseResponse{
-        exception_t seqmemcommit_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(seqmemcommit_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(seqmemcommit_err_code);
-        }
-    };
-
-    struct TileMemcommitResponse: TileMemcommitBaseResponse{
-        exception_t server_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const TileMemcommitResponse&>(*this), server_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<TileMemcommitResponse&>(*this), server_err_code);
-        }
-    };
-
-    struct SysLogRetrieveBaseRequest{
-        dg::string token;
+    struct SysLogRetrieveRequest{
+        dg::string auth2_token;
         dg::string kind;
-        std::chrono::nanoseconds fr;
-        std::chrono::nanoseconds to;
+        std::chrono::time_point<std::chrono::utc_clock> fr;
+        std::chrono::time_point<std::chrono::utc_clock> to;
         uint32_t limit;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(token, kind, fr, to, limit);
+            reflector(auth2_token, kind, fr, to, limit);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(token, kind, fr, to, limit);
+            reflector(auth2_token, kind, fr, to, limit);
         }
     };
 
-    struct SysLogRetrieveRequest: SysLogRetrieveBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
+    struct SysLogRetrieveResponse{
+        dg::string response;
+        exception_t err;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const SysLogRetrieveBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(response, err);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<SysLogRetrieveBaseRequest&>(*this), uri, requestor, timeout);
-        }
-    };
-    
-    struct SysLogRetrieveBaseResponse{
-        dg::vector<dg::network_postgres_db::model::SystemLogEntry> log_vec;
-        exception_t retrieve_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(log_vec, retrieve_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(log_vec, retrieve_err_code);
+            reflector(response, err);
         }
     };
 
-    struct SysLogRetrieveResponse: SysLogRetrieveBaseResponse{
-        exception_t server_err_code;
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const SysLogRetrieveBaseResponse&>(*this), server_err_code);
-        }
-
-        template <class Reflector>
-        void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<SysLogRetrieveBaseResponse&>(*this), server_err_code);
-        }
-    };
-
-    struct UserLogRetrieveBaseRequest{
-        dg::string token;
-        dg::string kind;
-        std::chrono::nanoseconds fr;
-        std::chrono::nanoseconds to;
+    struct DedicatedLogRetrieveRequest{
+        dg::string auth2_token;
+        uint64_t dedicated_log_id;
+        std::chrono::time_point<std::chrono::utc_clock> fr;
+        std::chrono::time_point<std::chrono::utc_clock> to;
         uint32_t limit;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(token, kind, fr, to);
+            reflector(auth2_token, dedicated_log_id, fr, to, limit);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(token, kind, fr, to);
+            reflector(auth2_token, dedicated_log_id, fr, to, limit);
         }
     };
 
-    struct UserLogRetrieveRequest: UserLogRetrieveBaseRequest{
-        dg::string uri;
-        dg::string requestor;
-        std::chrono::nanoseconds timeout;
+    struct DedicatedLogRetrieveResponse{
+        dg::string response;
+        exception_t err;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const UserLogRetrieveBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(response, err);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<UserLogRetrieveBaseRequest&>(*this), uri, requestor, timeout);
+            reflector(response, err);
         }
     };
 
-    struct UserLogRetrieveBaseResponse{
-        dg::vector<dg::network_postgres_db::model::UserLogEntry> log_vec;
-        exception_t retrieve_err_code;
+    //------------------------------
+
+    //---------tile-actions---------
+
+    struct TileActionRequest{
+        dg::string auth2_token;
+        dg::string payload;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(log_vec, retrieve_err_code);
+            reflector(auth2_token, payload);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(log_vec, retrieve_err_code);
+            reflector(auth2_token, payload);
         }
     };
 
-    struct UserLogRetrieveResponse: UserLogRetrieveBaseResponse{
-        exception_t server_err_code;
+    struct TileActionResponse{
+        exception_t err;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(static_cast<const UserLogRetrieveBaseResponse&>(*this), server_err_code);
+            reflector(err);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<UserLogRetrieveBaseResponse&>(*this), server_err_code);
+            reflector(err);
         }
     };
-    
+
+    struct TileActionClientVersionRequest{
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            (void) reflector;
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            (void) reflector;
+        }
+    };
+
+    struct TileActionClientVersionResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    struct TileActionClientInitPayLoadRequest{
+        dg::string auth2_token;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(auth2_token);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(auth2_token);
+        }
+    };
+
+    struct TileActionClientInitPayLoadResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    //------------------------------
+
+    //---------system-stats---------
+
+    struct SystemDescriptionRequest{
+        dg::string auth2_token;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(auth2_token);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(auth2_token);
+        }
+    };
+
+    struct SystemDescriptionResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    struct SystemStatRequest{
+        dg::string auth2_token;
+        std::chrono::time_point<std::chrono::utc_clock> fr;
+        std::chrono::time_point<std::chrono::utc_clock> to;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(auth2_token, fr, to);
+        }
+        
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(auth2_token, fr, to);
+        }
+    };
+
+    struct SystemStatResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    struct SoftwareConfigurationDescriptionRequest{
+        dg::string auth2_token;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(auth2_token);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(auth2_token);
+        }
+    };
+
+    struct SoftwareConfigurationDescriptionResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    //------------------------------
+
+    //----------network-------------
+
+    struct NetworkBlackListRequest{
+        dg::string sys_token;
+        dg::vector<dg::string> ip_vec;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, ip_vec);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, ip_vec);
+        }
+    };
+
+    struct NetworkBlackListResponse{
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(err);
+        }
+    };
+
+    struct NetworkGreenListRequest{
+        dg::string sys_token;
+        dg::vector<dg::string> ip_vec;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, ip_vec);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, ip_vec);
+        }
+    };
+
+    struct NetworkGreenListResponse{
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(err);
+        }
+    };
+
+    struct NetworkSetGlobalInBoundCapacityRequest{
+        dg::string sys_token;
+        uint64_t byte_per_second;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, byte_per_second);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, byte_per_second);
+        }
+    };
+
+    struct NetworkSetGlobalInBoundCapacityResponse{
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(err);
+        }
+    };
+
+    struct NetworkSetGlobalOutBoundCapacityRequest{
+        dg::string sys_token;
+        uint64_t byte_per_second;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, byte_per_second);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, byte_per_second);
+        }
+    };
+
+    struct NetworkSetGlobalOutBoundCapacityResponse{
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(err);
+        }
+    };
+
+    struct NetworkSetIndividualInBoundCapacityRequest{
+        dg::string sys_token;
+        uint64_t byte_per_second;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, byte_per_second);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, byte_per_second);
+        }
+    };
+
+    struct NetworkSetIndividualInBoundCapacityResponse{
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(err);
+        }
+    };
+
+    struct NetworkGetConfigurationRequest{
+        dg::string sys_token;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token);
+        }
+    };
+
+    struct NetworkGetConfigurationResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    struct NetworkFluxStatRequest{
+        dg::string sys_token;
+        std::chrono::time_point<std::chrono::utc_clock> fr;
+        std::chrono::time_point<std::chrono::utc_clock> to;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, fr, to);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, fr, to);
+        }
+    };
+
+    struct NetworkFluxStatResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    struct NetworkIPFluxStatRequest{
+        dg::string sys_token;
+        dg::string ip;
+        std::chrono::time_point<std::chrono::utc_clock> fr;
+        std::chrono::time_point<std::chrono::utc_clock> to;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, ip, fr, to);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, ip, fr, to);
+        }
+    };
+
+    struct NetworkIPFluxStatResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    //------------------------------
+
+    //------memregion-segments------
+
+    struct MemoryMappingDescriptionRequest{
+        dg::string sys_token;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token);
+        }
+    };
+
+    struct MemoryMappingDescriptionResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    struct MemoryTranslationUnit{
+        uint64_t this_uma_addr;
+        uint64_t that_uma_addr;
+        dg::string that_ip;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(this_uma_addr, that_uma_addr, that_ip);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(this_uma_addr, that_uma_addr, that_ip);
+        }
+    };
+
+    struct ExternalMemoryMappingRequest{
+        dg::string sys_token;
+        dg::vector<MemoryTranslationUnit> memory_mapping_payload; //we'd try to semanticalize these guys whenever possible, we'd implement a liaison to translate this -> Flask
+                                                                  //problem is that we can't actually do normal Flask + friends for our system, because it is very error-prone + hard to debug
+                                                                  //we'd rather implement a semantic layer to seperate the client + server, we'd rahter implement a liasion, problem is that we'd have to implement version control for mailbox + rest request + etc. 
+        
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(sys_token, memory_mapping_payload);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(sys_token, memory_mapping_payload);
+        }
+    };
+
+    struct ExternalMemoryMappingResponse{
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(err);
+        }
+    };
+
+    //------------------------------
+
     class TokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
