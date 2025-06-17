@@ -676,14 +676,124 @@ namespace dg::network_mempress_impl1{
     };
 
     //I guess the exhaustion controlled is the connector problem, not the memory press problem, we'd just have it here
+    //we dont have a patch for the memory vectorization, it'd just use a lot of memory allocations that we'd think harmful
+    //we'd use an affined exhaustion controlled guard at the infretry device to solve this problem
+    //we dont have an immediate patch for this 
 
-    class ExhaustionControlledMemoryPress: public virtual MemoryPressInterface{
+    class ExhaustionControlledBatchPress: public virtual MemoryPressInterface{
+
+        private:
+
+            std::unique_ptr<BatchPress> base;
+            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
+
+        public:
+
+            ExhaustionControlledBatchPress(std::unique_ptr<BatchPress> base,
+                                           std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) noexcept: base(std::move(base)),
+                                                                                                                                      executor(std::move(executor)){}
+
+            auto first() const noexcept -> uma_ptr_t{
+
+                return this->base->first();
+            }
+
+            auto last() const noexcept -> uma_ptr_t{
+
+                return this->base->last();
+            }
+
+            auto memregion_size() const noexcept -> size_t{
+
+                return this->base->memregion_size();
+            }
+
+            auto is_busy(uma_ptr_t ptr) noexcept -> bool{
+
+                return this->base->is_busy(ptr);
+            }
+
+            void push(uma_ptr_t region, std::move_iterator<event_t *> event_arr, size_t event_arr_sz, exception_t * exception_arr) noexcept{
+
+                event_t * base_event_arr = event_arr.base();
+
+                if (event_arr_sz == 0u){
+                    return;
+                }
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (event_arr_sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
+                        std::abort();
+                    }
+                }
+
+                std::expected<dg::vector<event_t>, exception_t> payload = dg::network_exception::cstyle_initialize<dg::vector<event_t>>(event_arr_sz); 
+
+                if (!payload.has_value()){
+                    std::fill(exception_arr, std::next(exception_arr, event_arr_sz), dg::network_exception::RESOURCE_EXHAUSTION); //I would rather having an explicit error even though it could be not maintainable
+                    return;
+                }
+
+                std::copy(std::make_move_iterator(base_event_arr), std::make_move_iterator(std::next(base_event_arr, event_arr_sz)), payload->begin());
+                std::expected<bool, exception_t> response = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
+
+                auto task = [&, this]() noexcept{
+                    response = this->base->push(std::move(payload.value()));
+                    return !repsonse.has_value() || response.value();
+                };
+
+                dg::network_concurrency_infretry_x::ExecutableWrapper virtual_task(task);
+                this->executor->exec(virtual_task);
+
+                if (!response.has_value()){
+                    std::fill(exception_arr, std::next(exception_arr, event_arr_sz), response.error());
+                    std::copy(std::make_move_iterator(payload->begin()), std::make_move_iterator(payload->end()), base_event_arr);
+                    return;
+                }
+
+                if (!response.value()){
+                    std::fill(exception_arr, std::next(exception_arr, event_arr_sz), dg::network_exception::QUEUE_FULL);
+                    std::copy(std::make_move_iterator(payload->begin()), std::make_move_iterator(payload->end()), base_event_arr);
+                    return;
+                }
+
+                std::fill(exception_arr, std::next(exception_arr, event_arr_sz), dg::network_exception::SUCCESS);
+            }
+
+            auto try_collect(uma_ptr_t region, event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept -> bool{
+
+                return this->base->try_collect(region, event_arr, event_arr_sz, event_arr_cap);
+            }
+
+            auto is_collectable(uma_ptr_t ptr) noexcept -> bool{
+
+                return this->base->is_collectable(ptr);
+            }
+
+            void collect(uma_ptr_t region, event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept{
+
+                this->base->collect(region, event_arr, event_arr_sz, event_arr_cap);
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
+            }
+
+            auto minimum_collect_cap() noexcept -> size_t{
+
+                return this->base->minimum_collect_cap();
+            }
+    };
+
+    class ExhaustionControlledMemoryPress: public virtual dg::network_mempress::MemoryPressInterface{
 
         private:
 
             std::unique_ptr<MemoryPress> base;
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor;
-
+        
         public:
 
             ExhaustionControlledMemoryPress(std::unique_ptr<MemoryPress> base,
@@ -705,52 +815,41 @@ namespace dg::network_mempress_impl1{
                 return this->base->memregion_size();
             }
 
+            auto is_busy(uma_ptr_t ptr) noexcept -> bool{
+
+                return this->base->is_busy(ptr);
+            }
+
             void push(uma_ptr_t region, std::move_iterator<event_t *> event_arr, size_t event_arr_sz, exception_t * exception_arr) noexcept{
 
-                event_t * base_event_arr = event_arr.base();
+                event_t * first_event_arr           = event_arr.base();
+                event_t * last_event_arr            = std::next(first_event_arr, event_arr_sz);
 
-                if (event_sz == 0u){
-                    return;
-                }
+                exception_t * first_exception_arr   = exception_arr;
+                exception_t * last_exception_arr    = std::next(first_exception_arr, event_arr_sz);
 
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (event_sz > this->max_consume_size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
-                        std::abort();
-                    }
-                }
+                this->base->push(region, event_arr, event_arr_sz, exception_arr);
 
-                std::expected<dg::vector<event_t>, exception_t> payload = dg::network_exception::cstyle_initialize<dg::vector<event_t>>(event_sz); 
-
-                if (!payload.has_value()){
-                    std::fill(exception_arr, std::next(exception_arr, event_sz), dg::network_exception::RESOURCE_EXHAUSTION); //I would rather having an explicit error even though it could be not maintainable
-                    return;
-                }
-
-                std::copy(std::make_move_iterator(base_event_arr), std::make_move_iterator(std::next(base_event_arr, event_sz)), payload->begin());
-                std::expected<bool, exception_t> response = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
-                
                 auto task = [&, this]() noexcept{
-                    response = this->base->push(std::move(payload.value()));
-                    return !repsonse.has_value() || response.value() == true;
+                    exception_t * first_retriable_arr   = std::find(first_exception_arr, last_exception_arr, dg::network_exception::QUEUE_FULL);
+                    exception_t * last_retriable_arr    = std::find_if(first_retriable_arr, last_exception_arr, [](exception_t err) noexcept{return err != dg::network_exception::QUEUE_FULL;});
+
+                    size_t sliding_window_sz            = std::distance(first_retriable_arr, last_retriable_arr);
+
+                    if (sliding_window_sz == 0u){
+                        return true;
+                    }
+
+                    size_t relative_offset_sz           = std::distance(first_exception_arr, first_retriable_arr);
+
+                    std::advance(first_event_arr, relative_offset_sz);
+                    std::advance(first_exception_arr, relative_offset_sz);
+
+                    this->base->push(region, std::make_move_iterator(first_event_arr), sliding_window_sz, first_exception_arr);
                 };
 
                 dg::network_concurrency_infretry_x::ExecutableWrapper virtual_task(task);
                 this->executor->exec(virtual_task);
-
-                if (!response.has_value()){
-                    std::fill(exception_arr, std::next(exception_arr, event_sz), response.error());
-                    std::copy(std::make_move_iterator(payload->begin()), std::make_move_iterator(payload->end()), base_event_arr);
-                    return;
-                }
-
-                if (!response.value()){
-                    std::fill(exception_arr, std::next(exception_arr, event_sz), dg::network_exception::QUEUE_FULL);
-                    std::copy(std::make_move_iterator(payload->begin()), std::make_move_iterator(payload->end()), base_event_arr);
-                    return;
-                }
-
-                std::fill(exception_arr, std::next(exception_arr, event_sz), dg::network_exception::SUCCESS);
             }
 
             auto try_collect(uma_ptr_t region, event_t * event_arr, size_t& event_arr_sz, size_t event_arr_cap) noexcept -> bool{
@@ -792,7 +891,7 @@ namespace dg::network_mempress_impl1{
             const size_t MAX_SUBMIT_CAP     = size_t{1} << 30;
             const size_t MIN_REGION_VEC_CAP = 1u;
             const size_t MAX_REGION_VEC_CAP = size_t{1} << 30;
-            
+
             using uptr_t    = typename dg::ptr_info<uma_ptr_t>::unsigned_t;
             uptr_t ufirst   = dg::pointer_cast<uptr_t>(first);
             uptr_t ulast    = dg::pointer_cast<uptr_t>(last);
@@ -840,6 +939,72 @@ namespace dg::network_mempress_impl1{
                                                 submit_cap,
                                                 std::move(vec));
         }
+
+        static auto spawn_exhaustion_controlled_batchpress(uma_ptr_t first, uma_ptr_t last,
+                                                           size_t submit_cap,
+                                                           size_t region_vec_cap,
+                                                           size_t memregion_sz,
+                                                           std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) -> std::unique_ptr<dg::network_mempress::MemoryPressInterface> {
+
+            const size_t MIN_SUBMIT_CAP     = 1u;
+            const size_t MAX_SUBMIT_CAP     = size_t{1} << 30;
+            const size_t MIN_REGION_VEC_CAP = 1u;
+            const size_t MAX_REGION_VEC_CAP = size_t{1} << 30;
+
+            using uptr_t    = typename dg::ptr_info<uma_ptr_t>::unsigned_t;
+            uptr_t ufirst   = dg::pointer_cast<uptr_t>(first);
+            uptr_t ulast    = dg::pointer_cast<uptr_t>(last);
+
+            if (ulast < ufirst){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (!stdx::is_pow2(memregion_sz)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (ufirst % memregion_sz != 0u){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (ulast % memregion_sz != 0u){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(submit_cap, MIN_SUBMIT_CAP, MAX_SUBMIT_CAP) != submit_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(region_vec_cap, MIN_REGION_VEC_CAP, MAX_REGION_VEC_CAP) != region_vec_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (!stdx::is_pow2(region_vec_cap)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (executor == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t vec_sz   = (ulast - ufirst) / memregion_sz;
+            auto vec        = dg::vector<BatchBucket>(vec_sz);
+
+            for (BatchBucket& bucket: vec){
+                bucket.event_container          = dg::pow2_cyclic_queue<dg::vector<event_t>>(stdx::ulog2(region_vec_cap));
+                bucket.lck                      = std::make_unique<std::atomic_flag>(false); //TODOs: hdi
+                bucket.is_empty_concurrent_var  = std::make_unique<std::atomic_flag>(true); //TODOs: hdi
+            }
+
+            auto batch_press    =  std::make_unique<BatchPress>(stdx::ulog2(memregion_sz),
+                                                                first,
+                                                                last,
+                                                                submit_cap,
+                                                                std::move(vec));
+
+            return std::make_unique<ExhaustionControlledBatchPress>(std::move(batch_press),
+                                                                    std::move(executor));
+        } 
 
         static auto spawn_mempress(uma_ptr_t first, uma_ptr_t last,
                                    size_t submit_cap, size_t region_cap, size_t memregion_sz) -> std::unique_ptr<dg::network_mempress::MemoryPressInterface>{
@@ -900,6 +1065,21 @@ namespace dg::network_mempress_impl1{
                                                  submit_cap,
                                                  std::move(vec));
         }
+
+        static auto spawn_exhaustion_controlled_mempress(std::unique_ptr<dg::network_mempress::MemoryPressInterface> base,
+                                                         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor){
+                        
+            if (base == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (executor == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<ExhaustionControlledMemoryPress>(std::move(base),
+                                                                     std::move(executor));
+        } 
 
         static auto spawn_fastpress(uma_ptr_t first, uma_ptr_t last,
                                     size_t submit_cap, size_t region_cap,
