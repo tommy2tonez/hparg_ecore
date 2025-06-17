@@ -354,6 +354,10 @@ namespace dg::network_mempress_impl1{
 
                 std::fill(exception_arr, std::next(exception_arr, push_sz), dg::network_exception::SUCCESS);
                 std::fill(std::next(exception_arr, push_sz), std::next(exception_arr, event_arr_sz), dg::network_exception::QUEUE_FULL);
+
+                if (new_sz != 0u){
+                    this->region_vec[bucket_idx].is_empty_concurrent_var.value.clear(std::memory_order_relaxed);
+                }
             }
 
             auto try_collect(uma_ptr_t ptr, event_t * dst, size_t& dst_sz, size_t dst_cap) noexcept -> bool{
@@ -642,7 +646,7 @@ namespace dg::network_mempress_impl1{
                 size_t normal_dst_sz    = 0u;
                 size_t normal_dst_cap   = dst_cap - batch_dst_sz;
 
-                this->normal_press->collect(normal_dst, normal_dst_sz, normal_dst_cap);
+                this->normal_press->collect(ptr, normal_dst, normal_dst_sz, normal_dst_cap);
 
                 dst_sz                  = batch_dst_sz + normal_dst_sz;
             }
