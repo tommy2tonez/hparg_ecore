@@ -43,18 +43,93 @@ namespace dg::network_rest{
 
     //----------api-version-----------
 
-    struct RESTAPIVersionRequest{};
+    //all apis must adhere to the rule of request being semantically sensical (a serialization format that is not JSON), and output being a JSON response (a human readable serialization format), clearly documented in the API explaination section for every server version
+    //we'd just have to force the user to use a different serialization for input, for a lot of reasons
+    //let's say we have std::chrono::utc_clock, we'd want to catch that error, to be differented from the std::chrono::high_resolution_clock, etc
+    //we dont care about output, because it's documented clearly about what that semantically means, while the input we can't enforce such a thing
+
+    struct RESTAPIVersionRequest{
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            (void) reflector;
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            (void) reflector;
+        }
+    };
 
     struct RESTAPIVersionResponse{
         dg::string response;
         exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
     };
 
-    struct ExceptionVersionRequest{};
+    struct ExceptionVersionRequest{
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            (void) reflector;    
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            (void) reflector;
+        }
+    };
 
     struct ExceptionVersionResponse{
         dg::string response;
         exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
+    };
+
+    struct ServerVersionRequest{
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            (void) reflector;
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            (void) reflector;
+        }
+    };
+
+    struct ServerVersionResponse{
+        dg::string response;
+        exception_t err;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(response, err);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(response, err);
+        }
     };
 
     //--------------------------------
@@ -844,6 +919,35 @@ namespace dg::network_rest{
     };
 
     //------------------------------
+
+    static inline constexpr std::string_view REST_API_VERSION_GET_ROUTE                         = std::string_view("/get/basic/rest_api_version");
+    static inline constexpr std::string_view REST_API_EXCEPTION_VERSION_GET_ROUTE               = std::string_view("/get/basic/exception_version");
+    static inline constexpr std::string_view REST_API_SERVER_VERSION_GET_ROUTE                  = std::string_view("/get/basic/server_version");
+
+    static inline constexpr std::string_view REST_API_AUTH2_GET_ROUTE                           = std::string_view("/get/auth2/token");
+    static inline constexpr std::string_view REST_API_AUTH2_REGISTRATION_SET_ROUTE              = std::string_view("/set/auth2/registration");
+    static inline constexpr std::string_view REST_API_AUTH2_DEREGISTRATION_SET_ROUTE            = std::string_view("/set/auth2/deregistration");
+
+    static inline constexpr std::string_view REST_API_SYSLOG_GET_ROUTE                          = std::string_view("/get/log/syslog");
+    static inline constexpr std::string_view REST_API_DEDICATED_LOG_GET_ROUTE                   = std::string_view("/get/log/dedicated_log");
+
+    static inline constexpr std::string_view REST_API_TILE_ACTION_PAYLOAD_SET_ROUTE             = std::string_view("/set/core/tileaction/payload");
+    static inline constexpr std::string_view REST_API_TILE_ACTION_CLIENT_VERSION_GET_ROUTE      = std::string_view("/get/core/tileaction/client_version");
+    static inline constexpr std::string_view REST_API_TILE_ACTION_CLIENT_INIT_PAYLOAD_GET_ROUTE = std::string_view("/get/core/tileaction/client_payload");
+    // static inline constexpr std::string_view REST_API_SOFTWARE_CONFIG_GET_ROUTE                 = "/get/core/config";
+
+    static inline constexpr std::string_view REST_API_SYSTEM_DESCRIPTION_GET_ROUTE              = std::string_view("/get/sys/description");
+    static inline constexpr std::string_view REST_API_SYSTEM_STAT_GET_ROUTE                     = std::string_view("/get/sys/stat");
+
+    static inline constexpr std::string_view REST_API_NETWORK_BLACKLIST_SET_ROUTE               = std::string_view("/set/network/blacklist");
+    static inline constexpr std::string_view REST_API_NETWORK_GREENLIST_SET_ROUTE               = std::string_view("/set/network/greenlist");
+    static inline constexpr std::string_view REST_API_NETWORK_GLOBAL_INBOUNDCAP_SET_ROUTE       = std::string_view("/set/network/bandwidth/global_inbound");
+    static inline constexpr std::string_view REST_API_NETWORK_GLOBAL_OUTBOUNDCAP_SET_ROUTE      = std::string_view("/set/network/bandwidth/global_outbound");
+    static inline constexpr std::string_view REST_API_NETWORK_INDIVIDUAL_INBOUNDCAP_SET_ROUTE   = std::string_view("/set/network/bandwidth/individual_inbound");
+    static inline constexpr std::string_view REST_API_NETWORK_INDIVIDUAL_OUTBOUNDCAP_SET_ROUTE  = std::string_view("/set/network/bandwidth/individual_outbound");
+
+    static inline constexpr std::string_view REST_API_NETWORK_FLUX_STAT_GET_REQUEST             = std::string_view("/get/network/stat/sys_flux");
+    static inline constexpr std::string_view REST_API_NETWORK_IP_FLUX_STAT_GET_REQUEST          = std::string_view("/get/network/stat/ip_flux");
 
     class TokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
