@@ -2314,6 +2314,63 @@ namespace std{
     }
 }
 
+namespace dg::network_datastructure::unordered_set_variants{
+
+    template <class Key, class Hasher, class Allocator>
+    class unordered_node_set{
+
+        public:
+
+            explicit unordered_node_set(size_type bucket_count,
+                                        const Hasher& hasher        = Hasher(),
+                                        const Allocator& allocator  = Allocator(),
+                                        const KeyEqual& key_equal   = KeyEqual()){}
+            
+            unordered_node_set(size_type bucket_count,
+                               const Allocator& allocator){}
+            
+            unordered_node_set(size_type bucket_count,
+                               const Hasher& hasher,
+                               const Allocator& allocator){}
+                        
+            explicit unordered_node_set(const Allocator& allocator){}
+
+            template <class InputIt>
+            unordered_node_set(InputIt first, InputIt last,
+                               size_type bucket_count,
+                               const Hasher& hasher         = Hasher(),
+                               const KeyEqual& key_equal    = KeyEqual(),
+                               const Allocator& allocator   = Allocator()){}
+            
+            template <class InputIt>
+            unordered_node_set(InputIt first, InputIt last,
+                               size_type bucket_count,
+                               const Allocator& allocator){}
+            
+            template <class InputIt>
+            unordered_node_set(InputIt first, InputIt last,
+                               size_type bucket_count,
+                               const Hasher& hasher,
+                               const Allocator& allocator){}
+
+            unordered_node_set(const self& other, const Allocator& alloc){}
+
+            unordered_node_set(self&& other, const Allocator& alloc){}
+
+            unordered_node_set(std::initializer_list<value_type> init,
+                               size_type bucket_count,
+                               const Hasher& hasher         = Hasher(),
+                               const KeyEqual& key_equal    = KeyEqual(),
+                               const Allocator& allocator   = Allocator()){}
+            
+            unordered_node_set(std::initializer_list<value_type> init,
+                               size_type bucket_count,
+                               const Hasher& hasher,
+                               const Allocator& allocator){}
+                               
+    };
+}
+
 namespace dg::network_datastructure::atomic_loader{
 
     //we will use this a lot

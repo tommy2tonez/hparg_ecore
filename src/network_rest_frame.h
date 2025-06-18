@@ -23,6 +23,7 @@ namespace dg::network_rest_frame::model{
 
     static inline constexpr uint32_t INTERNAL_REQUEST_SERIALIZATION_SECRET  = 3312354321ULL;
     static inline constexpr uint32_t INTERNAL_RESPONSE_SERIALIZATION_SECRET = 3554488158ULL;
+    static inline constexpr std::string_view REST_FRAME_VERSION_SUFFX       = std::string_view("REST_FRAME_V1"); //this is to actually solve the serialization problem, we can weed out the version problems, for the bad packets, we are guaranteed to filter that using the hashed value 
 
     struct CacheID{
         std::array<char, 8u> ip;
@@ -56,6 +57,7 @@ namespace dg::network_rest_frame::model{
         dg::string requestee_uri;
         dg::string requestor;
         dg::string payload;
+        dg::string payload_serialization_format;
 
         std::chrono::nanoseconds client_timeout_dur;
         std::optional<uint8_t> dual_priority;
@@ -64,12 +66,12 @@ namespace dg::network_rest_frame::model{
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(requestee_uri, requestor, payload, client_timeout_dur, dual_priority, server_abs_timeout, designated_request_id);
+            reflector(requestee_uri, requestor, payload, payload_serialization_format, client_timeout_dur, dual_priority, server_abs_timeout, designated_request_id);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(requestee_uri, requestor, payload, client_timeout_dur, dual_priority, server_abs_timeout, designated_request_id);
+            reflector(requestee_uri, requestor, payload, payload_serialization_format, client_timeout_dur, dual_priority, server_abs_timeout, designated_request_id);
         }
     };
 
@@ -77,30 +79,32 @@ namespace dg::network_rest_frame::model{
         dg::string requestee_uri;
         dg::string requestor;
         dg::string payload;
+        dg::string payload_serialization_format;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(requestee_uri, requestor, payload);
+            reflector(requestee_uri, requestor, payload, payload_serialization_format);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(requestee_uri, requestor, payload);
+            reflector(requestee_uri, requestor, payload, payload_serialization_format);
         }
     };
 
     struct Response{
         dg::string response;
+        dg::string response_serialization_format;
         exception_t err_code;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(response, err_code);
+            reflector(response, response_serialization_format, err_code);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(response, err_code);
+            reflector(response, response_serialization_format, err_code);
         }
     };
 
@@ -4286,9 +4290,10 @@ namespace dg::network_rest_frame::client_impl1{
                     static_assert(std::is_nothrow_move_assignable_v<model::InternalRequest>);
                     static_assert(std::is_nothrow_move_constructible_v<dg::string>);
 
-                    rs.value()[i] = InternalRequest{.request    = Request{.requestee_uri    = std::move(base_request_arr[i].requestee_uri),
-                                                                          .requestor        = std::move(base_request_arr[i].requestor),
-                                                                          .payload          = std::move(base_request_arr[i].payload)},
+                    rs.value()[i] = InternalRequest{.request    = Request{.requestee_uri                = std::move(base_request_arr[i].requestee_uri),
+                                                                          .requestor                    = std::move(base_request_arr[i].requestor),
+                                                                          .payload                      = std::move(base_request_arr[i].payload),
+                                                                          .payload_serialization_format = std::move(base_request_arr[i].payload_serialization_format)},
 
                                                     .ticket_id                  = ticket_id_arr[i],
                                                     .dual_priority              = base_request_arr[i].dual_priority,
@@ -4304,9 +4309,10 @@ namespace dg::network_rest_frame::client_impl1{
             static void internal_rollback_client_request(model::ClientRequest * client_request_arr, dg::vector<model::InternalRequest>&& internal_request_arr) noexcept{
 
                 for (size_t i = 0u; i < internal_request_arr.size(); ++i){
-                    client_request_arr[i].requestee_uri = std::move(internal_request_arr[i].request.requestee_uri);
-                    client_request_arr[i].requestor     = std::move(internal_request_arr[i].request.requestor);
-                    client_request_arr[i].payload       = std::move(internal_request_arr[i].request.payload);
+                    client_request_arr[i].requestee_uri                 = std::move(internal_request_arr[i].request.requestee_uri);
+                    client_request_arr[i].requestor                     = std::move(internal_request_arr[i].request.requestor);
+                    client_request_arr[i].payload                       = std::move(internal_request_arr[i].request.payload);
+                    client_request_arr[i].payload_serialization_format  = std::move(internal_request_arr[i].request.payload_serialization_format);
                 }
             }
     };
