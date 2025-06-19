@@ -1249,6 +1249,12 @@ namespace dg::network_datastructure::unordered_map_variants{
         return true;
     }
 
+    constexpr auto vector_precond() -> bool{
+
+        std::vector<size_t> vec{};
+        return vec.capacity() == 0u;
+    } 
+
     // template <class T>
     constexpr auto min_size_clamp(std::size_t arg, std::size_t lo, std::size_t hi) ->  size_t{
 
@@ -1305,6 +1311,8 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                            Node_5<key_t, mapped_t, virtual_addr_t>,
                                                            ReorderedNode<key_t, mapped_t, virtual_addr_t>>>;
     };
+
+    static_assert(vector_precond());
 
     template <class Flag, class key_t, class mapped_t, class virtual_addr_t>
     using Node = typename NodeChooser<Flag, key_t, mapped_t, virtual_addr_t>::type;
@@ -1817,7 +1825,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()) [[unlikely]]{ //strong guarantee, might corrupt vector_capacity <-> bucket_vec_size ratio, signals an uphash
                     this->rehash(this->bucket_vec.size() << self::POW2_GROWTH_FACTOR);
                 }
- 
+
                 virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
 
                 if (*insert_reference == self::NULL_VIRTUAL_ADDR){
@@ -2335,35 +2343,131 @@ namespace dg::network_datastructure::unordered_set_variants{
         VirtualAddrType nxt_addr;        
     };
 
-    template <class RandomAccessIterator>
+    template <class BidirIterator>
     class unordered_set_node_external_iterator{
         
         private:
 
-            RandomAccessIterator base_node_iterator;
-        
+            BidirIterator base_node_iterator;
+
+            using key_type              = std::decay_t<decltype(std::declval<BidirIterator&>()->key)>; 
+            using base_iterator_type    = BidirIterator::value_type; 
+
         public:
 
+            using self                  = unordered_set_node_external_iterator;
+            using difference_type       = std::ptrdiff_t;
+            using value_type            = type_like_t<base_iterator_type, key_type>; 
 
+            template <class T = BidirIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T>, bool> = true>
+            constexpr unordered_set_node_external_iterator(): base_node_iterator(){}
+
+            constexpr unordered_set_node_external_iterator(BidirIterator base_node_iterator) noexcept(std::is_nothrow_move_constructible_v<BidirIterator>): base_node_iterator(std::move(base_node_iterator)){}
+        
+            constexpr auto operator ++() noexcept -> self&{
+            
+                ++this->base_node_iterator;
+                return *this;
+            }
+
+            constexpr auto operator ++(int) noexcept -> self{
+
+                return self(this->base_node_iterator++);
+            }
+
+            constexpr auto operator --() noexcept -> self&{
+
+                --this->base_node_iterator;
+                return *this;
+            }
+
+            constexpr auto operator --(int) noexcept -> self{
+
+                return self(this->base_node_iterator--);
+            }
+
+            constexpr auto operator ==(const self& other) const noexcept -> bool{
+
+                return this->base_node_iterator == other.base_node_iterator;
+            }
+
+            constexpr auto operator !=(const self& other) const noexcept -> bool{
+
+                return this->base_node_iterator != other.base_node_iterator;
+            }
+
+            constexpr auto operator *() const noexcept -> decltype(auto){
+
+                return (*this->base_node_iterator).key;
+            }
+
+            constexpr auto unfancy() const noexcept -> const BidirIterator&{
+
+                return this->base_node_iterator;
+            }
     };
 
-    template <class KeyType, class VirtualAddrType = std::size_t, class Hasher = std::hash<KeyType>, class Pred = std::equal_to<KeyType>, class Allocator = std::allocator<UnorderedSetNode<KeyType, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
+    template <class KeyType, class VirtualAddrType = std::size_t, class Hasher = std::hash<KeyType>, class Pred = std::equal_to<KeyType>, class Allocator = std::allocator<KeyType>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_set{
 
         private:
 
             std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::template rebind_alloc<VirtualAddrType>> bucket_vec;
-            std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, Allocator> virtual_storage_vec; 
+            std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>> virtual_storage_vec; 
             Hasher _hasher;
             Pred pred;
             Allocator allocator;
 
+            using unfancy_iterator          = std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>::iterator;
+            using unfancy_const_iterator    = std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>::const_iterator;
+            using node_t                    = UnorderedSetNode<KeyType, VirtualAddrType>; 
+
         public:
+
+            using key_type                  = KeyType;
+            using value_type                = KeyType;
+            using hasher                    = Hasher;
+            using key_equal                 = Pred;
+            using allocator_type            = Allocator;
+            using reference                 = value_type&;
+            using const_reference           = const value_type&;
+            using pointer                   = typename std::allocator_traits<Allocator>::pointer;
+            using const_pointer             = typename std::allocator_traits<Allocator>::const_pointer;
+            using iterator                  = unordered_set_node_external_iterator<unfancy_iterator>;
+            using const_iterator            = unordered_set_node_external_iterator<unfancy_const_iterator>;
+            using size_type                 = std::size_t;
+            using difference_type           = std::ptrdiff_t;
+            using self                      = unordered_node_set;
+            using load_factor_ratio         = typename LoadFactor::type;
+            using virtual_addr_t            = VirtualAddrType;
+
+            static inline constexpr virtual_addr_t NULL_VIRTUAL_ADDR    = null_addr_v<virtual_addr_t>;
+            static inline constexpr size_t POW2_GROWTH_FACTOR           = 1u;
+            static inline constexpr uint64_t MIN_CAP                    = 8u;
+            static inline constexpr uint64_t MAX_CAP                    = uint64_t{1} << 50;
+
+            static_assert((std::numeric_limits<size_type>::max() >= MAX_CAP));
+
+            static_assert(std::disjunction_v<std::is_same<typename std::ratio<1, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<2, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<3, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<4, 8>::type, load_factor_ratio>,
+                                             std::is_same<typename std::ratio<5, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<6, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<7, 8>::type, load_factor_ratio>, 
+                                             std::is_same<typename std::ratio<8, 8>::type, load_factor_ratio>>);
 
             constexpr explicit unordered_node_set(size_type bucket_count,
                                                   const Hasher& _hasher       = Hasher(),
                                                   const Allocator& allocator  = Allocator(),
-                                                  const Pred& pred            = Pred()){}
+                                                  const Pred& pred            = Pred()): virtual_storage_vec(allocator),
+                                                                                         bucket_vec(unordered_set_variants::min_size_clamp(static_cast<std::size_t>(unordered_set_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<std::size_t>(self::max_capacity())), self::NULL_VIRTUAL_ADDR, allocator),
+                                                                                         _hasher(_hasher),
+                                                                                         pred(pred),
+                                                                                         allocator(allocator){
+
+                this->virtual_storage_vec.reserve(self::right_capacity_to_size(this->capacity()));
+            }
 
             unordered_node_set(size_type bucket_count,
                                const Hasher& _hasher,
@@ -2416,6 +2520,39 @@ namespace dg::network_datastructure::unordered_set_variants{
 
             __attribute__((noinline)) constexpr void rehash(size_type tentative_new_cap){
 
+                if (tentative_new_cap <= this->capacity()){
+                    return;
+                }
+
+                size_t new_bucket_cap               = std::max(self::min_capacity(), static_cast<size_type>(unordered_set_variants::ceil2(tentative_new_cap)));
+
+                if (new_bucket_cap > self::max_capacity()){
+                    throw std::length_error("bad unordered_node_set capacity");
+                }
+
+                size_t new_virtual_storage_vec_cap  = self::right_capacity_to_size(new_bucket_cap);
+                auto new_bucket_vec                 = decltype(bucket_vec)(new_bucket_cap, self::NULL_VIRTUAL_ADDR, this->allocator);
+
+                this->virtual_storage_vec.reserve(new_virtual_storage_vec_cap);
+
+                for (size_t i = 0u; i < this->virtual_storage_vec.size(); ++i){
+                    this->virtual_storage_vec[i].nxt_addr   = self::NULL_VIRTUAL_ADDR;
+                    size_t hashed_value                     = this->_hasher(this->virtual_storage_vec[i].key);
+                    size_t bucket_idx                       = hashed_value & (new_bucket_cap - 1u);
+                    virtual_addr_t * insert_reference       = &new_bucket_vec[bucket_idx];
+
+                    while (true){
+                        if (*insert_reference == self::NULL_VIRTUAL_ADDR){
+                            break;
+                        }
+
+                        insert_reference = &this->virtual_storage_vec[*insert_reference].nxt_addr;
+                    }
+
+                    *insert_reference = static_cast<virtual_addr_t>(i);
+                }
+
+                this->bucket_vec = std::move(new_bucket_vec);
             }
 
             constexpr void reserve(size_type new_sz){
@@ -2434,28 +2571,74 @@ namespace dg::network_datastructure::unordered_set_variants{
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
 
-            }
-            
-            auto insert(){
+                auto [nofancy_it, status] = this->nofancy_emplace(std::forward<Args>(args)...);
+                return std::make_pair(iterator(nofancy_it), status);
+            } 
 
-            }
+            template <class KeyLike>
+            constexpr auto insert(KeyLike&& key) -> std::pair<iterator, bool>{
 
-            void clear(){
-
-            }
-
-            void swap(){
-
+                auto [nofancy_it, status] = this->nofancy_insert(std::forward<KeyLike>(key));
+                return std::make_pair(iterator(nofancy_it), status);
             }
 
-            auto erase(){
+            template <class InputIt>
+            constexpr void insert(InputIt first, InputIt last){
 
+                this->reserve(this->size() + std::distance(first, last));
+
+                while (first != last){
+                    this->insert(*first);
+                    std::advance(first, 1u);
+                }
+            }
+
+            constexpr void insert(std::initializer_list<KeyType> init_list){
+
+                this->insert(init_list.begin(), init_list.end());
+            }
+
+            constexpr void clear() noexcept(true){
+
+                //static_assert(noexcept(this->virtual_storage_vec.clear()));
+
+                this->virtual_storage_vec.clear();
+                std::fill(this->bucket_vec.begin(), this->bucket_vec.end(), self::NULL_VIRTUAL_ADDR);
+            }
+
+            constexpr void swap(self& other) noexcept(true){
+
+                //static_assert(noexcept(std::swap(this->virtual_storage_vec, other.virtual_storage_vec)));
+                //static_assert(noexcept(std::swap(this->bucket_vec, other.bucket_vec)));
+                //static_assert(noexcept(std::swap(this->_hasher, other._hasher)));
+                //static_assert(noexcept(std::swap(this->pred, other.pred)));
+                //static_assert(noexcept(std::swap(this->allocator, other.allocator)));
+
+                std::swap(this->virtual_storage_vec, other.virtual_storage_vec);
+                std::swap(this->bucket_vec, other.bucket_vec);
+                std::swap(this->_hasher, other._hasher);
+                std::swap(this->pred, other.pred);
+                std::swap(this->allocator, other.allocator);
+            }
+
+            template <class EraseArg>
+            constexpr auto erase(EraseArg&& erase_arg) noexcept(true){
+
+                if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
+                    if constexpr(std::is_nothrow_convertible_v<EraseArg&&, const_iterator>){
+                        return this->unfancy_erase(const_iterator(std::forward<EraseArg>(erase_arg)).unfancy());
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                } else{
+                    return this->unfancy_erase(std::forward<EraseArg>(erase_arg));
+                }
             }
 
             template <class KeyLike>
             constexpr auto find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
-                return this->internal_find(key);
+                return const_iterator(this->unfancy_find(key));
             }
 
             template <class KeyLike>
@@ -2465,7 +2648,7 @@ namespace dg::network_datastructure::unordered_set_variants{
             }
 
             template <class KeyLike>
-            auto count(const KeyLike& key) const noexcept(true) -> size_t{
+            constexpr auto count(const KeyLike& key) const noexcept(true) -> size_t{
 
                 return static_cast<size_t>(this->contains(key));
             }
@@ -2520,24 +2703,34 @@ namespace dg::network_datastructure::unordered_set_variants{
                 return static_cast<Pred&&>(this->pred);
             }   
 
+            constexpr auto begin() noexcept -> iterator{
+
+                return iterator(this->unfancy_begin());
+            }
+
             constexpr auto begin() const noexcept -> const_iterator{
 
-                return this->virtual_storage_vec.begin();
+                return const_iterator(this->unfancy_begin());
             }
 
             constexpr auto cbegin() const noexcept -> const_iterator{
 
-                return this->virtual_storage_vec.cbegin();
+                return const_iterator(this->unfancy_cbegin());
+            }
+
+            constexpr auto end() noexcept -> iterator{
+
+                return iterator(this->unfancy_end());
             }
 
             constexpr auto end() const noexcept -> const_iterator{
 
-                return this->virtual_storage_vec.end();
+                return const_iterator(this->unfancy_end());
             }
 
             constexpr auto cend() const noexcept -> const_iterator{
 
-                return this->virtual_storage_vec.cend();
+                return const_iterator(this->unfancy_cend());
             }
 
             static consteval auto max_load_factor() noexcept -> double{
@@ -2554,11 +2747,11 @@ namespace dg::network_datastructure::unordered_set_variants{
 
                 return sz / self::max_load_factor();
             }
-        
+
         private:
-            
+
             static constexpr auto right_capacity_to_size(size_t cap) noexcept -> size_t{
-                
+
                 return cap / static_cast<size_t>(load_factor_ratio::den) * static_cast<size_t>(load_factor_ratio::num);
             }
 
@@ -2609,19 +2802,19 @@ namespace dg::network_datastructure::unordered_set_variants{
             }
 
             template <class KeyLike>
-            constexpr auto internal_find(const KeyLike& key) const noexcept(true) -> const_iterator{
-                
+            constexpr auto internal_find(const KeyLike& key) const noexcept(true) -> nofancy_const_iterator{
+
                 const virtual_addr_t * bucket_reference = this->internal_find_bucket_reference(key);
 
                 if (*bucket_reference == self::NULL_VIRTUAL_ADDR){
-                    return this->end();
+                    return this->nofancy_end();
                 }
 
                 return std::next(this->virtual_storage_vec.begin(), *bucket_reference);
             }
 
             template <class BucketLike>
-            constexpr auto internal_insert(BucketLike&& bucket) -> std::pair<iterator, bool>{
+            constexpr auto internal_insert(BucketLike&& bucket) -> std::pair<nofancy_iterator, bool>{
 
                 if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()){
                     this->rehash(this->bucket_vec.size() << self::POW2_GROWTH_FACTOR);
@@ -2665,24 +2858,102 @@ namespace dg::network_datastructure::unordered_set_variants{
                 return true;
             }
 
-            constexpr auto internal_erase_iter(const_iterator iter) noexcept(true) -> iterator{
+            constexpr auto internal_erase_iter(nofancy_const_iterator iter) noexcept(true) -> nofancy_iterator{
 
-                if (iter == this->cend()){
-                    return this->end();
+                if (iter == this->nofancy_cend()){
+                    return this->nofancy_end();
                 } else [[likely]]{
-                    size_t off = std::distance(this->virtual_storage_vec.cbegin(), iter);
+                    size_t off = std::distance(this->virtual_storage_vec.nofancy_cbegin(), iter);
                     this->internal_erase_key(iter->key);
                     return std::next(this->virtual_storage_vec.begin(), off);
                 }
             }
+
+            template <class ...Args>
+            constexpr auto nofancy_emplace(Args&& ...args) -> std::pair<nofancy_iterator, bool>{
+
+                return this->internal_insert(UnorderedSetNode<KeyType, VirtualAddrType>{.key        = KeyType(std::forward<Args>(args)...),
+                                                                                        .nxt_addr   = self::NULL_VIRTUAL_ADDR});
+            }
+
+            template <class KeyLike>
+            constexpr auto nofancy_insert(KeyLike&& key) -> std::pair<nofancy_iterator, bool>{
+
+                return this->internal_insert(UnorderedSetNode<KeyType, VirtualAddrType>{.key        = std::forward<KeyLike>(key),
+                                                                                        .nxt_addr   = self::NULL_VIRTUAL_ADDR});
+            }
+
+            template <class EraseArg>
+            constexpr auto nofancy_erase(EraseArg&& erase_arg) noexcept(true){
+
+                if constexpr(std::is_convertible_v<EraseArg&&, nofancy_const_iterator>){
+                    if constexpr(std::is_nothrow_convertible_v<EraseArg&&, nofancy_const_iterator>){
+                        return this->internal_erase_iter(std::forward<EraseArg>(erase_arg));
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                } else{
+                    return static_cast<size_type>(this->internal_erase_key(std::forward<EraseArg>(erase_arg)));
+                }
+            }
+
+            template <class KeyLike>
+            constexpr auto nofancy_find(const KeyLike& key) const noexcept(true) -> nofancy_const_iterator{
+
+                return this->internal_find(key);
+            }
+
+            constexpr auto nofancy_begin() noexcept -> nofancy_iterator{
+
+                return this->virtual_storage_vec.begin();
+            }
+
+            constexpr auto nofancy_begin() const noexcept -> nofancy_const_iterator{
+
+                return this->virtual_storage_vec.begin();
+            }
+
+            constexpr auto nofancy_cbegin() const noexcept -> nofancy_const_iterator{
+
+                return this->virtual_storage_vec.cbegin();
+            }
+
+            constexpr auto nofancy_end() noexcept -> nofancy_iterator{
+
+                return this->virtual_storage_vec.end();
+            }
+
+            constexpr auto nofancy_end() const noexcept -> nofancy_const_iterator{
+
+                return this->virtual_storage_vec.end();
+            }
+
+            constexpr auto nofancy_cend() const noexcept -> nofancy_const_iterator{
+
+                return this->virtual_storage_vec.cend();
+            }
     };
 
-    constexpr auto operator ==(){
+    template <class ...Args>
+    constexpr auto operator ==(const unordered_node_set<Args...>& lhs, const unordered_node_set<Args...>& rhs) noexcept(true) -> bool{
 
+        if (lhs.size() != rhs.size()){
+            return false;
+        }
+
+        for (const auto& key: lhs){
+            if (!rhs.contains(key)){
+                return false;
+            }
+        }
+
+        return true;
     }
 
-    constexpr auto operator !=(){
+    template <class ...Args>
+    constexpr auto operator !=(const unordered_node_set<Args...>& lhs, const unordered_node_set<Args...>& rhs) noexcept(true) -> bool{
 
+        return !(lhs == rhs);
     }
 }
 
