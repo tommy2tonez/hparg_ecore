@@ -1,16 +1,16 @@
-#ifndef __NETWORK_MEMPRESS_DISPATCH_WAREHOUSE_INSTANCE_H__
-#define __NETWORK_MEMPRESS_DISPATCH_WAREHOUSE_INSTANCE_H__
+#ifndef __NETWORK_MEMPRESS_DISPATCH_WAREHOUSE_1_INSTANCE_H__
+#define __NETWORK_MEMPRESS_DISPATCH_WAREHOUSE_1_INSTANCE_H__
 
 #include "network_mempress_dispatch_warehouse_impl1.h"
 #include "network_mempress_dispatch_warehouse_interface.h"
 #include "stdx.h"
 
-namespace dg::network_mempress_dispatch_warehouse_instance{
+namespace dg::network_mempress_dispatch_warehouse_1_instance{
 
-    struct DispatchWareHouseSignature{};
+    struct DispatchWareHouse1Signature{};
 
-    using warehouse_singleton = stdx::singleton<DispatchWareHouseSignature, std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface>>; 
-
+    using warehouse_singleton = stdx::singleton<DispatchWareHouse1Signature, std::shared_ptr<dg::network_mempress_dispatch_warehouse::WareHouseInterface>>;
+    
     struct Config{
         size_t production_queue_cap;
         size_t max_concurrency_sz;
@@ -44,6 +44,6 @@ namespace dg::network_mempress_dispatch_warehouse_instance{
 
         return warehouse_singleton::get();
     }
-}
+} 
 
 #endif

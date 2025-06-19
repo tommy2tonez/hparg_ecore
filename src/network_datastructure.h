@@ -2367,8 +2367,107 @@ namespace dg::network_datastructure::unordered_set_variants{
                                size_type bucket_count,
                                const Hasher& hasher,
                                const Allocator& allocator){}
-                               
+            
+            auto begin(){
+
+            }
+
+            auto cbegin(){
+
+            }
+
+            auto end(){
+
+            }
+
+            auto cend(){
+
+            }
+
+            auto empty(){
+
+            }
+
+            auto size(){
+
+            }
+
+            auto max_size(){
+
+            }
+
+            void clear(){
+
+            }
+
+            auto insert(){
+
+            }
+
+            auto emplace(){
+
+            }
+
+            auto erase(){
+
+            }
+
+            void swap(){
+
+            }
+
+            auto count(){
+
+            }
+
+            auto find(){
+
+            }
+
+            auto contains(){
+
+            }
+
+            consteval auto load_factor(){
+
+            }
+
+            consteval auto max_load_factor(){
+
+            }
+
+            void rehash(){
+
+            }
+
+            void reserve(){
+
+            }
+
+            auto hash_function() const &{
+
+            }
+
+            auto hash_function() &&{
+
+            }
+
+            auto key_eq() const &{
+
+            }
+
+            auto key_eq() &&{
+
+            }                               
     };
+
+    constexpr auto operator ==(){
+
+    }
+
+    constexpr auto operator !=(){
+
+    }
 }
 
 namespace dg::network_datastructure::atomic_loader{

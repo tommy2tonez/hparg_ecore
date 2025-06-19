@@ -1,7 +1,7 @@
 #ifndef __DG_NETWORK_MEMPRESS_COLLECTOR_INSTANCE_H__
 #define __DG_NETWORK_MEMPRESS_COLLECTOR_INSTANCE_H__
 
-#include "network_mempress_dispatch_warehouse_instance.h"
+#include "network_mempress_dispatch_warehouse_0_instance.h"
 #include "network_mempress_instance.h"
 #include "network_mempress_collector_impl1.h"
 #include <variant>
@@ -89,10 +89,10 @@ namespace dg::network_mempress_collector_instance{
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> connector = {};
             
             if (!config.infretry_machine_config.has_value()){
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                conifg.warehouse_connector_ingestion_sz);
             } else{
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                dg::network_concurrency_infretry_x::get_normal_infretry_machine(config.infretry_machine_config.dur,
                                                                                                                                                                config.infretry_machine_config.retry_sz,
                                                                                                                                                                config.infretry_machine_config.has_inf_cyclic_loop,
@@ -124,10 +124,10 @@ namespace dg::network_mempress_collector_instance{
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> connector = {};
 
             if (!config.infretry_machine_config.has_value()){
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                conifg.warehouse_connector_ingestion_sz);
             } else{
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                dg::network_concurrency_infretry_x::get_normal_infretry_machine(config.infretry_machine_config.dur,
                                                                                                                                                                config.infretry_machine_config.retry_sz,
                                                                                                                                                                config.infretry_machine_config.has_inf_cyclic_loop,
@@ -159,10 +159,10 @@ namespace dg::network_mempress_collector_instance{
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> connector = {};
             
             if (!config.infretry_machine_config.has_value()){
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                conifg.warehouse_connector_ingestion_sz);
             } else{
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                dg::network_concurrency_infretry_x::get_normal_infretry_machine(config.infretry_machine_config.dur,
                                                                                                                                                                config.infretry_machine_config.retry_sz,
                                                                                                                                                                config.infretry_machine_config.has_inf_cyclic_loop,
@@ -196,10 +196,10 @@ namespace dg::network_mempress_collector_instance{
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> connector = {};
             
             if (!config.infretry_machine_config.has_value()){
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                conifg.warehouse_connector_ingestion_sz);
             } else{
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                dg::network_concurrency_infretry_x::get_normal_infretry_machine(config.infretry_machine_config.dur,
                                                                                                                                                                config.infretry_machine_config.retry_sz,
                                                                                                                                                                config.infretry_machine_config.has_inf_cyclic_loop,
@@ -233,10 +233,10 @@ namespace dg::network_mempress_collector_instance{
             std::unique_ptr<dg::network_producer_consumer::ConsumerInterface<event_t>> connector = {};
             
             if (!config.infretry_machine_config.has_value()){
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                conifg.warehouse_connector_ingestion_sz);
             } else{
-                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_instance::get_instance(),
+                connector = dg::network_mempress_collector::Factory::spawn_warehouse_connector(dg::network_mempress_dispatch_warehouse_0_instance::get_instance(),
                                                                                                dg::network_concurrency_infretry_x::get_normal_infretry_machine(config.infretry_machine_config.dur,
                                                                                                                                                                config.infretry_machine_config.retry_sz,
                                                                                                                                                                config.infretry_machine_config.has_inf_cyclic_loop,
