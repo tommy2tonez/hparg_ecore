@@ -2350,14 +2350,14 @@ namespace dg::network_datastructure::unordered_set_variants{
 
             BidirIterator base_node_iterator;
 
-            using key_type              = std::decay_t<decltype(std::declval<BidirIterator&>()->key)>; 
+            using key_type              = std::decay_t<decltype(std::declval<BidirIterator&>()->key)>;
             using base_iterator_type    = BidirIterator::value_type; 
 
         public:
 
             using self                  = unordered_set_node_external_iterator;
             using difference_type       = std::ptrdiff_t;
-            using value_type            = type_like_t<base_iterator_type, key_type>; 
+            using value_type            = type_like_t<base_iterator_type, key_type>;
 
             template <class T = BidirIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T>, bool> = true>
             constexpr unordered_set_node_external_iterator(): base_node_iterator(){}
@@ -2365,7 +2365,7 @@ namespace dg::network_datastructure::unordered_set_variants{
             constexpr unordered_set_node_external_iterator(BidirIterator base_node_iterator) noexcept(std::is_nothrow_move_constructible_v<BidirIterator>): base_node_iterator(std::move(base_node_iterator)){}
         
             constexpr auto operator ++() noexcept -> self&{
-            
+
                 ++this->base_node_iterator;
                 return *this;
             }
@@ -2420,7 +2420,7 @@ namespace dg::network_datastructure::unordered_set_variants{
 
             using unfancy_iterator          = std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>::iterator;
             using unfancy_const_iterator    = std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>::const_iterator;
-            using node_t                    = UnorderedSetNode<KeyType, VirtualAddrType>; 
+            using node_t                    = UnorderedSetNode<KeyType, VirtualAddrType>;
 
         public:
 
@@ -2469,54 +2469,54 @@ namespace dg::network_datastructure::unordered_set_variants{
                 this->virtual_storage_vec.reserve(self::right_capacity_to_size(this->capacity()));
             }
 
-            unordered_node_set(size_type bucket_count,
-                               const Hasher& _hasher,
-                               const Allocator& allocator): unordered_node_set(bucket_count, _hasher, allocator, Pred()){}
+            constexpr unordered_node_set(size_type bucket_count,
+                                         const Hasher& _hasher,
+                                         const Allocator& allocator): unordered_node_set(bucket_count, _hasher, allocator, Pred()){}
 
-            unordered_node_set(size_type bucket_count,
-                               const Allocator& allocator): unordered_node_set(bucket_count, Hasher(), allocator){}
+            constexpr unordered_node_set(size_type bucket_count,
+                                         const Allocator& allocator): unordered_node_set(bucket_count, Hasher(), allocator){}
 
             constexpr explicit unordered_node_set(const Allocator& allocator): unordered_node_set(self::min_capacity(), allocator){}
 
             constexpr unordered_node_set(): unordered_node_set(Allocator()){}
 
             template <class InputIt>
-            unordered_node_set(InputIt first,
-                               InputIt last,
-                               size_type bucket_count,
-                               const Hasher& _hasher        = Hasher(),
-                               const Pred& pred             = Pred(),
-                               const Allocator& allocator   = Allocator()): unordered_node_set(bucket_count, _hasher, allocator, pred){
-                
+            constexpr unordered_node_set(InputIt first,
+                                         InputIt last,
+                                         size_type bucket_count,
+                                         const Hasher& _hasher        = Hasher(),
+                                         const Pred& pred             = Pred(),
+                                         const Allocator& allocator   = Allocator()): unordered_node_set(bucket_count, _hasher, allocator, pred){
+
                 this->insert(first, last); //bad, leak
             }
             
             template <class InputIt>
-            unordered_node_set(InputIt first,
-                               InputIt last,
-                               size_type bucket_count,
-                               const Allocator& allocator): unordered_node_set(first, last, bucket_count, Hasher(), Pred(), allocator){}
+            constexpr unordered_node_set(InputIt first,
+                                         InputIt last,
+                                         size_type bucket_count,
+                                         const Allocator& allocator): unordered_node_set(first, last, bucket_count, Hasher(), Pred(), allocator){}
 
             template <class InputIt>
-            unordered_node_set(InputIt first,
-                               InputIt last,
-                               size_type bucket_count,
-                               const Hasher& _hasher,
-                               const Allocator& allocator): unordered_node_set(first, last, bucket_count, _hasher, Pred(), allocator){}
+            constexpr unordered_node_set(InputIt first,
+                                         InputIt last,
+                                         size_type bucket_count,
+                                         const Hasher& _hasher,
+                                         const Allocator& allocator): unordered_node_set(first, last, bucket_count, _hasher, Pred(), allocator){}
 
             // unordered_node_set(const self& other, const Allocator& alloc){}
             // unordered_node_set(self&& other, const Allocator& alloc){}
 
-            unordered_node_set(std::initializer_list<KeyType> init_list,
-                               size_type bucket_count,
-                               const Hasher& _hasher        = Hasher(),
-                               const Pred& pred             = Pred(),
-                               const Allocator& allocator   = Allocator()): unordered_node_set(init_list.begin(), init_list.end(), bucket_count, _hasher, pred, allocator){}
+            constexpr unordered_node_set(std::initializer_list<value_type> init_list,
+                                         size_type bucket_count,
+                                         const Hasher& _hasher        = Hasher(),
+                                         const Pred& pred             = Pred(),
+                                         const Allocator& allocator   = Allocator()): unordered_node_set(init_list.begin(), init_list.end(), bucket_count, _hasher, pred, allocator){}
 
-            unordered_node_set(std::initializer_list<KeyType> init_list,
-                               size_type bucket_count,
-                               const Hasher& _hasher,
-                               const Allocator& allocator): unordered_node_set(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
+            constexpr unordered_node_set(std::initializer_list<value_type> init_list,
+                                         size_type bucket_count,
+                                         const Hasher& _hasher,
+                                         const Allocator& allocator): unordered_node_set(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
 
             __attribute__((noinline)) constexpr void rehash(size_type tentative_new_cap){
 
