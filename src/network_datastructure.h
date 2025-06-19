@@ -2239,7 +2239,10 @@ namespace dg::network_datastructure::unordered_map_variants{
             } 
 
             template <class KeyLike>
-            constexpr auto internal_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
+            constexpr auto internal_find_bucket_reference(const KeyLike& key) const noexcept(true) -> const virtual_addr_t *{
+
+                //static_assert(noexcept(this->_hasher(key)));
+                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].key, key)));
 
                 size_t hashed_value         = this->_hasher(key);
                 size_t bucket_idx           = this->to_bucket_index(hashed_value);
@@ -2255,9 +2258,15 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class KeyLike>
+            constexpr auto internal_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
+
+                return const_cast<virtual_addr_t *>(static_cast<const self *>(this)->internal_find_bucket_reference(key));
+            }
+
+            template <class KeyLike>
             constexpr auto internal_find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
-                virtual_addr_t * bucket_reference = this->internal_find_bucket_reference(key);
+                const virtual_addr_t * bucket_reference = this->internal_find_bucket_reference(key);
 
                 if (*bucket_reference == self::NULL_VIRTUAL_ADDR){
                     return this->virtual_storage_vec.end();
@@ -2781,6 +2790,9 @@ namespace dg::network_datastructure::unordered_set_variants{
             template <class KeyLike>
             constexpr auto internal_find_bucket_reference(const KeyLike& key) const noexcept(true) -> const virtual_addr_t *{
 
+                //static_assert(noexcept(this->_hasher(key)));
+                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].key, key)));
+
                 size_t hashed_value         = this->_hasher(key);
                 size_t bucket_idx           = this->to_bucket_index(hashed_value);
                 virtual_addr_t * current    = &this->bucket_vec[bucket_idx];
@@ -2798,7 +2810,7 @@ namespace dg::network_datastructure::unordered_set_variants{
             constexpr auto internal_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
 
                 //this is guaranteed to be "defined according to std"
-                return const_cast<virtual_addr_t *>(this->internal_find_bucket_reference(key));
+                return const_cast<virtual_addr_t *>(static_cast<const self *>(this)->internal_find_bucket_reference(key));
             }
 
             template <class KeyLike>
