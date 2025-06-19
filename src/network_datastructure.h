@@ -530,7 +530,7 @@ namespace dg::network_datastructure::cyclic_queue{
         private:
 
             BaseIterator iter;
-        
+
         public:
 
             using self              = aligned_storage_vector_iterator; 
@@ -655,7 +655,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
             //alright, we arent being greedy, we might step into the undefined territory
 
-            using rebinded_allocator = typename std::allocator_traits<Allocator>::rebind_alloc<std::aligned_storage_t<sizeof(T), alignof(T)>>;
+            using rebinded_allocator = typename std::allocator_traits<Allocator>::typename rebind_alloc<std::aligned_storage_t<sizeof(T), alignof(T)>>;
 
             std::vector<std::aligned_storage_t<sizeof(T), alignof(T)>, rebinded_allocator> data_arr;
             size_t off;
@@ -1455,7 +1455,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                     throw std::length_error("bad unordered_node_map size");
                 }
 
-                this->rehash(self::size_to_capacity(new_sz));
+                this->rehash(self::ceil_size_to_capacity(new_sz));
             }
 
             template <class KeyLike, class ...Args>
@@ -1673,19 +1673,19 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return this->virtual_storage_vec.cend();
             }
 
-            static consteval auto load_factor() noexcept -> double{
+            static consteval auto max_load_factor() noexcept -> double{
 
                 return static_cast<double>(self::load_factor_ratio::num) / self::load_factor_ratio::den;
             }
 
             static constexpr auto capacity_to_size(size_t cap) noexcept -> size_t{
 
-                return cap * self::load_factor();
+                return cap * self::max_load_factor();
             }
 
             static constexpr auto size_to_capacity(size_t sz) noexcept -> size_t{
 
-                return sz / self::load_factor();
+                return sz / self::max_load_factor();
             }
 
         private:
@@ -1697,7 +1697,20 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             static constexpr auto right_size_to_capacity(size_t sz) noexcept -> size_t{
 
-                return cap / static_cast<size_t>(load_factor_ratio::num) * static_cast<size_t>(load_factor_ratio::den);
+                return sz / static_cast<size_t>(load_factor_ratio::num) * static_cast<size_t>(load_factor_ratio::den);
+            }
+
+            static constexpr auto ceil_size_to_capacity(size_t sz) noexcept -> size_t{
+
+                if (sz == 0u){
+                    return 0u;
+                }
+
+                size_t mul_value        = sz * static_cast<size_t>(load_factor_ratio::den);
+                size_t round_mul_value  = (((mul_value - 1u) / load_factor_ratio::num) + 1u) * load_factor_ratio::num;
+                size_t new_cap          = round_mul_value / load_factor_ratio::num;
+
+                return new_cap;
             }
 
             constexpr auto to_bucket_index(size_t hashed_value) const noexcept -> size_t{
@@ -2161,19 +2174,19 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return this->virtual_storage_vec.cend();
             }
 
-            static consteval auto load_factor() noexcept -> double{
+            static consteval auto max_load_factor() noexcept -> double{
 
                 return static_cast<double>(self::load_factor_ratio::num) / self::load_factor_ratio::den;
             }
 
             static constexpr auto capacity_to_size(size_t cap) noexcept -> size_t{
 
-                return cap * self::load_factor();
+                return cap * self::max_load_factor();
             }
 
             static constexpr auto size_to_capacity(size_t sz) noexcept -> size_t{
 
-                return sz / self::load_factor();
+                return sz / self::max_load_factor();
             }
         
         private:
@@ -2185,7 +2198,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             static constexpr auto right_size_to_capacity(size_t sz) noexcept -> size_t{
 
-                return cap / static_cast<size_t>(load_factor_ratio::num) * static_cast<size_t>(load_factor_ratio::den);
+                return sz / static_cast<size_t>(load_factor_ratio::num) * static_cast<size_t>(load_factor_ratio::den);
             }
 
             constexpr auto to_bucket_index(size_t hashed_value) const noexcept -> size_t{
@@ -2316,83 +2329,114 @@ namespace std{
 
 namespace dg::network_datastructure::unordered_set_variants{
 
-    template <class Key, class Hasher, class Allocator>
+    template <class KeyType, class VirtualAddrType>
+    struct UnorderedSetNode{
+        KeyType key;
+        VirtualAddrType nxt_addr;        
+    };
+
+    template <class RandomAccessIterator>
+    class unordered_set_node_external_iterator{
+        
+        private:
+
+            RandomAccessIterator base_node_iterator;
+        
+        public:
+
+
+    };
+
+    template <class KeyType, class VirtualAddrType = std::size_t, class Hasher = std::hash<KeyType>, class Pred = std::equal_to<KeyType>, class Allocator = std::allocator<UnorderedSetNode<KeyType, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_set{
+
+        private:
+
+            std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::template rebind_alloc<VirtualAddrType>> bucket_vec;
+            std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, Allocator> virtual_storage_vec; 
+            Hasher _hasher;
+            Pred pred;
+            Allocator allocator;
 
         public:
 
-            explicit unordered_node_set(size_type bucket_count,
-                                        const Hasher& hasher        = Hasher(),
-                                        const Allocator& allocator  = Allocator(),
-                                        const KeyEqual& key_equal   = KeyEqual()){}
-            
+            constexpr explicit unordered_node_set(size_type bucket_count,
+                                                  const Hasher& _hasher       = Hasher(),
+                                                  const Allocator& allocator  = Allocator(),
+                                                  const Pred& pred            = Pred()){}
+
             unordered_node_set(size_type bucket_count,
-                               const Allocator& allocator){}
-            
+                               const Hasher& _hasher,
+                               const Allocator& allocator): unordered_node_set(bucket_count, _hasher, allocator, Pred()){}
+
             unordered_node_set(size_type bucket_count,
-                               const Hasher& hasher,
-                               const Allocator& allocator){}
-                        
-            explicit unordered_node_set(const Allocator& allocator){}
+                               const Allocator& allocator): unordered_node_set(bucket_count, Hasher(), allocator){}
+
+            constexpr explicit unordered_node_set(const Allocator& allocator): unordered_node_set(self::min_capacity(), allocator){}
+
+            constexpr unordered_node_set(): unordered_node_set(Allocator()){}
 
             template <class InputIt>
-            unordered_node_set(InputIt first, InputIt last,
+            unordered_node_set(InputIt first,
+                               InputIt last,
                                size_type bucket_count,
-                               const Hasher& hasher         = Hasher(),
-                               const KeyEqual& key_equal    = KeyEqual(),
-                               const Allocator& allocator   = Allocator()){}
+                               const Hasher& _hasher        = Hasher(),
+                               const Pred& pred             = Pred(),
+                               const Allocator& allocator   = Allocator()): unordered_node_set(bucket_count, _hasher, allocator, pred){
+                
+                this->insert(first, last); //bad, leak
+            }
             
             template <class InputIt>
-            unordered_node_set(InputIt first, InputIt last,
+            unordered_node_set(InputIt first,
+                               InputIt last,
                                size_type bucket_count,
-                               const Allocator& allocator){}
-            
+                               const Allocator& allocator): unordered_node_set(first, last, bucket_count, Hasher(), Pred(), allocator){}
+
             template <class InputIt>
-            unordered_node_set(InputIt first, InputIt last,
+            unordered_node_set(InputIt first,
+                               InputIt last,
                                size_type bucket_count,
-                               const Hasher& hasher,
-                               const Allocator& allocator){}
+                               const Hasher& _hasher,
+                               const Allocator& allocator): unordered_node_set(first, last, bucket_count, _hasher, Pred(), allocator){}
 
-            unordered_node_set(const self& other, const Allocator& alloc){}
+            // unordered_node_set(const self& other, const Allocator& alloc){}
+            // unordered_node_set(self&& other, const Allocator& alloc){}
 
-            unordered_node_set(self&& other, const Allocator& alloc){}
-
-            unordered_node_set(std::initializer_list<value_type> init,
+            unordered_node_set(std::initializer_list<KeyType> init_list,
                                size_type bucket_count,
-                               const Hasher& hasher         = Hasher(),
-                               const KeyEqual& key_equal    = KeyEqual(),
-                               const Allocator& allocator   = Allocator()){}
+                               const Hasher& _hasher        = Hasher(),
+                               const Pred& pred             = Pred(),
+                               const Allocator& allocator   = Allocator()): unordered_node_set(init_list.begin(), init_list.end(), bucket_count, _hasher, pred, allocator){}
+
+            unordered_node_set(std::initializer_list<KeyType> init_list,
+                               size_type bucket_count,
+                               const Hasher& _hasher,
+                               const Allocator& allocator): unordered_node_set(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
+
+            __attribute__((noinline)) constexpr void rehash(size_type tentative_new_cap){
+
+            }
+
+            constexpr void reserve(size_type new_sz){
+
+                if (new_sz <= this->size()){
+                    return;
+                }
+
+                if (new_sz > self::max_size()){
+                    throw std::length_error("bad unordered_node_set size");
+                }
+
+                this->rehash(self::ceil_size_to_capacity(new_sz));
+            }
+
+            template <class ...Args>
+            constexpr auto emplace(Args&& ...args) -> std::pair<iterator, bool>{
+
+            }
             
-            unordered_node_set(std::initializer_list<value_type> init,
-                               size_type bucket_count,
-                               const Hasher& hasher,
-                               const Allocator& allocator){}
-            
-            auto begin(){
-
-            }
-
-            auto cbegin(){
-
-            }
-
-            auto end(){
-
-            }
-
-            auto cend(){
-
-            }
-
-            auto empty(){
-
-            }
-
-            auto size(){
-
-            }
-
-            auto max_size(){
+            auto insert(){
 
             }
 
@@ -2400,11 +2444,7 @@ namespace dg::network_datastructure::unordered_set_variants{
 
             }
 
-            auto insert(){
-
-            }
-
-            auto emplace(){
+            void swap(){
 
             }
 
@@ -2412,53 +2452,229 @@ namespace dg::network_datastructure::unordered_set_variants{
 
             }
 
-            void swap(){
+            template <class KeyLike>
+            constexpr auto find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
+                return this->internal_find(key);
             }
 
-            auto count(){
+            template <class KeyLike>
+            constexpr auto contains(const KeyLike& key) const noexcept(true) -> bool{
 
+                return this->find(key) != this->end();
             }
 
-            auto find(){
+            template <class KeyLike>
+            auto count(const KeyLike& key) const noexcept(true) -> size_t{
 
+                return static_cast<size_t>(this->contains(key));
             }
 
-            auto contains(){
+            constexpr auto empty() const noexcept -> bool{
 
+                return this->virtual_storage_vec.empty();
             }
 
-            consteval auto load_factor(){
+            constexpr auto capacity() const noexcept -> size_type{
 
+                return this->bucket_vec.size();
             }
 
-            consteval auto max_load_factor(){
+            static consteval auto min_capacity() -> size_type{
 
+                return self::MIN_CAP;
             }
 
-            void rehash(){
+            static consteval auto max_capacity() -> size_type{
 
+                return self::MAX_CAP;
             }
 
-            void reserve(){
-
+            constexpr auto size() const noexcept -> size_type{
+                
+                return this->virtual_storage_vec.size();
             }
 
-            auto hash_function() const &{
+            static consteval auto max_size() -> size_type{
 
+                return self::right_capacity_to_size(self::max_capacity());
             }
 
-            auto hash_function() &&{
+            constexpr auto hash_function() const & noexcept -> const Hasher&{
 
+                return this->_hasher;
             }
 
-            auto key_eq() const &{
+            constexpr auto hash_function() && noexcept -> Hasher&&{
 
+                return static_cast<Hasher&&>(this->_hasher);
             }
 
-            auto key_eq() &&{
+            constexpr auto key_eq() const & noexcept -> const Pred&{
 
-            }                               
+                return this->pred;
+            }
+
+            constexpr auto key_eq() && noexcept -> Pred&&{
+
+                return static_cast<Pred&&>(this->pred);
+            }   
+
+            constexpr auto begin() const noexcept -> const_iterator{
+
+                return this->virtual_storage_vec.begin();
+            }
+
+            constexpr auto cbegin() const noexcept -> const_iterator{
+
+                return this->virtual_storage_vec.cbegin();
+            }
+
+            constexpr auto end() const noexcept -> const_iterator{
+
+                return this->virtual_storage_vec.end();
+            }
+
+            constexpr auto cend() const noexcept -> const_iterator{
+
+                return this->virtual_storage_vec.cend();
+            }
+
+            static consteval auto max_load_factor() noexcept -> double{
+
+                return static_cast<double>(self::load_factor_ratio::num) / self::load_factor_ratio::den;
+            }
+
+            static constexpr auto capacity_to_size(size_t cap) noexcept -> size_t{
+
+                return cap * self::max_load_factor();
+            }
+
+            static constexpr auto size_to_capacity(size_t sz) noexcept -> size_t{
+
+                return sz / self::max_load_factor();
+            }
+        
+        private:
+            
+            static constexpr auto right_capacity_to_size(size_t cap) noexcept -> size_t{
+                
+                return cap / static_cast<size_t>(load_factor_ratio::den) * static_cast<size_t>(load_factor_ratio::num);
+            }
+
+            static constexpr auto right_size_to_capacity(size_t sz) noexcept -> size_t{
+
+                return sz / static_cast<size_t>(load_factor_ratio::num) * static_cast<size_t>(load_factor_ratio::den);
+            }
+
+            static constexpr auto ceil_size_to_capacity(size_t sz) noexcept -> size_t{
+
+                if (sz == 0u){
+                    return 0u;
+                }
+
+                size_t mul_value        = sz * static_cast<size_t>(load_factor_ratio::den);
+                size_t round_mul_value  = (((mul_value - 1u) / load_factor_ratio::num) + 1u) * load_factor_ratio::num;
+                size_t new_cap          = round_mul_value / load_factor_ratio::num; 
+
+                return new_cap;
+            }
+
+            constexpr auto to_bucket_index(size_t hashed_value) const noexcept -> size_t{
+
+                return hashed_value & (this->bucket_vec.size() - 1u);
+            }
+
+            template <class KeyLike>
+            constexpr auto internal_find_bucket_reference(const KeyLike& key) const noexcept(true) -> const virtual_addr_t *{
+
+                size_t hashed_value         = this->_hasher(key);
+                size_t bucket_idx           = this->to_bucket_index(hashed_value);
+                virtual_addr_t * current    = &this->bucket_vec[bucket_idx];
+
+                while (true){
+                    if (*current == self::NULL_VIRTUAL_ADDR || this->pred(this->virtual_storage_vec[*current].key, key)){
+                        return current;
+                    }
+
+                    current = &this->virtual_storage_vec[*current].nxt_addr;
+                }
+            }
+
+            template <class KeyLike>
+            constexpr auto internal_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
+
+                //this is guaranteed to be "defined according to std"
+                return const_cast<virtual_addr_t *>(this->internal_find_bucket_reference(key));
+            }
+
+            template <class KeyLike>
+            constexpr auto internal_find(const KeyLike& key) const noexcept(true) -> const_iterator{
+                
+                const virtual_addr_t * bucket_reference = this->internal_find_bucket_reference(key);
+
+                if (*bucket_reference == self::NULL_VIRTUAL_ADDR){
+                    return this->end();
+                }
+
+                return std::next(this->virtual_storage_vec.begin(), *bucket_reference);
+            }
+
+            template <class BucketLike>
+            constexpr auto internal_insert(BucketLike&& bucket) -> std::pair<iterator, bool>{
+
+                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()){
+                    this->rehash(this->bucket_vec.size() << self::POW2_GROWTH_FACTOR);
+                }
+
+                virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(bucket.key);
+
+                if (*insert_reference == self::NULL_VIRTUAL_ADDR){
+                    *insert_reference   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
+                    this->virtual_storage_vec.emplace_back(std::forward<BucketLike>(bucket));
+                    auto rs             = std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), true);
+
+                    return rs;
+                }
+
+                return std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), false);
+            }
+
+            template <class KeyLike>
+            constexpr auto internal_erase_key(const KeyLike& key) noexcept(true) -> bool{
+
+                virtual_addr_t * key_reference = this->internal_find_bucket_reference(key);
+
+                if (*key_reference == self::NULL_VIRTUAL_ADDR){
+                    return false;
+                }
+
+                virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.back().key);
+
+                //this is probably confusing 
+                //because key_reference == swapping_reference => *key_reference == *swapping_reference => removing bucket is the back bucket => we would attempt to move the key_reference -> the next guy
+
+                if (swapping_reference == key_reference) [[unlikely]]{
+                    *key_reference = this->virtual_storage_vec[*key_reference].nxt_addr;
+                } else [[likely]]{
+                    *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[*key_reference].nxt_addr);
+                    dg_restrict_swap_for_destroy(&this->virtual_storage_vec[*swapping_reference], &this->virtual_storage_vec.back());
+                }
+
+                this->virtual_storage_vec.pop_back();
+                return true;
+            }
+
+            constexpr auto internal_erase_iter(const_iterator iter) noexcept(true) -> iterator{
+
+                if (iter == this->cend()){
+                    return this->end();
+                } else [[likely]]{
+                    size_t off = std::distance(this->virtual_storage_vec.cbegin(), iter);
+                    this->internal_erase_key(iter->key);
+                    return std::next(this->virtual_storage_vec.begin(), off);
+                }
+            }
     };
 
     constexpr auto operator ==(){
