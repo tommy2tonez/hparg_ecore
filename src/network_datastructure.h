@@ -3200,10 +3200,8 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return hashed_value & static_cast<size_t>(this->bucket_vec.size() - 1u);
             }
         
-
             //we'll use induction to solve this problem
             //assume that (org_virtual_addr + virtual_addr_offset) & (virtual_storage_vec.capacity() - 1u) returns the idx of the storage
-
             //we cant use if, we cant use modulo, so we'd have to "promote" that value
 
             constexpr auto to_storage_addr(virtual_addr_t org_virtual_addr) noexcept -> virtual_addr_t{
@@ -3299,7 +3297,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto nofancy_insert(KeyLike&& key) -> std::pair<nofancy_const_iterator, bool>{
 
-                return this->internal_insert(UnorderedSetNode<KeyType, VirtualAddrType>{.key        = KeyType(std::forward<KeyLike>(key)),
+                return this->internal_insert(UnorderedSetNode<KeyType, VirtualAddrType>{.key        = std::forward<KeyLike>(key),
                                                                                         .nxt_addr   = self::NULL_VIRTUAL_ADDR});
             }
 
@@ -3328,7 +3326,6 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 return this->virtual_storage_vec.cend();
             }
-
     };
 }
 
