@@ -1914,7 +1914,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>> virtual_storage_vec;
             std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::template rebind_alloc<VirtualAddrType>> bucket_vec;
-            VirtualAddrType virtual_addr_offset;
+            size_t virtual_addr_offset;
             Hasher _hasher;
             Pred pred;
             Allocator allocator;
@@ -2224,12 +2224,12 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             constexpr auto to_storage_addr(virtual_addr_t org_virtual_addr) noexcept -> virtual_addr_t{
 
-                return (org_virtual_addr + this->virtual_addr_offset) & static_cast<size_t>(this->virtual_storage_vec.capacity() - 1u); //OK, there is a literacy about how 1 << 64 is aligned, so we can actually deduct that from the computation, virtual_addr_offset can actually exceed the size_t and overflow safely as specified in the std
+                static_assert(std::is_unsigned_v<virtual_addr_t>);
+
+                return (this->virtual_addr_offset + org_virtual_addr) & static_cast<size_t>(this->virtual_storage_vec.capacity() - 1u);
             }
 
             constexpr auto to_virtual_addr(virtual_addr_t storage_addr) noexcept -> virtual_addr_t{
-
-                //alright, i'm being confused
 
                 static_assert(std::is_unsigned_v<virtual_addr_t>);
 
@@ -2280,10 +2280,12 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             constexpr void internal_erase_front() noexcept{
 
+                //static_assert(noexcept(this->virtual_storage_vec.pop_front()));
+
                 virtual_addr_t * bucket_reference   = this->internal_find_bucket_reference(this->virtual_storage_vec.front().first);
                 *bucket_reference                   = this->virtual_storage_vec.front().nxt_addr;
                 this->virtual_storage_vec.pop_front();
-                this->virtual_addr_offset           += this->virtual_storage_vec.capacity() - 1u; //induction, assume there are pointers pointing to the range, we offset everything by one (previous one), so we'd want to move everything forward by one revolution - 1
+                this->virtual_addr_offset           += this->virtual_storage_vec.capacity() - 1u;
                 this->virtual_addr_offset           &= this->virtual_storage_vec.capacity() - 1u;
             }
 
@@ -2297,7 +2299,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
 
                 if (*insert_reference == self::NULL_VIRTUAL_ADDR){
-                    *insert_reference   = this->to_virtual_addr(this->virtual_storage_vec.size());//??? we need to take the difference this is precisely why I said this is hard, we need to keep this "in range", we definitely could take a delta -> the front and do an addition
+                    *insert_reference   = this->to_virtual_addr(this->virtual_storage_vec.size());
                     this->virtual_storage_vec.push_back(std::forward<ValueLike>(value));
                     auto rs             = std::make_pair(std::next(this->virtual_storage_vec.begin(), this->virtual_storage_vec.size() - 1u), true);
 
@@ -2319,6 +2321,34 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return std::make_pair(ptr, true);
             }
     };
+
+    template <class ...Args>
+    constexpr auto operator ==(const cyclic_unordered_node_map<Args...>& lhs, const cyclic_unordered_node_map<Args...>& rhs) noexcept(true) -> bool{
+
+        if (lhs.size() != rhs.size()){
+            return false;
+        }
+
+        for (const auto& kv_pair: lhs){
+            auto rhs_ptr = rhs.find(kv_pair.first);
+
+            if (rhs_ptr == rhs.end()){
+                return false;
+            }
+
+            if (rhs_ptr->second != kv_pair.second){
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    template <class ...Args>
+    constexpr auto operator !=(const cyclic_unordered_node_map<Args...>& lhs, const cyclic_unordered_node_map<Args...>& rhs) noexcept(true) -> bool{
+
+        return !(lhs == rhs);
+    }
 
     template <class KeyType, class VirtualAddrType>
     struct UnorderedSetNode{
@@ -2933,7 +2963,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             
             dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>> virtual_storage_vec;
             std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::template rebind_alloc<VirtualAddrType>> bucket_vec;
-            VirtualAddrType virtual_addr_offset;
+            size_t virtual_addr_offset;
             Hasher _hasher;
             Pred pred;
             Allocator allocator;
@@ -3206,7 +3236,9 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             constexpr auto to_storage_addr(virtual_addr_t org_virtual_addr) noexcept -> virtual_addr_t{
 
-                return (org_virtual_addr + this->virtual_addr_offset) & static_cast<size_t>(this->virtual_storage_vec.capacity() - 1u);
+                static_assert(std::is_unsigned_v<virtual_addr_t>);
+
+                return (this->virtual_addr_offset + org_virtual_addr) & static_cast<size_t>(this->virtual_storage_vec.capacity() - 1u);
             }
 
             constexpr auto to_virtual_addr(virtual_addr_t storage_addr) noexcept -> virtual_addr_t{
@@ -3259,6 +3291,8 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             constexpr void internal_erase_front() noexcept{
+
+                //static_assert(noexcept(this->virtual_storage_vec.pop_front()));
 
                 virtual_addr_t * bucket_reference       = this->internal_find_bucket_reference(this->virtual_storage_vec.front().first);
                 *bucket_reference                       = this->virtual_storage_vec.front().nxt_addr;
@@ -3327,6 +3361,28 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return this->virtual_storage_vec.cend();
             }
     };
+
+    template <class ...Args>
+    constexpr auto operator ==(const cyclic_unordered_node_set<Args...>& lhs, const cyclic_unordered_node_set<Args...>& rhs) noexcept(true) -> bool{
+
+        if (lhs.size() != rhs.size()){
+            return false;
+        }
+
+        for (const auto& key: lhs){
+            if (!rhs.contains(key)){
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    template <class ...Args>
+    constexpr auto operator !=(const cyclic_unordered_node_set<Args...>& lhs, const cyclic_unordered_node_set<Args...>& rhs) noexcept(true) -> bool{
+
+        return !(lhs == rhs);
+    }
 }
 
 namespace std{
@@ -3342,8 +3398,6 @@ namespace std{
     constexpr void erase_if(dg::network_datastructure::unordered_map_variants::unordered_node_map<Args...>& umap,
                             Pred pred){
 
-        //a reverse erase_if is better cache_wise speaking
-
         auto it = umap.begin();
 
         while (it != umap.end()){
@@ -3353,6 +3407,42 @@ namespace std{
                 std::advance(it, 1u);
             }
         }
+    }
+
+    template <class ...Args>
+    constexpr void swap(dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_map<Args...>& lhs,
+                        dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_map<Args...>& rhs) noexcept(noexcept(std::declval<dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_map<Args...>&>().swap(std::declval<dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_map<Args...>&>()))){
+
+        lhs.swap(rhs);
+    }
+
+    template <class ...Args>
+    constexpr void swap(dg::network_datastructure::unordered_map_variants::unordered_node_set<Args...>& lhs,
+                        dg::network_datastructure::unordered_map_variants::unordered_node_set<Args...>& rhs) noexcept(noexcept(std::declval<dg::network_datastructure::unordered_map_variants::unordered_node_set<Args...>&>().swap(std::declval<dg::network_datastructure::unordered_map_variants::unordered_node_set<Args...>&>()))){
+
+        lhs.swap(rhs);
+    }
+
+    template <class ...Args, class Pred>
+    constexpr void erase_if(dg::network_datastructure::unordered_map_variants::unordered_node_set<Args...>& uset,
+                            Pred pred){
+
+        auto it = uset.begin();
+
+        while (it != uset.end()){
+            if (pred(*it)){
+                it = uset.erase(it);
+            } else{
+                std::advance(it, 1u);
+            }
+        }
+    }
+
+    template <class ...Args>
+    constexpr void swap(dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_set<Args...>& lhs,
+                        dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_set<Args...>& rhs) noexcept(noexcept(std::declval<dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_set<Args...>&>().swap(std::declval<dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_set<Args...>&>()))){
+
+        lhs.swap(rhs);
     }
 }
 
