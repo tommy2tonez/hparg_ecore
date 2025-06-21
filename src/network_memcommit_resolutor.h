@@ -7406,7 +7406,7 @@ namespace dg::network_memcommit_resolutor{
             };
     };
 
-    class WindowSmphResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<SignalAggregationEvent>{
+    class WsmpResolutor: public virtual dg::network_producer_consumer::ConsumerInterface<SignalAggregationEvent>{
 
         private:
 
@@ -7416,11 +7416,11 @@ namespace dg::network_memcommit_resolutor{
 
         public:
 
-            WindowSmphResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
-                                size_t delivery_capacity,
-                                size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
-                                                                   delivery_capacity(delivery_capacity),
-                                                                   vectorization_sz(vectorization_sz){}
+            WsmpResolutor(std::shared_ptr<dg::network_producer_consumer::ConsumerInterface<virtual_memory_event_t>> request_box,
+                          size_t delivery_capacity,
+                          size_t vectorization_sz) noexcept: request_box(std::move(request_box)),
+                                                             delivery_capacity(delivery_capacity),
+                                                             vectorization_sz(vectorization_sz){}
 
             auto is_met_dispatch_requirements(const SignalAggregationEvent& event) const noexcept -> exception_t{
 
@@ -7466,9 +7466,9 @@ namespace dg::network_memcommit_resolutor{
                     }
                 }
             }
-        
+
         private:
-            
+
             struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, SignalAggregationEvent>{
 
                 dg::network_producer_consumer::DeliveryHandle<virtual_memory_event_t> * request_delivery_handle;
@@ -7636,25 +7636,22 @@ namespace dg::network_memcommit_resolutor{
         private:
 
             const std::unique_ptr<CronSignalResolutor> cron_resolutor;
-            const size_t cron_dispatch_sz;
             const std::unique_ptr<SmphSignalResolutor> smph_resolutor;
-            const size_t smph_dispatch_sz;
             const std::unique_ptr<FsmpSignalResolutor> fsmp_resolutor;
-            const size_t fsmp_dispatch_sz;
+            const std::unique_ptr<WsmpSignalResolutor> wsmp_resolutor;
+            const size_t vectorization_sz;
 
         public:
 
             AggregationSignalResolutor(std::unique_ptr<CronSignalResolutor> cron_resolutor,
-                                       size_t cron_dispatch_sz,
                                        std::unique_ptr<SmphSignalResolutor> smph_resolutor,
-                                       size_t smph_dispatch_sz,
                                        std::unique_ptr<FsmpSignalResolutor> fsmp_resolutor,
-                                       size_t fsmp_dispatch_sz) noexcept: cron_resolutor(std::move(cron_resolutor)),
-                                                                          cron_dispatch_sz(cron_dispatch_sz),
+                                       std::unique_ptr<WsmpSignalResolutor> wsmp_resolutor,
+                                       size_t vectorization_sz) noexcept: cron_resolutor(std::move(cron_resolutor)),
                                                                           smph_resolutor(std::move(smph_resolutor)),
-                                                                          smph_dispatch_sz(smph_dispatch_sz),
-                                                                          fsmp_resolutor(fsmp_resolutor),
-                                                                          fsmp_dispatch_sz(fsmp_dispatch_sz){}
+                                                                          fsmp_resolutor(std::move(fsmp_resolutor)),
+                                                                          wsmp_resolutor(std::move(wsmp_resolutor)),
+                                                                          vectorization_sz(vectorization_sz){}
 
             auto is_met_dispatch_requirements(const SignalAggregationEvent& event) const noexcept -> exception_t{
 
@@ -7667,7 +7664,8 @@ namespace dg::network_memcommit_resolutor{
                 switch (tile_kind.value()){
                     case TILE_KIND_CRON: [[fallthrough]]
                     case TILE_KIND_SMPH: [[fallthrough]]
-                    case TILE_KIND_FSMP:
+                    case TILE_KIND_FSMP: [[fallthrough]]
+                    case TILE_KIND_WSMP:
                     {
                         return dg::network_exception::SUCCESS;
                     }
@@ -7680,18 +7678,16 @@ namespace dg::network_memcommit_resolutor{
 
             void push(SignalAggregationEvent * event_arr, size_t sz) noexcept{
 
-                size_t trimmed_cron_dispatch_sz     = std::min(this->cron_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> cron_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->cron_resolutor.get(), trimmed_cron_dispatch_sz));
+                auto internal_resolutor             = InternalResolutor{};
+                internal_resolutor.cron_resolutor   = this->cron_resolutor.get();
+                internal_resolutor.smph_resolutor   = this->smph_resolutor.get();
+                internal_resolutor.fsmp_resolutor   = this->fsmp_resolutor.get();
+                internal_resolutor.wsmp_resolutor   = this->wsmp_resolutor.get();
 
-                size_t trimmed_smph_dispatch_sz     = std::min(this->smph_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> smph_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->smph_resolutor.get(), trimmed_smph_dispatch_sz));
-
-                size_t trimmed_fsmp_dispatch_sz     = std::min(this->fsmp_dispatch_sz, sz);
-                dg::network_stack_allocation::NoExceptRawAllocation<char[]> fsmp_dh_mem(dg::network_producer_consumer::delvrsrv_allocation_cost(this->fsmp_resolutor.get(), trimmed_fsmp_dispatch_sz));
-                
-                auto cron_delivery_handle   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->cron_resolutor.get(), trimmed_cron_dispatch_sz, cron_dh_mem.get()));
-                auto smph_delivery_handle   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->smph_resolutor.get(), trimmed_smph_dispatch_sz, smph_dh_mem.get()));
-                auto fsmp_delivery_handle   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(this->fsmp_resolutor.get(), trimmed_fsmp_dispatch_sz, fsmp_dh_mem.get()));
+                size_t trimmed_vectorization_sz     = std::min(this->vectorization_sz, sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_vectorization_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_vectorization_sz, feeder_mem.get())); 
 
                 for (size_t i = 0u; i < sz; ++i){
                     if constexpr(DEBUG_MODE_FLAG){
@@ -7706,17 +7702,22 @@ namespace dg::network_memcommit_resolutor{
                     switch (tile_kind){
                         case TILE_KIND_CRON:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(cron_delivery_handle.get(), event_arr[i]);
+                            dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind.value(), event_arr[i]);
                             break;
                         }
                         case TILE_KIND_SMPH:
                         {   
-                            dg::network_producer_consumer::delvrsrv_deliver(smph_delivery_handle.get(), event_arr[i]);
+                            dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind.value(), event_arr[i]);
                             break;
                         }
                         case TILE_KIND_FSMP:
                         {
-                            dg::network_producer_consumer::delvrsrv_deliver(fsmp_delivery_handle.get(), event_arr[i]);
+                            dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind.value(), event_arr[i]);
+                            break;
+                        }
+                        case TILE_KIND_WSMP:
+                        {
+                            dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), tile_kind.value(), event_arr[i]);
                             break;
                         }
                         default:
@@ -7731,6 +7732,51 @@ namespace dg::network_memcommit_resolutor{
                     }
                 }
             }
+        
+        private:
+            
+            struct InternalResolutor: dg::network_producer_consumer::KVConsumerInterface<tile_kind_t, SignalAggregationEvent>{
+
+                dg::network_producer_consumer::ConsumerInterface<SignalAggregationEvent> * cron_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<SignalAggregationEvent> * smph_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<SignalAggregationEvent> * fsmp_resolutor;
+                dg::network_producer_consumer::ConsumerInterface<SignalAggregationEvent> * wsmp_resolutor;
+
+                void push(const tile_kind_t& tile_kind, std::move_iterator<SignalAggregationEvent *> event_arr, size_t sz) noexcept{
+
+                    switch (tile_kind){
+                        case TILE_KIND_CRON:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(this->cron_resolutor, event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_SMPH:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(this->smph_resolutor, event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_FSMP:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(this->fsmp_resolutor, event_arr, sz);
+                            break;
+                        }
+                        case TILE_KIND_WSMP:
+                        {
+                            dg::network_producer_consumer::delvrsrv_deliver(this->wsmp_resolutor, event_arr, sz);
+                            break;
+                        }
+                        default:
+                        {
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
+                    }
+                }
+            };
     };
 
     //
