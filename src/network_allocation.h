@@ -542,37 +542,6 @@ namespace dg::network_allocation{
             }
     };
 
-    //we got a pull request for doing sliding window, I've yet to know what that means
-    //alright, we'd want to do a cyclic bump queue
-    //this is an extension of bump queue to bump_allocate not-reusable segments on L1 cache
-
-    //let's see how we could patch this
-    //think in terms of cyclic queue, we have a sliding window, we want to extend the head or tail everytime we dump our bins, and snap back in the opposite direction
-    //we would want to move forward and backward in the cyclic queue, what...
-    //because forward head is head, backward head is tail
-    //the implementation is not easy, we can do this in 2 days
-    //until the cyclic bump queue is not extensible, we'll request a new chunk of memory
-    //the implementation we've been longing for
-
-    //a dictionary vectorization of head_tail, with the memory footprint overhead of at most the vectorizing freebin, uint16_t bucket_virtual_addr_t, so the total overhead should not exceed 10% of the freebin_vec
-    //we compromise the bump_extension at the internal_dump_freebin_vec, 
-    //do a dictionary vectorization, find, extend, get head_tail, iterate through the map, find the intervals that do not intersect with the headtail and redump it to the freebin_vec for final dispatch
-    //the howtos write this cleanly is another problem
-    //when to reverse our cyclic queue, when to forward only, when to etc.
-    //the only problem is the in the freebin_vec
-    //we'll sleep on this
-
-    //imagine we have an arbitrary cyclic queue
-    //this could extend in the head or extend in the tail
-    //if more head, then our restart point is the tail
-    //if more tail, then our restart point is the head
-
-    //alright, the reverse logic is hard
-    //we'll build a forward bump_allocator, and a translator (a virtual layer) to convert from backward -> forward and forward -> backward
-    //so a backward allocation == forward_to_backward(backward_to_forward(backward)(mem_blk))
-    //we'll keep this our backlogs
-    //we also have a request to do rational logs by using 100% trained Taylor Approximations, we dont think that is necessary, log2() should be representative and fast enough to work in most cases
-
     template <class Metadata>
     class DGStdAllocator{
 
@@ -596,6 +565,16 @@ namespace dg::network_allocation{
 
             std::vector<Allocation> freebin_vec;
             size_t freebin_vec_cap;
+
+            //we'd try to "extract" the memory patterns, because memory pattern means exact reusable, so there is no use for upsizing the bin
+            //upsizing the bins are taken cared of by the smallbin_reuse_table
+
+            //I mean it's possible that we are looking at stuffs like 17 upsizing to 18 ... 31, which are the sole special cases 
+            //we dont have a "better" approach per se in terms of allocation speed and average use cases, really, in real life scenerios, exact reuse is the most important, even though we cant cover the 18 .. 31 range
+
+            dg::network_datastructure::unordered_map_variants::unordered_node_map<size_t, dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_map;
+            size_t exact_allocation_map_global_population_cap;
+            size_t exact_allocation_map_local_population_cap;
 
             std::shared_ptr<HeapAllocatorInterface> heap_allocator; //we have to defer std::free for the reason that this operation must be noblock, we offload the responsibility to an intermediate container
             std::shared_ptr<DeferDeallocationContainerInterface> defer_deallocation_offloader; //is there a way to make this optional?
@@ -634,6 +613,10 @@ namespace dg::network_allocation{
                            std::vector<Allocation> freebin_vec,
                            size_t freebin_vec_cap, 
 
+                           dg::network_datastructure::unordered_map_variants::unordered_node_map<size_t, dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_map,
+                           size_t exact_allocation_map_queue_cap,
+                           size_t exact_allocation_map_cap, 
+
                            std::shared_ptr<HeapAllocatorInterface> heap_allocator,
                            std::shared_ptr<DeferDeallocationContainerInterface> defer_deallocation_offloader,
 
@@ -651,6 +634,10 @@ namespace dg::network_allocation{
 
                                                                                    freebin_vec(std::move(freebin_vec)),
                                                                                    freebin_vec_cap(freebin_vec_cap),
+
+                                                                                   exact_allocation_map(std::move(exact_allocation_map)),
+                                                                                   exact_allocation_map_queue_cap(exact_allocation_map_queue_cap),
+                                                                                   exact_allocation_map_cap(exact_allocation_map_cap),
 
                                                                                    heap_allocator(std::move(heap_allocator)),
                                                                                    defer_deallocation_offloader(std::move(defer_deallocation_offloader)),
@@ -673,37 +660,20 @@ namespace dg::network_allocation{
 
                 this->malloc_chk_interval_counter += 1u;
 
-                //there is no modulo performed if INTERVAL_CHECK_SZ is of uint8_t, uint16_t or uint32_t
-                //> MAXIMUM_SMALLBIN_BLK_SZ == > 63 == >= 64
-                //== shift 6 bits, 0 cmp
-                //or MAXIMUM_SMALLBIN_BLK_SZ == 65535
-                //blk_sz <= sizeof(uint32_t) => uint16_t read of latter + 0 cmp, this is the sound solution
-                //this means we need to demote blk_sz > uint32_t, we have to specify this in our Metadata
-
-                //this is very fast
-                //we will need to do memory dereference optimization (inheritance is truly a nightmare...)
-                //we have to keep the practices of component designs + actual performance of C functions only (functions are heavily optimized by legacy people) 
-                //when we are optimizing for codes
-
-                //we need to analyze the branches hit
-                //the branches compute (preferably a i < sz cmp for loop)
-                //the fast path
-                //the slow path
-                //the memory dereferencing overheads
-                //the code size (to allow compilers to do aggressive optimization)
-                
-                //for the code size, we'd want to reduce the code size by marking a branch unlikely or __force_noinline__
-                //for the memory dereferencing, we'd want to do inheritance or static storage (static storage is truly a magic for hot_code)
-                //slow_path == internal_careful_malloc, internal_bump_allocate (maybe not)
-                //fast_path == binary graycode
-
-                //this heap allocation code is the most important lowlevel code that we will ever have to write, unless you are writing a virtual machine
-                //the problem with vector is that it is slow
-                //we have experienced deque, vector + array + static array benchmarks, the answer is that static array outperforms most of these guys, followed by deque then vector (I dont really know why)
+                //we are being complained about this being too "not reusable"
 
                 if (this->malloc_chk_interval_counter % PUNCTUAL_CHECK_INTERVAL_SZ == 0u || Metadata::compile_time_demote_blk_sz(blk_sz) > self::MAXIMUM_SMALLBIN_BLK_SZ) [[unlikely]]{
                     return this->internal_careful_malloc(blk_sz);
                 } else [[likely]]{
+                    auto map_ptr                = this->exact_allocation_map.find(blk_sz);
+
+                    if (map_ptr != this->exact_allocation_map.end() && map_ptr->second.size() != 0u){
+                        void * rs = map_ptr->second.back();
+                        map_ptr->second.pop_back();
+
+                        return rs;
+                    }
+
                     size_t pow2_blk_sz          = stdx::ceil2(std::max(blk_sz, self::MINIMUM_ALLOCATION_BLK_SZ));
                     size_t smallbin_table_idx   = std::countr_zero(pow2_blk_sz); 
                     uint64_t membership_bitset  = (this->smallbin_avail_bitset >> smallbin_table_idx) & stdx::lowones_bitgen<uint64_t>(std::integral_constant<size_t, SMALLBIN_PROBE_SZ>{}); //shift the sz, SMALLBIN_PROBE_SZ if compile-time deterministic would translate to a uint8_t direct read, if probing 8 bits
@@ -757,22 +727,40 @@ namespace dg::network_allocation{
                     return;
                 }
 
-                //uint32_t load
-
                 sz_header_t user_ptr_sz                                 = this->internal_read_user_ptr_size(user_ptr);
                 vrs_ctrl_header_t user_ptr_truncated_version_control    = this->internal_read_user_ptr_truncated_version_control(user_ptr);  
 
-                //this is constituted as a shift and a 0 cmp
-                //what's better, a direct address read and a cmp
-                //this requires user_ptr_sz to be of uint32_t
-                //and LARGEBIN_SMALLBIN_SZ to be of uint16_t
-                //this is hard
-                //or ... we just do a direct read of uint16_t negate cmp, this is the sound solution
-
                 if (user_ptr_sz == self::LARGEBIN_SMALLBIN_SZ) [[unlikely]]{
                     this->internal_large_free(user_ptr);
-                } else [[likely]]{
+                } else [[likely]]{ 
                     vrs_ctrl_header_t current_truncated_version_control = self::internal_get_truncated_version_control(this->bump_allocator_version_control);
+
+                    //we are trying to extract the memory allocation patterns by using exact allocations, a snapshot of memory allocation at a heavily used loop
+                    //if the "top of the memory pattern" is reached, we'd bounce that to the bin queue for promoted reuse + etc.
+                    //we are very concerned about the binary search lowerbound, for being impractical (first is that it does not solve the problem of allocation time, second is that it might "over-swing" the allocation, which we would want to fallback to the normal allocation)
+
+                    if (current_truncated_version_control != user_ptr_truncated_version_control){
+                        auto map_ptr = this->exact_allocation_map.find(user_ptr_sz);
+
+                        if (map_ptr == this->exact_allocation_map.end()){
+                            if (this->exact_allocation_map.size() == this->exact_allocation_map_cap){
+                                this->internal_move_exact_allocation_map_resource_to_freebin();
+                                this->exact_allocation_map.clear();
+                            }
+
+                            auto exact_queue                = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>(stdx::ulog2(this->exact_allocation_map_queue_cap));//this needs to be stack, we dont know the howtos yet
+                            auto [insert_ptr, status]       = this->exact_allocation_map.insert(std::make_pair(user_ptr_sz, std::move(exact_queue)));
+                            map_ptr                         = insert_ptr;
+
+                            dg::network_exception_handler::dg_assert(status);
+                        }
+
+                        if (map_ptr->second.size() != map_ptr->second.capacity()){
+                            map_ptr->second.push_back(user_ptr);
+                            return; 
+                        }
+                    }
+
                     size_t floor_smallbin_table_idx                     = stdx::ulog2(user_ptr_sz);
                     auto& smallbin_vec                                  = this->smallbin_reuse_table[floor_smallbin_table_idx];
 
@@ -956,7 +944,7 @@ namespace dg::network_allocation{
 
                 if (dg::network_exception::is_failed(err)){
                     return err;
-                }            
+                }
 
                 this->freebin_vec.clear();
                 return dg::network_exception::SUCCESS;
@@ -982,7 +970,7 @@ namespace dg::network_allocation{
 
             inline auto internal_dispatch_bump_allocator_refill() noexcept -> bool{
 
-                this->internal_check_for_reset();
+                // this->internal_check_for_reset();
                 this->internal_decommission_bump_allocator();
 
                 size_t requesting_interval_sz   = this->bump_allocator_refill_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ;
@@ -1044,9 +1032,22 @@ namespace dg::network_allocation{
                                                               self::internal_get_truncated_version_control(this->bump_allocator_version_control));
             }
 
-            void internal_commit_waiting_bin() noexcept{
+            __attribute__((noinline)) void internal_move_exact_allocation_map_resource_to_freebin() noexcept{
 
-                this->internal_decommission_bump_allocator();
+                for (auto& bucket_pair: this->exact_allocation_map){
+                    for (void * buffer: bucket_pair.second){
+                        if (this->freebin_vec.size() == this->freebin_vec_cap){
+                            this->internal_dump_freebin_vec();
+                        }
+
+                        this->freebin_vec.push_back(Allocation{buffer, bucket_pair.first});
+                    }
+
+                    bucket_pair.second.clear();
+                }
+            } 
+
+            __attribute__((noinline)) void internal_move_smallbin_vec_resource_to_freebin() noexcept{
 
                 for (auto& smallbin_queue: this->smallbin_reuse_table){
                     for (auto& smallbin: smallbin_queue){
@@ -1058,9 +1059,17 @@ namespace dg::network_allocation{
                     }
 
                     smallbin_queue.clear();
-                }
+                }                
+            }
 
+            void internal_commit_waiting_bin() noexcept{
+
+                this->internal_decommission_bump_allocator();
+
+                this->internal_move_exact_allocation_map_resource_to_freebin();
+                this->internal_move_smallbin_vec_resource_to_freebin();
                 this->internal_dump_freebin_vec();
+
                 this->smallbin_avail_bitset = 0u;
             }
 
