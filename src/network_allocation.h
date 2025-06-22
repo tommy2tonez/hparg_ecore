@@ -753,17 +753,24 @@ namespace dg::network_allocation{
                     //if the "top of the memory pattern" is reached, we'd bounce that to the bin queue for promoted reuse + etc.
                     //we are very concerned about the binary search lowerbound, for being impractical (first is that it does not solve the problem of allocation time, second is that it might "over-swing" the allocation, which we would want to fallback to the normal allocation)
 
+                    //we'll be engineering the branchness + landing pad for this like how we did for the delvrsrv_kv
+                    //essentially, we'd want to steer the branchability to land to the exact allocation map 99% of the time, or else etc.
+                    //that'd squeeze probably 2x - 3x perf, depending on how good the code actually is
+                    //because this is a performance critical loop, we dont want to unnecessary fetch instruction or access unnecessary buckets, which would heavily pollute our L1 or L2 cache which is very bad 
+                    //we can prove that this section of 100 lines of 50 lines of code can actually handle pretty much all the allocation patterns from fixed size allocations, or dynamic size allocations with fixed windows to etc.
+                    //given a busy enough loop, an "eat-through-the-recycle-bin" would be sitting pretty in our fast_bin buckets
+                    //we'll be circling back to this problem at a later time
+
                     if (current_truncated_version_control == user_ptr_truncated_version_control){
                         auto map_ptr = this->exact_allocation_map.find(user_ptr_sz);
 
                         //trying to resolve the map_ptr == empty
                         if (map_ptr == this->exact_allocation_map.end()){
                             if (this->exact_allocation_map.size() == this->exact_allocation_map_cap){
-                                this->internal_move_exact_allocation_map_resource_to_fastbin();
                                 this->internal_clear_exact_allocation_map();
                             }
 
-                            auto [insert_ptr, status]   = this->exact_allocation_map.insert(std::make_pair(user_ptr_sz, this->internal_allocate_exact_allocation_queue()));
+                            auto [insert_ptr, status]   = this->exact_allocation_map.insert(std::make_pair(user_ptr_sz, dg::network_exception::remove_expected(this->internal_allocate_exact_allocation_queue())));
                             map_ptr                     = insert_ptr;
 
                             dg::network_exception_handler::dg_assert(status);
@@ -923,24 +930,19 @@ namespace dg::network_allocation{
                 return this->internal_write_allocation_header(std::next(static_cast<char *>(internal_ptr), LARGEBIN_ALLOCATION_HEADER_SZ - ALLOCATION_HEADER_SZ), self::LARGEBIN_SMALLBIN_SZ, 0u); 
             }
 
-            auto internal_allocate_exact_allocation_queue() noexcept -> dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>{
+            auto internal_allocate_exact_allocation_queue() noexcept -> std::expected<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>, exception_t>{
 
                 // if constexpr(DEBUG_MODE_FLAG){
-                assert(!this->exact_allocation_queue_allocation_vec.empty()){
+                // assert(!this->exact_allocation_queue_allocation_vec.empty()){
+
+                if (this->exact_allocation_queue_allocation_vec.empty()){
+                    return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                }
 
                 dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *> rs = std::move(this->exact_allocation_queue_allocation_vec.back());
                 this->exact_allocation_queue_allocation_vec.pop_back();
 
-                return rs;
-            } 
-
-            void internal_clear_exact_allocation_map() noexcept{
-
-                for (auto& map_pair: this->exact_allocation_map){
-                    this->exact_allocation_queue_allocation_vec.push_back(std::move(map_pair.second));
-                }
-
-                this->exact_allocation_map.clear();
+                return std::move(rs);
             } 
 
             void internal_direct_dump_freebin_vec() noexcept{
@@ -1103,6 +1105,17 @@ namespace dg::network_allocation{
                 }
             } 
 
+            __attribute__((noinline)) void internal_clear_exact_allocation_map() noexcept{
+
+                this->internal_move_exact_allocation_map_resource_to_fastbin();
+
+                for (auto& map_pair: this->exact_allocation_map){
+                    this->exact_allocation_queue_allocation_vec.push_back(std::move(map_pair.second));
+                }
+
+                this->exact_allocation_map.clear();
+            }
+
             __attribute__((noinline)) void internal_move_exact_allocation_map_resource_to_freebin() noexcept{
 
                 for (auto& bucket_pair: this->exact_allocation_map){
@@ -1137,7 +1150,7 @@ namespace dg::network_allocation{
 
                 this->internal_decommission_bump_allocator();
 
-                this->internal_move_exact_allocation_map_resource_to_freebin();
+                this->internal_clear_exact_allocation_map();
                 this->internal_move_smallbin_vec_resource_to_freebin();
                 this->internal_dump_freebin_vec();
 
