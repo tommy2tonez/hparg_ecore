@@ -576,8 +576,19 @@ namespace dg::network_allocation{
             //we are guaranteed to capture the allocations in the frame after a certain initial iterations (the iterations to either clear the map or the iterations to fill the buckets or both)
             //we need to use a finite pool of pow2_cyclic_queue by using a special finite Allocator, we'll be talking about this
 
+            //why is this proved to be "good?"
+            //in the sense of capturing the allocation stack frames
+
+            //assume that the allocation eats thru the bump_allocator -> another version
+            //the version control will hinder the reusability of other noises that have destructive interference with the allocations
+
+            //every "eat-thru-the-recycle-bin" allocation will be reusable hence (either clear the map or fill the buckets or both, etc.), during a sufficiently-busy loop
+            //so there is actually no cases where the logic of extracting the stack frame patterns is hindered
+
+            //this is incredibly very super important in multi-core system, yeah, 1024 cores only share 1 RAM channel, we have to be innovative about this kind of reusability
+
             dg::network_datastructure::unordered_map_variants::unordered_node_map<size_t, dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_map;
-            size_t exact_allocation_map_queue_cap;
+            std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_queue_allocation_vec;
             size_t exact_allocation_map_cap;
 
             std::shared_ptr<HeapAllocatorInterface> heap_allocator; //we have to defer std::free for the reason that this operation must be noblock, we offload the responsibility to an intermediate container
@@ -618,7 +629,7 @@ namespace dg::network_allocation{
                            size_t freebin_vec_cap, 
 
                            dg::network_datastructure::unordered_map_variants::unordered_node_map<size_t, dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_map,
-                           size_t exact_allocation_map_queue_cap,
+                           std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_queue_allocation_vec,
                            size_t exact_allocation_map_cap, 
 
                            std::shared_ptr<HeapAllocatorInterface> heap_allocator,
@@ -640,7 +651,7 @@ namespace dg::network_allocation{
                                                                                    freebin_vec_cap(freebin_vec_cap),
 
                                                                                    exact_allocation_map(std::move(exact_allocation_map)),
-                                                                                   exact_allocation_map_queue_cap(exact_allocation_map_queue_cap),
+                                                                                   exact_allocation_queue_allocation_vec(std::move(exact_allocation_queue_allocation_vec)),
                                                                                    exact_allocation_map_cap(exact_allocation_map_cap),
 
                                                                                    heap_allocator(std::move(heap_allocator)),
@@ -749,11 +760,10 @@ namespace dg::network_allocation{
                         if (map_ptr == this->exact_allocation_map.end()){
                             if (this->exact_allocation_map.size() == this->exact_allocation_map_cap){
                                 this->internal_move_exact_allocation_map_resource_to_fastbin();
-                                this->exact_allocation_map.clear();
+                                this->internal_clear_exact_allocation_map();
                             }
 
-                            auto exact_queue            = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>>(stdx::ulog2(this->exact_allocation_map_queue_cap))); //this needs to be stack, we dont know the howtos yet
-                            auto [insert_ptr, status]   = this->exact_allocation_map.insert(std::make_pair(user_ptr_sz, std::move(exact_queue)));
+                            auto [insert_ptr, status]   = this->exact_allocation_map.insert(std::make_pair(user_ptr_sz, this->internal_allocate_exact_allocation_queue()));
                             map_ptr                     = insert_ptr;
 
                             dg::network_exception_handler::dg_assert(status);
@@ -912,6 +922,26 @@ namespace dg::network_allocation{
 
                 return this->internal_write_allocation_header(std::next(static_cast<char *>(internal_ptr), LARGEBIN_ALLOCATION_HEADER_SZ - ALLOCATION_HEADER_SZ), self::LARGEBIN_SMALLBIN_SZ, 0u); 
             }
+
+            auto internal_allocate_exact_allocation_queue() noexcept -> dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>{
+
+                // if constexpr(DEBUG_MODE_FLAG){
+                assert(!this->exact_allocation_queue_allocation_vec.empty()){
+
+                dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *> rs = std::move(this->exact_allocation_queue_allocation_vec.back());
+                this->exact_allocation_queue_allocation_vec.pop_back();
+
+                return rs;
+            } 
+
+            void internal_clear_exact_allocation_map() noexcept{
+
+                for (auto& map_pair: this->exact_allocation_map){
+                    this->exact_allocation_queue_allocation_vec.push_back(std::move(map_pair.second));
+                }
+
+                this->exact_allocation_map.clear();
+            } 
 
             void internal_direct_dump_freebin_vec() noexcept{
 

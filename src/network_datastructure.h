@@ -21,30 +21,11 @@
 
 // #include "network_log.h"
 
+//move assignment + move operation is probably one of the most heatly debated problem in C++
+//usually move assignment + move operation would "guarantee" that the moved object to be in a "safe" state to be deallocated + "safe" state to do another move + etc.
+//this is the correct language, because snapping it to a state where it'd be in a "defined default state" is wrong, for the reasons being that it would not be noexcept 
+
 namespace dg::network_datastructure::cyclic_queue{
-
-    //this only works if the default state of T does not hold extra semantic meaning rather than a truely empty, meaningless representation
-    //std::vector<> actually uses inplace construction to make sure that is not the case
-    //this is precisely the reason std::vector<> is not qualified for raw pointer arithmetic operation
-    //because it is not constructed by using new[] contiguous memory operation
-    //we are not doing that yet
-
-    //we spoke to the community about move and assign operators + friends
-    //move is to put the object into INVALID state + good for destruction + another move
-    //move is not supposed to put the object into VALID state for operations, it's nothrow_impossible a lot of time, semantically INCORRECT a lot of time also
-    //what happens after move is that we are not supposed to invoke any of the class functions, except for ... another move, this is the std way of doing things, not allocating another default constructed state
-    //the std has been malpracticed for a longest time ever
-    //even their stl container implementation of MOVE is sometimes incorrect
-    //I'm tired of implementing things that are not QUANTIFIABLE, like snapping sz off cap -> 0 after move
-    //we are in C, there are literally 1024 ways to misuse the C program
-
-    //there are so many implementations that are hindered because of the ambiguity of the move rule
-    //std::optional<>::move
-    //std::variants<>::move
-
-    //std is afraid of strictening the rule -> invalid + good for destruction + good for another move + good for another copy
-    //they are the all-method-valid absolutists
-    //yet the semantic of move is specifically to break that 
 
     template <class = void>
     static inline constexpr bool FALSE_VAL = false;
