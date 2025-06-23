@@ -120,27 +120,52 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
             }
     };
 
+    //I dont have the hinge for this component, I feel like this is bad, not well implemented
+    //what precisely are we solving
+
+    //we have a batch of workorders
+    //we need to complete the workorders as fast as possible in the sense of allocating enough correct waiters to dispatch the workorders 
+
+    //in the totally random case, we are on finite waiters, we need to partition that in a chunk of uniform processing unit
+
+    //in the memregion cases, we need to allocate a right amount of waiters to wait
+    //best scenerio, each waiter waits exactly one region
+    //problems, we dont have that number of waiters, which would also increase the lock contention dramatically which is bad  
+
+    //what's the right amount, region1 region2 on worker 1, region3 region4 on worker 2, etc.
+    //it seems like the order of the kv matters
+
+    //assume that we are sorting the memregions
+
+    //region1 (repeat 100 times), region2 (repeat 10 times), region3 (repeat 1 time), region 4 (repeat 1 time)
+    //we'd want to take a uniform slice region1 -> region4 or region4 -> region1
+
+    //our first implementation would sounds like that, the normal unit size scenerio, a border extend of the unit (if the border lands on the body of a contiguous region, we'd be moving that to the last), a keyvalue sort based on value size
+
+    //alright, now we are doing the hot-cold problem, what's the worst latency scenerio of discretization_sz == 16, it's 1 1 1 ... 1 (16 times), because a worker would have to wait on a memregion to complete 16 times
+    //how about we solve the problem by using engineered dispatches, we'd make sure that our memregion hits would be 10 + 6 == 16, so a worker would have to wait on a memregion to complete 2 times
+
     class Assorter: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
             std::shared_ptr<WareHouseExtractionConnectorInterface> unassorted_warehouse;
             std::shared_ptr<WareHouseIngestionConnectorInterface> assorted_warehouse;
-            size_t affined_region_process_threshold;
             size_t region_vectorization_sz;
-            size_t generic_vectorization_sz;
+            size_t warehouse_expected_ingestion_sz; 
+            size_t warehouse_max_ingestion_sz;
 
         public:
 
             Assorter(std::shared_ptr<WareHouseExtractionConnectorInterface> unassorted_warehouse,
                      std::shared_ptr<WareHouseIngestionConnectorInterface> assorted_warehouse,
-                     size_t affined_region_process_threshold,
                      size_t region_vectorization_sz,
-                     size_t generic_vectorization_sz) noexcept: unassorted_warehouse(std::move(unassorted_warehouse)),
-                                                                assorted_warehouse(std::move(assorted_warehouse)),
-                                                                affined_region_process_threshold(affined_region_process_threshold),
-                                                                region_vectorization_sz(region_vectorization_sz),
-                                                                generic_vectorization_sz(generic_vectorization_sz){}
+                     size_t warehouse_expected_ingestion_sz,
+                     size_t warehouse_max_ingestion_sz) noexcept: unassorted_warehouse(std::move(unassorted_warehouse)),
+                                                                  assorted_warehouse(std::move(assorted_warehouse)),
+                                                                  region_vectorization_sz(region_vectorization_sz),
+                                                                  warehouse_expected_ingestion_sz(warehouse_expected_ingestion_sz),
+                                                                  warehouse_max_ingestion_sz(warehouse_max_ingestion_sz){}
 
             bool run_one_epoch() noexcept{
 
@@ -152,32 +177,32 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
 
                 auto generic_internal_resolutor             = GenericInternalResolutor{}; 
                 generic_internal_resolutor.warehouse        = this->assorted_warehouse.get();
+                generic_internal_resolutor.expected_unit_sz = this->warehouse_expected_ingestion_sz;
+                generic_internal_resolutor.max_unit_sz      = this->warehouse_max_ingestion_sz;
 
-                size_t trimmed_generic_vectorization_sz     = std::min(this->generic_vectorization_sz, static_cast<size_t>(event_vec.size()));
+                size_t trimmed_generic_vectorization_sz     = std::min(this->region_vectorization_sz, static_cast<size_t>(event_vec.size()));
                 size_t generic_feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&generic_internal_resolutor, trimmed_generic_vectorization_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> generic_feeder_mem(generic_feeder_allocation_cost);
                 auto generic_feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&generic_internal_resolutor, trimmed_generic_vectorization_sz, generic_feeder_mem.get()));
 
                 auto region_internal_resolutor              = RegionInternalResolutor{};
-                region_internal_resolutor.warehouse         = this->assorted_warehouse.get();
                 region_internal_resolutor.generic_feeder    = generic_feeder.get();
-                region_internal_resolutor.threshold         = this->affined_region_process_threshold;
 
                 size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, static_cast<size_t>(event_vec.size()));
-                size_t region_feeder_allocation_cost        = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&region_internal_resolutor, trimmed_region_vectorization_sz);
+                size_t region_feeder_allocation_cost        = dg::network_producer_consumer::delvrsrv_orderedkv_allocation_cost(&region_internal_resolutor, trimmed_region_vectorization_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> region_feeder_mem(region_feeder_allocation_cost);
-                auto region_feeder                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&region_internal_resolutor, trimmed_region_vectorization_sz, region_feeder_mem.get()));
+                auto region_feeder                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_orderedkv_open_preallocated_raiihandle(&region_internal_resolutor, trimmed_region_vectorization_sz, region_feeder_mem.get()));
 
                 for (const event_t& event: event_vec){
                     uma_ptr_t event_ptr = this->internal_get_event_ptr(event);
                     uma_ptr_t region    = dg::memult::region(event_ptr, dg::network_memops_uma::memlock_region_size()); //
 
-                    dg::network_producer_consumer::delvrsrv_kv_deliver(region_feeder.get(), region, event);
+                    dg::network_producer_consumer::delvrsrv_orderedkv_deliver(region_feeder.get(), region, event);
                 }
 
                 return true;
             }
-        
+
         private:
 
             static inline auto internal_get_event_ptr(const virtual_memory_event_t& event) noexcept -> uma_ptr_t{
@@ -220,65 +245,65 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
                     }
                 }
             }
-
+ 
             struct GenericInternalResolutor: dg::network_producer_consumer::ConsumerInterface<event_t>{
 
                 WareHouseIngestionConnectorInterface * warehouse;
+                size_t expected_unit_sz;
+                size_t max_unit_sz;
 
                 void push(std::move_iterator<event_t *> event_arr, size_t sz) noexcept{
 
-                    if (sz == 0u){
-                        return;
-                    }
+                    size_t discretization_sz    = this->expected_unit_sz;
+                    event_t * first             = event_arr.base();
+                    event_t * last              = std::next(first, sz); 
 
-                    std::expected<dg::vector<event_t>, exception_t> event_vec = dg::network_exception::cstyle_initialize<dg::vector<event_t>>(sz);
+                    while (first != last){
+                        size_t rem_sz               = std::distance(first, last);
+                        size_t discretization_sz    = this->expected_unit_sz;
+                        size_t tentative_sz         = std::min(discretization_sz, rem_sz);
+                        event_t * tentative_last    = std::next(first, tentative_sz);
 
-                    if (!event_vec.has_value()){
-                        dg::network_log_stackdump::error(dg::network_exception::verbose(event_vec.error()));
-                        return;
-                    }
+                        while (tentative_last != last){
+                            if (tentative_last->region != std::prev(tentative_last)->region){
+                                break;
+                            }
 
-                    std::copy(event_arr, std::next(event_arr, sz), event_vec->begin());
-                    exception_t err = this->warehouse->push(std::move(event_vec.value()));
+                            if (std::distance(first, tentative_last) == this->max_unit_sz){
+                                break;
+                            }
 
-                    if (dg::network_exception::is_failed(err)){
-                        dg::network_log_stackdump::error(dg::network_exception::verbose(err));
-                        return;
+                            std::advance(tentative_last, 1u);
+                        }
+
+                        size_t ingestion_sz                 = std::distance(first, tentative_last);
+                        dg::vector<event_t ingesting_vec    = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<event_t>>(ingestion_sz));
+
+                        for (size_t i = 0u; i < ingestion_sz; ++i){
+                            ingesting_vec[i] = std::move(first[i]);
+                        }
+
+                        exception_t err = this->warehouse->push(std::move(ingesting_vec.value()));
+
+                        if (dg::network_exception::is_failed(err)){
+                            dg::network_log_stackdump::error(dg::network_exception::verbose(err));
+                        }
+
+                        first = tentative_last;
                     }
                 }
             };
 
             struct RegionInternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, event_t>{
 
-                WareHouseIngestionConnectorInterface * warehouse;
                 dg::network_producer_consumer::DeliveryHandle<event_t> * generic_feeder;
-                size_t threshold;
 
                 void push(const uma_ptr_t& key, std::move_iterator<event_t *> event_arr, size_t sz) noexcept{
 
                     event_t * base_event_arr = event_arr.base();
 
-                    if (sz < this->threshold){
-                        for (size_t i = 0u; i < sz; ++i){
-                            dg::network_producer_consumer::delvrsrv_deliver(this->generic_feeder, std::move(base_event_arr[i]));
-                        }
-
-                        return;
-                    }
-
-                    std::expected<dg::vector<event_t>, exception_t> event_vec = dg::network_exception::cstyle_initialize<dg::vector<event_t>>(sz);
-
-                    if (!event_vec.has_value()){
-                        dg::network_log_stackdump::error(dg::network_exception::verbose(event_vec.error()));
-                        return;
-                    }
-
-                    std::copy(event_arr, std::next(event_arr, sz), event_vec->begin());
-                    exception_t err = this->warehouse->push(std::move(event_vec.value()));
-
-                    if (dg::network_exception::is_failed(err)){
-                        dg::network_log_stackdump::error(dg::network_exception::verbose(err));
-                        return;
+                    for (size_t i = 0u; i < sz; ++i){
+                        dg::network_producer_consumer::delvrsrv_deliver(this->generic_feeder, std::move(base_event_arr[i]));
                     }
                 }
             };
