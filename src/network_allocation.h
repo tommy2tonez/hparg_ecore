@@ -542,6 +542,27 @@ namespace dg::network_allocation{
             }
     };
 
+    //This morning when I was proving the algorithm by using induction, there was a cyclic of no base resolution
+    //free() -> free_bin, fast_bin + exact_bin which guarantee the "will be deallocated"
+    //the malloc() tries to continue the "will be deallocated" by returning the pointer to the user which will call free()
+    //so we have a cyclic logic of "will be deallocated" and free()
+
+    //So we have to find another way, it's called a lifetime tracking of a pointer from being spawn to life by bump_allocator, until it is being free() by calling the upper allocator
+    //we need to do path analysis of the pointer lifetime
+
+    //from malloc -> user -> free -> (3 possible queues) being the fastbin, the freebin and the exact bin
+
+    //to freebin (OK)
+    //exactbin -> fastbin -> freebin (OK)
+    //exactbin -> user -> free() -> ... 
+    //exactbin -> fastbin -> user -> free() -> ...
+
+    //fastbin -> freebin (OK)
+    //fastbin -> user -> free() -> ...
+
+    //the ... will continue the loop of being queued again etc.
+    //we actually have found the method to do generic square matrix multiplication, we need to have a super driver to do backward propagation (we dont have the driver yet, we'll probably need 2-3 years to find the driver) 
+
     template <class Metadata>
     class DGStdAllocator{
 
