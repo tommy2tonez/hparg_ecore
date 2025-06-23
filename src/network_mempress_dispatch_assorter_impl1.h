@@ -13,6 +13,27 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
     //this is a very important optimizable, because we'd want to rely on our smph tile to do all the aggregating magics, yet we can't transfer the responsibility of "efficient dispatch of a bunch" -> the smph tile because that'd be implementation-specific, whose knowledge is unknown to the users
     //our only and sole clue in the world is probably statistics, we have to do our best to push all the data thru possible, give the user a window of probability of an arbitrary packet travelling from A -> B  
 
+    //I was thinking of the levelorder traversal of trees
+    
+    //this tree does not point to the immediate next level but also the next level etc., this is not an injective property but rather a multi_link tree
+    //how would I, precisely, partition the smph tile to forward + backward in the most efficient fashion
+
+    //we don't answer that question yet
+    //the question now is given the info of a batch dispatch, what's the most rational decision that we could make, without compromising the overall speed?
+
+    //let's make a decision tree
+
+    //it's possible that every region deserves their own "dispatcher" or "resolutor"
+
+    //problem, we are wasting a lot of memory orderings
+
+    //immediate patch, increase tile size -> 64KB, problem solved 
+    //other patch, we only marked a region as "deserved-to-be" when the region_events >= certain threshold
+    //alright, how about the others not "deserved-to-be"
+    //the generic dispatches need to have a smooth, reasonable batch size to be well distributed among the resolutors (we haven't solve this just yet)
+
+    //remember, we are concerned about the latency of completion, because we are "waiting" for a batch of memregion events to be completed, we aren't concerned about the total number on the region, that's the asynchronous device responsibility
+
     class WareHouseExtractionConnectorInterface{
 
         public:
@@ -198,7 +219,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
                         }
                     }
                 }
-            } 
+            }
 
             struct GenericInternalResolutor: dg::network_producer_consumer::ConsumerInterface<event_t>{
 
