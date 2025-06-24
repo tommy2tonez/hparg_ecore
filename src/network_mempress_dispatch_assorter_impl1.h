@@ -48,6 +48,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
 
             virtual ~WareHouseIngestionConnectorInterface() noexcept = default;
             virtual auto push(dg::vector<event_t>&&) noexcept -> exception_t = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
     class NormalWareHouseExtractionConnector: public virtual WareHouseExtractionConnectorInterface{
@@ -55,7 +56,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
         private:
 
             std::shared_ptr<dg::network_mempress_dispatch_warehouse_interface::WareHouseInterface> base;
-        
+
         public:
 
             NormalWareHouseExtractionConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse_interface::WareHouseInterface> base) noexcept: base(std::move(base)){}
@@ -71,7 +72,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
         private:
 
             std::shared_ptr<dg::network_mempress_dispatch_warehouse_interface::WareHouseInterface> base;
-        
+
         public: 
 
             NormalWareHouseIngestionConnector(std::shared_ptr<dg::network_mempress_dispatch_warehouse_interface::WareHouseInterface> base) noexcept: base(std::move(base)){}
@@ -79,6 +80,11 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
             auto push(dg::vector<event_t>&& event_vec) noexcept -> exception_t{
 
                 return this->base->push(std::move(event_vec));
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
             }
     };
 
@@ -118,6 +124,11 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
 
                 return err;
             }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->base->max_consume_size();
+            }
     };
 
     //I dont have the hinge for this component, I feel like this is bad, not well implemented
@@ -144,6 +155,12 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
 
     //alright, now we are doing the hot-cold problem, what's the worst latency scenerio of discretization_sz == 16, it's 1 1 1 ... 1 (16 times), because a worker would have to wait on a memregion to complete 16 times
     //how about we solve the problem by using engineered dispatches, we'd make sure that our memregion hits would be 10 + 6 == 16, so a worker would have to wait on a memregion to complete 2 times
+
+    //I was thinking about as-sorting based on all the memregions, it proved to be unnecessary because if there are intersections, we need to wait for a set of regions to be completed before another set could continue. 
+    //assorting in the case is not as necessary to reduce the overall latency
+
+    //in other words, assorting based on dst is optimal in all cases in terms of the batch completion latency
+    //maybe not in the case of overall completion latency, we need to have tons of workers to reduce the overhead of miswaiting, in the sense of the intersected sets of regions should be one guy responsibility or etc. we wont get to the Math of it all, it's complicated
 
     class Assorter: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -178,7 +195,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
                 auto generic_internal_resolutor             = GenericInternalResolutor{}; 
                 generic_internal_resolutor.warehouse        = this->assorted_warehouse.get();
                 generic_internal_resolutor.expected_unit_sz = this->warehouse_expected_ingestion_sz;
-                generic_internal_resolutor.max_unit_sz      = this->warehouse_max_ingestion_sz;
+                generic_internal_resolutor.max_unit_sz      = std::min(this->warehouse_max_ingestion_sz, this->assorted_warehouse->max_consume_size());
 
                 size_t trimmed_generic_vectorization_sz     = std::min(this->region_vectorization_sz, static_cast<size_t>(event_vec.size()));
                 size_t generic_feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_allocation_cost(&generic_internal_resolutor, trimmed_generic_vectorization_sz);
