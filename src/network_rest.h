@@ -985,7 +985,7 @@ namespace dg::network_rest{
     // }
     // };
 
-    class GenericTokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
+    class Auth2GenericTokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -1002,40 +1002,60 @@ namespace dg::network_rest{
                 std::expected<GenericTokenGenerateAuth2Request, exception_t> semantic_request   = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<GenericTokenGenerateAuth2Request, dg::string>)(request.payload);
 
                 if (!semantic_request.has_value()){
+                    exception_t err; 
+
+                    if (semantic_request.error() == dg::network_exception::COMPACT_SERIALIZER_CORRUPTED_FORMAT){
+                        err = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT;
+                    } else{
+                        err = dg::network_exception::REST_REQUEST_OTHER_ERROR;
+                    }
+
                     return Response{.response                       = {},
                                     .response_serialization_format  = {},
-                                    .err_code                       = semantic_request.error()};
+                                    .err_code                       = err};
                 }
 
                 std::expected<GenericTokenGenerateAuth2Response, exception_t> semantic_response = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
 
-                if (std::holds_alternative<Auth2UserNamePasswordPayLoad>(semantic_request.payload)){                    
-                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_credentials(std::get<Auth2UserNamePasswordPayLoad>(semantic_request.payload).username,
-                                                                                                                    std::get<Auth2UserNamePasswordPayLoad>(semantic_request.payload).password);
+                if (std::holds_alternative<Auth2UserNamePasswordPayLoad>(semantic_request->payload)){                    
+                    std::expected<dg::string, exception_t> token = dg::network_user::tokgen_from_credentials(std::get<Auth2UserNamePasswordPayLoad>(semantic_request->payload).username,
+                                                                                                             std::get<Auth2UserNamePasswordPayLoad>(semantic_request->payload).password);
 
-                    if (user_payload.has_value()){
-                        user_payload = dg::network_user::token_to_userpayload(user_payload.value());
-                    }
-
-                    if (!user_payload.has_value()){
-                        semantic_response   = std::unexpected(user_payload.error());
+                    if (!token.has_value()){
+                        if (token.error() == dg::network_exception::USER_BAD_AUTHENTICATION){
+                            semantic_response   = std::unexpected(dg::network_exception::REST_AUTH2_BAD_AUTH); 
+                        } else{
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                        }
                     } else{
-                        semantic_response   = GenericTokenGenerateAuth2Response{.response   = std::move(user_payload.value())};
-                    }
-                } else if (std::holds_alternative<Auth2TokenPayLoad>(semantic_request.payload)){
-                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_secret(std::get<Auth2TokenPayLoad>(semantic_request.payload).token);
+                        std::expected<dg::string, exception_t> user_payload = this->make_user_payload(token.value()); 
 
-                    if (user_payload.has_value()){
-                        user_payload = dg::network_user::token_to_userpayload(user_payload.value());
+                        if (!user_payload.has_value()){
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                        } else{
+                            semantic_response   = GenericTokenGenerateAuth2Response{.response   = std::move(user_payload.value())};
+                        }
                     }
+                } else if (std::holds_alternative<Auth2TokenPayLoad>(semantic_request->payload)){
+                    std::expected<dg::string, exception_t> token = dg::network_user::tokgen_from_secret(std::get<Auth2TokenPayLoad>(semantic_request->payload).token);
 
-                    if (!user_payload.has_value()){
-                        semantic_response   = std::unexpected(user_payload.error());
+                    if (!token.has_value()){
+                        if (token.error() == dg::network_exception::USER_BAD_AUTHENTICATION){
+                            semantic_response   = std::unexpected(dg::network_exception::REST_AUTH2_BAD_AUTH);
+                        } else{
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                        }
                     } else{
-                        semantic_response   = GenericTokenGenerateAuth2Response{.response   = std::move(user_payload.value())};
+                        std::expected<dg::string, exception_t> user_payload = this->make_user_payload(token.value());
+
+                        if (!user_payload.has_value()){
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                        } else{
+                            semantic_response   = GenericTokenGenerateAuth2Response{.response   = std::move(user_payload.value())};
+                        }
                     }
                 } else{
-                    semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_BAD_SEMANTIC_FORMAT);
+                    semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
                 }
 
                 if (!semantic_response.has_value()){
@@ -1050,9 +1070,15 @@ namespace dg::network_rest{
                                 .response_serialization_format  = RESPONSE_SEMANTIC_SERIALIZATION_FORMAT,
                                 .err_code                       = dg::network_exception::SUCCESS};
             }
+
+        private:
+
+            auto make_user_payload(const dg::string& user_token) noexcept -> std::expected<dg::string, exception_t>{
+
+            }
     };
 
-    class ProtectedTokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
+    class Auth2ProtectedTokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
@@ -1069,53 +1095,61 @@ namespace dg::network_rest{
                 std::expected<ProtectedTokenGenerateAuth2Request, exception_t> semantic_request     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<ProtectedTokenGenerateAuth2Request, dg::string>)(request.payload);
 
                 if (!semantic_request.has_value()){
+                    exception_t err;
+
+                    if (semantic_request.error() == dg::network_exception::COMPACT_SERIALIZER_CORRUPTED_FORMAT){
+                        err = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT;
+                    } else{
+                        err = dg::network_exception::REST_REQUEST_OTHER_ERROR;
+                    }
+
                     return Response{.response                       = {},
                                     .response_serialization_format  = {},
-                                    .err_code                       = semantic_request.error()};
+                                    .err_code                       = err};
                 }
 
                 std::expected<ProtectedTokenGenerateAuth2Response, exception_t> semantic_response   = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
 
-                if (std::holds_alternative<Auth2UserNamePasswordPayLoad>(semantic_request.payload)){
-                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_credentials(std::get<Auth2UserNamePasswordPayLoad>(semantic_request.payload));
+                if (std::holds_alternative<Auth2UserNamePasswordPayLoad>(semantic_request->payload)){
+                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_credentials(std::get<Auth2UserNamePasswordPayLoad>(semantic_request->payload));
 
                     if (!user_payload.has_value()){
                         if (user_payload.error() == dg::network_exception::USER_BAD_AUTHENTICATION){
                             semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_BAD_AUTH);
                         } else{
-                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_INTERNAL_CORRUPTION);
+                            semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
                         }
                     } else{
                         std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> expiry = dg::network_user::get_token_expiry(user_payload.value());
 
                         if (!expiry.has_value()){
-                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_INTERNAL_CORRUPTION);
+                            semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
                         } else{
                             semantic_response = ProtectedTokenGenerateAuth2Response{.token  = std::move(user_payload.value()),
                                                                                     .expiry = expiry.value()};
                         }
                     }
-                } else if (std::holds_alternative<Auth2TokenPayLoad>(semantic_request.payload)){
-                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_secret(std::get<Auth2TokenPayLoad>(semantic_request.payload).token);
+                } else if (std::holds_alternative<Auth2TokenPayLoad>(semantic_request->payload)){
+                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_secret(std::get<Auth2TokenPayLoad>(semantic_request->payload).token);
 
                     if (!user_payload.has_value()){                        
                         if (user_payload.error() == dg::network_exception::USER_BAD_AUTHENTICATION){
                             semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_BAD_AUTH);
                         } else{
-                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_INTERNAL_CORRUPTION);
+                            semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
                         }
                     } else{
                         std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> expiry = dg::network_user::get_token_expiry(user_payload.value());
 
                         if (!expiry.has_value()){
-                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_INTERNAL_CORRUPTION);
+                            semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
                         } else{
                             semantic_response = ProtectedTokenGenerateAuth2Response{.token  = std::move(user_payload.value()),
                                                                                     .expiry = expiry.value()};
                         }
                     }
                 } else{
-                    semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_BAD_SEMANTIC_FORMAT);
+                    semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
                 }
 
                 //we are trying to not throw so we could control every exit point explicitly (and attempt to do recovery if possible), not that we want to go back to the 1980s, but this is necessary to do exception analysis and avoid misthrow which would actually crash the entire system
@@ -1134,31 +1168,218 @@ namespace dg::network_rest{
             }
     };
 
-    class TokenRefreshResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
+    class Auth2RegistrationResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
             auto handle(Request request) noexcept -> Response{
 
-                TokenRefreshBaseRequest tokrefr_request{};
-                exception_t err = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<TokenRefreshBaseRequest>)(tokrefr_request, request.payload.data(), request.payload.size());
+                if (std::string_view(request.payload_serialization_format) != REQUEST_SEMANTIC_SERIALIZATION_FORMAT){
+                    exception_t err = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT;
 
-                if (dg::network_exception::is_failed(err)){
-                    TokenRefreshBaseResponse tokrefr_response{{}, err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokrefr_response), dg::network_exception::SUCCESS};
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = err};
                 }
 
-                std::expected<dg::string, exception_t> newtok = dg::network_user::token_refresh(tokrefr_request.token);
+                std::expected<Auth2RegistrationRequest, exception_t> semantic_request   = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<Auth2RegistrationRequest, dg::string>)(request.payload);
 
-                if (!newtok.has_value()){
-                    TokenRefreshBaseResponse tokrefr_response{{}, newtok.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokrefr_response), dg::network_exception::SUCCESS}; //fine - 
+                if (!semantic_request.has_value()){
+                    exception_t err;
+
+                    if (semantic_request.error() == dg::network_exception::COMPACT_SERIALIZER_CORRUPTED_FORMAT){
+                        err = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT;
+                    } else{
+                        err = dg::network_exception::REST_REQUEST_OTHER_ERROR;
+                    }
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = err};
                 }
 
-                TokenRefreshBaseResponse tokrefr_response{std::move(newtok.value()), dg::network_exception::SUCCESS};
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokrefr_response), dg::network_exception::SUCCESS};
+                std::expected<Auth2RegistrationResponse, exception_t> semantic_response = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
+
+                if (std::holds_alternative<Auth2UserNamePasswordRegistrationPayLoad>(semantic_request->payload)){
+                    auto& devirtualized         = std::get<Auth2UserNamePasswordRegistrationPayLoad>(semantic_request->payload);
+                    exception_t clearance_error = dg::network_system::authorize_systoken(devirtualized.sys_token);
+
+                    if (dg::network_exception::is_failed(clearance_error)){
+                        if (clearance_error == dg::network_exception::SYS_BAD_AUTH){
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REGISTRATION_BAD_SYS_AUTH);
+                        } else{
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                        }
+                    } else{
+                        exception_t registration_err    = dg::network_user::register_by_credentials(devirtualized.username, devirtualized.password, devirtualized.permission_level);
+
+                        if (dg::network_exception::is_failed(registration_err)){
+                            if (registration_err == dg::network_exception::USER_DUPLICATE_REGISTRATION_ERROR){
+                                semantic_response   = std::unexpected(dg::network_exception::REST_REGISTRATION_DUPLICATION_ERROR);
+                            } else{
+                                semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                            }
+                        } else{
+                            semantic_response       = Auth2RegistrationResponse{.response   = dg::network_exception_handler::nothrow_log(this->make_user_payload(devirtualized))}; 
+                        }
+                    }
+                } else if (std::holds_alternative<Auth2DedicatedTokenRegistrationPayLoad>(semantic_request->payload)){
+                    auto& devirtualized         = std::get<Auth2DedicatedTokenRegistrationPayLoad>(semantic_request->payload);
+                    exception_t clearance_error = dg::network_system::authorize_systoken(devirtualized.sys_token);
+
+                    if (dg::network_exception::is_failed(clearance_error)){
+                        if (clearance_error == dg::network_exception::SYS_BAD_AUTH){
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REGISTRATION_BAD_SYS_AUTH);
+                        } else{
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                        }
+                    } else{
+                        exception_t registration_err    = dg::network_user::register_by_secret(devirtualized.token, devirtualized.permission_level, devirtualized.expiry);
+
+                        if (dg::network_exception::is_failed(registration_err)){
+                            if (registration_err == dg::network_exception::USER_DUPLICATE_REGISTRATION_ERROR){
+                                semantic_response   = std::unexpected(dg::network_exception::REST_REGISTRATION_DUPLICATION_ERROR);
+                            } else{
+                                semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                            }
+                        } else{
+                            semantic_response       = Auth2RegistrationResponse{.response   = dg::network_exception_handler::nothrow_log(this->make_user_payload(devirtualized))};
+                        }
+                    }
+                } else{
+                    semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                }
+
+                if (!semantic_response.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = semantic_response.error()};
+                }
+
+                dg::string serialized_semantic_response = dg::network_exception_handler::nothrow_log(dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, Auth2RegistrationResponse>)(semantic_response.value()));
+
+                return Response{.response                       = std::move(serialized_semantic_response),
+                                .response_serialization_format  = RESPONSE_SEMANTIC_SERIALIZATION_FORMAT,
+                                .err_code                       = dg::network_exception::SUCCESS};
+            }
+        
+        private:
+            
+            auto make_user_payload(const Auth2UserNamePasswordRegistrationPayLoad& payload) noexcept -> std::expected<dg::string, exception_t>{
+
+            }
+
+            auto make_user_payload(const Auth2DedicatedTokenRegistrationPayLoad& payload) noexcept -> std::expected<dg::string, exception_t>{
+
             }
     };
+
+    class Auth2DeregistrationResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
+
+        public:
+
+            auto handle(Request request) noexcept -> Response{
+
+                if (std::string_view(request.payload_serialization_format) != REQUEST_SEMANTIC_SERIALIZATION_FORMAT){
+                    exception_t err = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT;
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = err};
+                }
+
+                std::expected<Auth2DeregistrationRequest, exception_t> semantic_request = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<Auth2DeregistrationRequest, dg::string>)(request.payload);
+
+                if (!semantic_request.has_value()){
+                    exception_t err;
+
+                    if (semantic_request.error() == dg::network_exception::COMPACT_SERIALIZER_CORRUPTED_FORMAT){
+                        err = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT;
+                    } else{
+                        err = dg::network_exception::REST_REQUEST_OTHER_ERROR;
+                    }
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = err};
+                }
+
+                std::expected<Auth2DeregistrationResponse, exception_t> semantic_response   = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
+
+                if (std::holds_alternative<Auth2UserNamePasswordDeregistrationPayLoad>(semantic_request->payload)){
+                    auto& devirtualized         = std::get<Auth2UserNamePasswordDeregistrationPayLoad>(semantic_request->payload); 
+                    exception_t clearance_error = dg::network_system::authorize_systoken(devirtualized.sys_token);
+                    
+                    if (dg::network_exception::is_failed(clearance_error)){
+                        if (clearance_error == dg::network_exception::SYS_BAD_AUTH){
+                            semantic_response   = std::unexpected(dg::network_exception::REST_DEREGISTRATION_BAD_AUTH); 
+                        } else{
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                        }
+                    } else{
+                        exception_t deregistration_err = dg::network_user::deregister_user_by_username(devirtualized.username);
+                        
+                        if (dg::network_exception::is_failed(deregistration_err)){
+                            if (deregistration_err == dg::network_exception::USER_DEREGISTRATION_RECORD_NOT_FOUND){
+                                semantic_response   = std::unexpected(dg::network_exception::REST_DEREGISTRATION_RECORD_NOT_FOUND);
+                            } else{
+                                semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                            }
+                        } else{
+                            semantic_response   = Auth2DeregistrationResponse{.response = dg::network_exception_handler::nothrow_log(this->make_user_payload(devirtualized))};
+                        }
+                    }
+                } else if (std::holds_alternative<Auth2TokenDeregistrationPayLoad>(semantic_request->payload)){
+                    auto& devirtualized         = std::get<Auth2TokenDeregistrationPayLoad>(semantic_request->payload);
+                    exception_t clearance_error = dg::network_system::authorize_systoken(devirtualized.sys_token);
+
+                    if (dg::network_exception::is_failed(clearance_error)){
+                        if (clearance_error == dg::network_exception::SYS_BAD_AUTH){
+                            semantic_response   = std::unexpected(dg::network_exception::REST_DEREGISTRATION_BAD_AUTH);
+                        } else{
+                            semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                        }
+                    } else{
+                        exception_t deregistration_err  = dg::network_user::deregister_user_by_secret(devirtualized.token); 
+
+                        if (dg::network_exception::is_failed(deregistration_err)){
+                            if (deregistration_err == dg::network_exception::USER_DEREGISTRATION_RECORD_NOT_FOUND){
+                                semantic_response   = std::unexpected(dg::network_exception::REST_DEREGISTRATION_RECORD_NOT_FOUND);
+                            } else{
+                                semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                            }
+                        } else{
+                            semantic_response   = Auth2DeregistrationResponse{.response = dg::network_exception_handler::nothrow_log(this->make_user_payload(devirtualized))};
+                        }
+                    }
+                } else{
+                    semantic_response   = std::unexpected(dg::network_exception::REST_REQUEST_OTHER_ERROR);
+                }
+
+                if (!semantic_response.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = semantic_response.error()};
+                }
+
+                dg::string serialized_semantic_response = dg::network_exception_handler::nothrow_log(dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, Auth2DeregistrationResponse>)(semantic_response.value()));
+
+                return Response{.response                       = std::move(serialized_semantic_response),
+                                .response_serialization_format  = RESPONSE_SEMANTIC_SERIALIZATION_FORMAT,
+                                .err_code                       = dg::network_exception::SUCCESS};
+            }
+        
+        private:
+
+            auto make_user_payload(const Auth2UserNamePasswordDeregistrationPayLoad&) noexcept -> std::expected<dg::string, exception_t>{
+
+            }
+
+            auto make_user_payload(const Auth2TokenDeregistrationPayLoad&) noexcept -> std::expected<dg::string, exception_t>{
+
+            }
+    };
+ 
 
     class TileInitResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
