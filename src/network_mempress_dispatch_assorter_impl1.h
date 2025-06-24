@@ -161,6 +161,8 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
 
     //in other words, assorting based on dst is optimal in all cases in terms of the batch completion latency
     //maybe not in the case of overall completion latency, we need to have tons of workers to reduce the overhead of miswaiting, in the sense of the intersected sets of regions should be one guy responsibility or etc. we wont get to the Math of it all, it's complicated
+    //we'd attempt to fix that by allocating more concurrent resolutors if the checkin time is not punctual (or too many resolutors spending time waiting)
+    //and kind of putting those concurrent resolutors to sleep when there are no workorders
 
     class Assorter: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -192,7 +194,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
                     return true;
                 }
 
-                auto generic_internal_resolutor             = GenericInternalResolutor{}; 
+                auto generic_internal_resolutor             = InternalGenericResolutor{}; 
                 generic_internal_resolutor.warehouse        = this->assorted_warehouse.get();
                 generic_internal_resolutor.expected_unit_sz = this->warehouse_expected_ingestion_sz;
                 generic_internal_resolutor.max_unit_sz      = std::min(this->warehouse_max_ingestion_sz, this->assorted_warehouse->max_consume_size());
@@ -202,7 +204,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> generic_feeder_mem(generic_feeder_allocation_cost);
                 auto generic_feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&generic_internal_resolutor, trimmed_generic_vectorization_sz, generic_feeder_mem.get()));
 
-                auto region_internal_resolutor              = RegionInternalResolutor{};
+                auto region_internal_resolutor              = InternalRegionResolutor{};
                 region_internal_resolutor.generic_feeder    = generic_feeder.get();
 
                 size_t trimmed_region_vectorization_sz      = std::min(this->region_vectorization_sz, static_cast<size_t>(event_vec.size()));
@@ -222,7 +224,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
 
         private:
 
-            static inline auto internal_get_event_ptr(const virtual_memory_event_t& event) noexcept -> uma_ptr_t{
+            static inline auto internal_get_event_ptr(const event_t& event) noexcept -> uma_ptr_t{
 
                 memory_event_kind_t event_kind = dg::network_memcommit_factory::read_virtual_event_kind(event);
 
@@ -262,8 +264,8 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
                     }
                 }
             }
- 
-            struct GenericInternalResolutor: dg::network_producer_consumer::ConsumerInterface<event_t>{
+
+            struct InternalGenericResolutor: dg::network_producer_consumer::ConsumerInterface<event_t>{
 
                 WareHouseIngestionConnectorInterface * warehouse;
                 size_t expected_unit_sz;
@@ -282,7 +284,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
                         event_t * tentative_last    = std::next(first, tentative_sz);
 
                         while (tentative_last != last){
-                            if (tentative_last->region != std::prev(tentative_last)->region){
+                            if (Assorter::internal_get_event_ptr(*tentative_last) != Assorter::internal_get_event_ptr(*std::prev(tentative_last))){
                                 break;
                             }
 
@@ -295,12 +297,8 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
 
                         size_t ingestion_sz                 = std::distance(first, tentative_last);
                         dg::vector<event_t ingesting_vec    = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<event_t>>(ingestion_sz));
-
-                        for (size_t i = 0u; i < ingestion_sz; ++i){
-                            ingesting_vec[i] = std::move(first[i]);
-                        }
-
-                        exception_t err = this->warehouse->push(std::move(ingesting_vec.value()));
+                        std::copy(std::make_move_iterator(first), std::make_move_iterator(tentative_last), ingesting_vec->begin());
+                        exception_t err                     = this->warehouse->push(std::move(ingesting_vec.value()));
 
                         if (dg::network_exception::is_failed(err)){
                             dg::network_log_stackdump::error(dg::network_exception::verbose(err));
@@ -311,7 +309,7 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
                 }
             };
 
-            struct RegionInternalResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, event_t>{
+            struct InternalRegionResolutor: dg::network_producer_consumer::KVConsumerInterface<uma_ptr_t, event_t>{
 
                 dg::network_producer_consumer::DeliveryHandle<event_t> * generic_feeder;
 
