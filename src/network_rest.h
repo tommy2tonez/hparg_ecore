@@ -48,6 +48,9 @@ namespace dg::network_rest{
     //let's say we have std::chrono::utc_clock, we'd want to catch that error, to be differented from the std::chrono::high_resolution_clock, etc
     //we dont care about output, because it's documented clearly about what that semantically means, while the input we can't enforce such a thing
 
+    static inline constexpr std::string_view REQUEST_SEMANTIC_SERIALIZATION_FORMAT  = dg::network_compact_serializer::SERIALIZATION_HEADER; 
+    static inline constexpr std::string_view RESPONSE_SEMANTIC_SERIALIZATION_FORMAT = dg::network_compact_serializer::SERIALIZATION_HEADER; 
+
     struct RESTAPIVersionRequest{
 
         template <class Reflector>
@@ -920,58 +923,214 @@ namespace dg::network_rest{
 
     //------------------------------
 
-    static inline constexpr std::string_view REST_API_VERSION_GET_ROUTE                         = std::string_view("/get/basic/rest_api_version");
-    static inline constexpr std::string_view REST_API_EXCEPTION_VERSION_GET_ROUTE               = std::string_view("/get/basic/exception_version");
-    static inline constexpr std::string_view REST_API_SERVER_VERSION_GET_ROUTE                  = std::string_view("/get/basic/server_version");
+    static inline constexpr std::string_view REST_API_VERSION_GET_ROUTE                         = "/api/get/basic/rest_api_version";
+    static inline constexpr std::string_view REST_API_EXCEPTION_VERSION_GET_ROUTE               = "/api/get/basic/exception_version";
+    static inline constexpr std::string_view REST_API_SERVER_VERSION_GET_ROUTE                  = "/api/get/basic/server_version";
 
-    static inline constexpr std::string_view REST_API_AUTH2_GET_ROUTE                           = std::string_view("/get/auth2/token");
-    static inline constexpr std::string_view REST_API_AUTH2_REGISTRATION_SET_ROUTE              = std::string_view("/set/auth2/registration");
-    static inline constexpr std::string_view REST_API_AUTH2_DEREGISTRATION_SET_ROUTE            = std::string_view("/set/auth2/deregistration");
+    static inline constexpr std::string_view REST_API_AUTH2_GET_ROUTE                           = "/api/get/auth2/token";
+    static inline constexpr std::string_view REST_API_AUTH2_REGISTRATION_SET_ROUTE              = "/api/set/auth2/registration";
+    static inline constexpr std::string_view REST_API_AUTH2_DEREGISTRATION_SET_ROUTE            = "/api/set/auth2/deregistration";
 
-    static inline constexpr std::string_view REST_API_SYSLOG_GET_ROUTE                          = std::string_view("/get/log/syslog");
-    static inline constexpr std::string_view REST_API_DEDICATED_LOG_GET_ROUTE                   = std::string_view("/get/log/dedicated_log");
+    static inline constexpr std::string_view REST_API_SYSLOG_GET_ROUTE                          = "/api/get/log/syslog";
+    static inline constexpr std::string_view REST_API_DEDICATED_LOG_GET_ROUTE                   = "/api/get/log/dedicated_log";
 
-    static inline constexpr std::string_view REST_API_TILE_ACTION_PAYLOAD_SET_ROUTE             = std::string_view("/set/core/tileaction/payload");
-    static inline constexpr std::string_view REST_API_TILE_ACTION_CLIENT_VERSION_GET_ROUTE      = std::string_view("/get/core/tileaction/client_version");
-    static inline constexpr std::string_view REST_API_TILE_ACTION_CLIENT_INIT_PAYLOAD_GET_ROUTE = std::string_view("/get/core/tileaction/client_payload");
+    static inline constexpr std::string_view REST_API_TILE_ACTION_PAYLOAD_SET_ROUTE             = "/api/set/core/tileaction/payload";
+    static inline constexpr std::string_view REST_API_TILE_ACTION_CLIENT_VERSION_GET_ROUTE      = "/api/get/core/tileaction/client_version";
+    static inline constexpr std::string_view REST_API_TILE_ACTION_CLIENT_INIT_PAYLOAD_GET_ROUTE = "/api/get/core/tileaction/client_payload";
     // static inline constexpr std::string_view REST_API_SOFTWARE_CONFIG_GET_ROUTE                 = "/get/core/config";
 
-    static inline constexpr std::string_view REST_API_SYSTEM_DESCRIPTION_GET_ROUTE              = std::string_view("/get/sys/description");
-    static inline constexpr std::string_view REST_API_SYSTEM_STAT_GET_ROUTE                     = std::string_view("/get/sys/stat");
+    static inline constexpr std::string_view REST_API_SYSTEM_DESCRIPTION_GET_ROUTE              = "/api/get/sys/description";
+    static inline constexpr std::string_view REST_API_SYSTEM_STAT_GET_ROUTE                     = "/api/get/sys/stat";
 
-    static inline constexpr std::string_view REST_API_NETWORK_BLACKLIST_SET_ROUTE               = std::string_view("/set/network/blacklist");
-    static inline constexpr std::string_view REST_API_NETWORK_GREENLIST_SET_ROUTE               = std::string_view("/set/network/greenlist");
-    static inline constexpr std::string_view REST_API_NETWORK_GLOBAL_INBOUNDCAP_SET_ROUTE       = std::string_view("/set/network/bandwidth/global_inbound");
-    static inline constexpr std::string_view REST_API_NETWORK_GLOBAL_OUTBOUNDCAP_SET_ROUTE      = std::string_view("/set/network/bandwidth/global_outbound");
-    static inline constexpr std::string_view REST_API_NETWORK_INDIVIDUAL_INBOUNDCAP_SET_ROUTE   = std::string_view("/set/network/bandwidth/individual_inbound");
-    static inline constexpr std::string_view REST_API_NETWORK_INDIVIDUAL_OUTBOUNDCAP_SET_ROUTE  = std::string_view("/set/network/bandwidth/individual_outbound");
+    static inline constexpr std::string_view REST_API_NETWORK_BLACKLIST_SET_ROUTE               = "/api/set/network/blacklist";
+    static inline constexpr std::string_view REST_API_NETWORK_GREENLIST_SET_ROUTE               = "/api/set/network/greenlist";
+    static inline constexpr std::string_view REST_API_NETWORK_GLOBAL_INBOUNDCAP_SET_ROUTE       = "/api/set/network/bandwidth/global_inbound";
+    static inline constexpr std::string_view REST_API_NETWORK_GLOBAL_OUTBOUNDCAP_SET_ROUTE      = "/api/set/network/bandwidth/global_outbound";
+    static inline constexpr std::string_view REST_API_NETWORK_INDIVIDUAL_INBOUNDCAP_SET_ROUTE   = "/api/set/network/bandwidth/individual_inbound";
+    static inline constexpr std::string_view REST_API_NETWORK_INDIVIDUAL_OUTBOUNDCAP_SET_ROUTE  = "/api/set/network/bandwidth/individual_outbound";
 
-    static inline constexpr std::string_view REST_API_NETWORK_FLUX_STAT_GET_REQUEST             = std::string_view("/get/network/stat/sys_flux");
-    static inline constexpr std::string_view REST_API_NETWORK_IP_FLUX_STAT_GET_REQUEST          = std::string_view("/get/network/stat/ip_flux");
+    static inline constexpr std::string_view REST_API_NETWORK_FLUX_STAT_GET_REQUEST             = "/api/get/network/stat/sys_flux";
+    static inline constexpr std::string_view REST_API_NETWORK_IP_FLUX_STAT_GET_REQUEST          = "/api/get/network/stat/ip_flux";
 
-    class TokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
+    // struct Request{
+    // dg::string requestee_uri;
+    // dg::string requestor;
+    // dg::string payload;
+    // dg::string payload_serialization_format;
+
+    // template <class Reflector>
+    // void dg_reflect(const Reflector& reflector) const{
+    //     reflector(requestee_uri, requestor, payload, payload_serialization_format);
+    // }
+
+    // template <class Reflector>
+    // void dg_reflect(const Reflector& reflector){
+    //     reflector(requestee_uri, requestor, payload, payload_serialization_format);
+    // }
+    // };
+
+    // struct Response{
+    // dg::string response;
+    // dg::string response_serialization_format;
+    // exception_t err_code;
+
+    // template <class Reflector>
+    // void dg_reflect(const Reflector& reflector) const{
+    //     reflector(response, response_serialization_format, err_code);
+    // }
+
+    // template <class Reflector>
+    // void dg_reflect(const Reflector& reflector){
+    //     reflector(response, response_serialization_format, err_code);
+    // }
+    // };
+
+    class GenericTokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
         public:
 
             auto handle(Request request) noexcept -> Response{
-                
-                TokenGenerateBaseRequest tokgen_request{};
-                exception_t err = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<TokenGenerateBaseRequest>)(tokgen_request, request.payload.data(), request.payload.size());
-                
-                if (dg::network_exception::is_failed(err)){
-                    TokenGenerateBaseResponse tokgen_response{{}, err};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokgen_response), dg::network_exception::SUCCESS};
+
+                if (std::string_view(request.payload_serialization_format) != REQUEST_SEMANTIC_SERIALIZATION_FORMAT){
+                    exception_t err = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT;
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = err};
                 }
 
-                std::expected<dg::string, exception_t> token = dg::network_user::token_generate_from_auth_payload(tokgen_request.auth_payload);
+                std::expected<GenericTokenGenerateAuth2Request, exception_t> semantic_request   = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<GenericTokenGenerateAuth2Request, dg::string>)(request.payload);
 
-                if (!token.has_value()){
-                    TokenGenerateBaseResponse tokgen_response{{}, token.error()};
-                    return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokgen_response), dg::network_exception::SUCCESS};
+                if (!semantic_request.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = semantic_request.error()};
                 }
 
-                TokenGenerateBaseResponse tokgen_response{std::move(token.value()), dg::network_exception::SUCCESS};
-                return Response{dg::network_compact_serializer::integrity_serialize<dg::string>(tokgen_response), dg::network_exception::SUCCESS};
+                std::expected<GenericTokenGenerateAuth2Response, exception_t> semantic_response = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
+
+                if (std::holds_alternative<Auth2UserNamePasswordPayLoad>(semantic_request.payload)){                    
+                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_credentials(std::get<Auth2UserNamePasswordPayLoad>(semantic_request.payload).username,
+                                                                                                                    std::get<Auth2UserNamePasswordPayLoad>(semantic_request.payload).password);
+
+                    if (user_payload.has_value()){
+                        user_payload = dg::network_user::token_to_userpayload(user_payload.value());
+                    }
+
+                    if (!user_payload.has_value()){
+                        semantic_response   = std::unexpected(user_payload.error());
+                    } else{
+                        semantic_response   = GenericTokenGenerateAuth2Response{.response   = std::move(user_payload.value())};
+                    }
+                } else if (std::holds_alternative<Auth2TokenPayLoad>(semantic_request.payload)){
+                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_secret(std::get<Auth2TokenPayLoad>(semantic_request.payload).token);
+
+                    if (user_payload.has_value()){
+                        user_payload = dg::network_user::token_to_userpayload(user_payload.value());
+                    }
+
+                    if (!user_payload.has_value()){
+                        semantic_response   = std::unexpected(user_payload.error());
+                    } else{
+                        semantic_response   = GenericTokenGenerateAuth2Response{.response   = std::move(user_payload.value())};
+                    }
+                } else{
+                    semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_BAD_SEMANTIC_FORMAT);
+                }
+
+                if (!semantic_response.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = semantic_response.error()};
+                }
+
+                dg::string serialized_semantic_response = dg::network_exception_handler::nothrow_log(dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, GenericTokenGenerateAuth2Response>)(semantic_response.value())); 
+
+                return Response{.response                       = std::move(serialized_semantic_response),
+                                .response_serialization_format  = RESPONSE_SEMANTIC_SERIALIZATION_FORMAT,
+                                .err_code                       = dg::network_exception::SUCCESS};
+            }
+    };
+
+    class ProtectedTokenGenerateResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
+
+        public:
+
+            auto handle(Request request) noexcept -> Response{
+
+                if (std::string_view(request.payload_serialization_format) != REQUEST_SEMANTIC_SERIALIZATION_FORMAT){
+                    exception_t err = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT;
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = err};
+                }
+
+                std::expected<ProtectedTokenGenerateAuth2Request, exception_t> semantic_request     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<ProtectedTokenGenerateAuth2Request, dg::string>)(request.payload);
+
+                if (!semantic_request.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = semantic_request.error()};
+                }
+
+                std::expected<ProtectedTokenGenerateAuth2Response, exception_t> semantic_response   = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
+
+                if (std::holds_alternative<Auth2UserNamePasswordPayLoad>(semantic_request.payload)){
+                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_credentials(std::get<Auth2UserNamePasswordPayLoad>(semantic_request.payload));
+
+                    if (!user_payload.has_value()){
+                        if (user_payload.error() == dg::network_exception::USER_BAD_AUTHENTICATION){
+                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_BAD_AUTH);
+                        } else{
+                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_INTERNAL_CORRUPTION);
+                        }
+                    } else{
+                        std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> expiry = dg::network_user::get_token_expiry(user_payload.value());
+
+                        if (!expiry.has_value()){
+                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_INTERNAL_CORRUPTION);
+                        } else{
+                            semantic_response = ProtectedTokenGenerateAuth2Response{.token  = std::move(user_payload.value()),
+                                                                                    .expiry = expiry.value()};
+                        }
+                    }
+                } else if (std::holds_alternative<Auth2TokenPayLoad>(semantic_request.payload)){
+                    std::expected<dg::string, exception_t> user_payload = dg::network_user::tokgen_from_secret(std::get<Auth2TokenPayLoad>(semantic_request.payload).token);
+
+                    if (!user_payload.has_value()){                        
+                        if (user_payload.error() == dg::network_exception::USER_BAD_AUTHENTICATION){
+                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_BAD_AUTH);
+                        } else{
+                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_INTERNAL_CORRUPTION);
+                        }
+                    } else{
+                        std::expected<std::chrono::time_point<std::chrono::utc_clock>, exception_t> expiry = dg::network_user::get_token_expiry(user_payload.value());
+
+                        if (!expiry.has_value()){
+                            semantic_response = std::unexpected(dg::network_exception::REST_AUTH2_INTERNAL_CORRUPTION);
+                        } else{
+                            semantic_response = ProtectedTokenGenerateAuth2Response{.token  = std::move(user_payload.value()),
+                                                                                    .expiry = expiry.value()};
+                        }
+                    }
+                } else{
+                    semantic_response = std::unexpected(dg::network_exception::REST_REQUEST_BAD_SEMANTIC_FORMAT);
+                }
+
+                //we are trying to not throw so we could control every exit point explicitly (and attempt to do recovery if possible), not that we want to go back to the 1980s, but this is necessary to do exception analysis and avoid misthrow which would actually crash the entire system
+
+                if (!semantic_response.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = semantic_response.error()};
+                }
+
+                dg::string serialized_semantic_response = dg::network_exception_handler::nothrow_log(dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, ProtectedTokenGenerateAuth2Response>)(semantic_response.value()));
+
+                return Response{.response                       = std::move(serialized_semantic_response),
+                                .response_serialization_format  = RESPONSE_SEMANTIC_SERIALIZATION_FORMAT,
+                                .err_code                       = dg::network_exception::SUCCESS};
             }
     };
 
