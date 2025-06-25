@@ -607,6 +607,8 @@ namespace dg::network_allocation{
             //so there is actually no cases where the logic of extracting the stack frame patterns is hindered
 
             //this is incredibly very super important in multi-core system, yeah, 1024 cores only share 1 RAM channel, we have to be innovative about this kind of reusability
+            //we need to be innovative about the pagination, essentially we'd want to "prefetch" the allocating buckets by telling the external workers that we'd be getting that soon
+            //we need to also be innovative about the bump_allocator deallocations, this is only half of the answer 
 
             dg::network_datastructure::unordered_map_variants::unordered_node_map<size_t, dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_map;
             std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_queue_allocation_vec;

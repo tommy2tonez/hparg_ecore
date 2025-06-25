@@ -131,38 +131,9 @@ namespace dg::network_mempress_dispatch_assorter_impl1{
             }
     };
 
-    //I dont have the hinge for this component, I feel like this is bad, not well implemented
-    //what precisely are we solving
-
-    //we have a batch of workorders
-    //we need to complete the workorders as fast as possible in the sense of allocating enough correct waiters to dispatch the workorders 
-
-    //in the totally random case, we are on finite waiters, we need to partition that in a chunk of uniform processing unit
-
-    //in the memregion cases, we need to allocate a right amount of waiters to wait
-    //best scenerio, each waiter waits exactly one region
-    //problems, we dont have that number of waiters, which would also increase the lock contention dramatically which is bad  
-
-    //what's the right amount, region1 region2 on worker 1, region3 region4 on worker 2, etc.
-    //it seems like the order of the kv matters
-
-    //assume that we are sorting the memregions
-
-    //region1 (repeat 100 times), region2 (repeat 10 times), region3 (repeat 1 time), region 4 (repeat 1 time)
-    //we'd want to take a uniform slice region1 -> region4 or region4 -> region1
-
-    //our first implementation would sounds like that, the normal unit size scenerio, a border extend of the unit (if the border lands on the body of a contiguous region, we'd be moving that to the last), a keyvalue sort based on value size
-
-    //alright, now we are doing the hot-cold problem, what's the worst latency scenerio of discretization_sz == 16, it's 1 1 1 ... 1 (16 times), because a worker would have to wait on a memregion to complete 16 times
-    //how about we solve the problem by using engineered dispatches, we'd make sure that our memregion hits would be 10 + 6 == 16, so a worker would have to wait on a memregion to complete 2 times
-
-    //I was thinking about as-sorting based on all the memregions, it proved to be unnecessary because if there are intersections, we need to wait for a set of regions to be completed before another set could continue. 
-    //assorting in the case is not as necessary to reduce the overall latency
-
-    //in other words, assorting based on dst is optimal in all cases in terms of the batch completion latency
-    //maybe not in the case of overall completion latency, we need to have tons of workers to reduce the overhead of miswaiting, in the sense of the intersected sets of regions should be one guy responsibility or etc. we wont get to the Math of it all, it's complicated
-    //we'd attempt to fix that by allocating more concurrent resolutors if the checkin time is not punctual (or too many resolutors spending time waiting)
-    //and kind of putting those concurrent resolutors to sleep when there are no workorders
+    //this requires a probably 10000 lines + paper to do this "correctly" + "optimally"
+    //essentially, we want to minimize the max(synchronization_time_points) of exclusive pairs
+    //we'd get back to this problem at a later time
 
     class Assorter: public virtual dg::network_concurrency::WorkerInterface{
 

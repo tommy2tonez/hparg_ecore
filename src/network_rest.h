@@ -66,7 +66,6 @@ namespace dg::network_rest{
 
     struct RESTAPIVersionResponse{
         dg::string response;
-        exception_t err;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
@@ -527,7 +526,6 @@ namespace dg::network_rest{
 
     struct SystemDescriptionResponse{
         dg::string response;
-        exception_t err;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
@@ -1380,6 +1378,221 @@ namespace dg::network_rest{
             }
     };
  
+    class SysLogRetrieveResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
+
+        public:
+
+            auto handle(Request request) noexcept -> Response{
+
+                if (std::string_view(request.payload_serialization_format) != REQUEST_SEMANTIC_SERIALIZATION_FORMAT){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT};
+                }
+
+                std::expected<SysLogRetrieveRequest, exception_t> semantic_request = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<SysLogRetrieveRequest, dg::string>)(request.payload);
+
+                if (!semantic_request.has_value()){
+                    if (semantic_request.error() == dg::network_exception::COMPACT_SERIALIZER_CORRUPTED_FORMAT){
+                        return Response{.response                       = {},
+                                        .response_serialization_format  = {},
+                                        .err_code                       = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT};
+
+                    }
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                // std::expected<SysLogRetrieveResponse, exception_t> semantic_response    = std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED);
+                exception_t clearance = dg::network_user::authorize_token(semantic_request->auth2_token);
+
+                //it's fine 
+
+                if (dg::network_exception::is_failed(clearance)){
+                    if (clearance == dg::network_exception::AUTH2_BAD_TOKEN){
+                        return Response{.response                       = {},
+                                        .response_serialization_format  = {},
+                                        .err_code                       = dg::network_exception::REST_REQUEST_BAD_TOKEN};
+                    }
+
+                    if (clearance == dg::network_exception::AUTH2_EXPIRED_TOKEN){
+                        return Response{.response                       = {},
+                                        .response_serialization_format  = {},
+                                        .err_code                       = dg::network_exception::REST_REQUEST_EXPIRED_TOKEN};
+                    }
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                std::expected<dg::network_user::user_id_t, exception_t> user_id = dg::network_user::get_user_id_from_token(semantic_request->auth2_token);
+
+                if (!user_id.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                std::expected<dg::network_user::user_permission_level_t, exception_t> permission_level = dg::network_user::get_permission_level(user_id.value());
+
+                if (!permission_level.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                if (permission_level.value() < dg::network_user::PERMISSION_LEVEL_SYSGET){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_BAD_PERMISSION};
+                }
+
+                std::expected<dg::vector<dg::network_postgres_db::model::SystemLog>> syslog_vec = dg::network_postgres_db::get_systemlog(semantic_request->kind, 
+                                                                                                                                         semantic_request->fr,
+                                                                                                                                         semantic_request->to,
+                                                                                                                                         semantic_request->limit);
+
+                if (!syslog_vec.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                std::expected<dg::string, exception_t> user_payload = this->make_user_payload(syslog_vec.value());
+
+                if (!user_payload.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                return Response{.response                           = std::move(user_payload.value()),
+                                .response_serialization_format      = JSON_SERIALIZATION_FORMAT,
+                                .err_code                           = dg::network_exception::SUCCESS};
+
+            }
+
+        private:
+
+            auto make_user_payload(const dg::vector<dg::network_postgres_db::model::SystemLog>& semantic_syslog) noexcept -> std::expected<dg::string, exception_t>{
+
+            }
+    };
+
+    //
+    //     struct DedicatedLogRetrieveRequest{
+    //     dg::string auth2_token;
+    //     uint64_t dedicated_log_id;
+    //     std::chrono::time_point<std::chrono::utc_clock> fr;
+    //     std::chrono::time_point<std::chrono::utc_clock> to;
+    //     uint32_t limit;
+
+    //     template <class Reflector>
+    //     void dg_reflect(const Reflector& reflector) const{
+    //         reflector(auth2_token, dedicated_log_id, fr, to, limit);
+    //     }
+
+    //     template <class Reflector>
+    //     void dg_reflect(const Reflector& reflector){
+    //         reflector(auth2_token, dedicated_log_id, fr, to, limit);
+    //     }
+    // };
+
+    class DedicatedLogRetrieveResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
+
+        public:
+
+            auto handle(Request request) noexcept -> Response{
+
+                if (std::string_view(request.payload_serialization_format) != REQUEST_SEMANTIC_SERIALIZATION_FORMAT){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT};
+                }
+
+                std::expected<DedicatedLogRetrieveRequest, exception_t> semantic_request = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<DedicatedLogRetrieveRequest, dg::string>)(request.payload);
+
+                if (semantic_request.has_value()){
+                    if (semantic_request.error() == dg::network_exception::COMPACT_SERIALIZER_CORRUPTED_FORMAT){
+                        return Response{.response                       = {},
+                                        .response_serialization_format  = {},
+                                        .err_code                       = dg::network_exception::REST_REQUEST_BAD_SERIALIZATION_FORMAT};
+                    }
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                exception_t clearance = dg::network_user::authorize_token(semantic_request->auth2_token);
+
+                if (dg::network_exception::is_failed(clearance)){
+                    if (clearance == dg::network_exception::AUTH2_BAD_TOKEN){
+                        return Response{.response                       = {},
+                                        .response_serialization_format  = {},
+                                        .err_code                       = dg::network_exception::REST_REQUEST_BAD_TOKEN};
+                    }
+
+                    if (clearance == dg::network_exception::AUTH2_EXPIRED_TOKEN){
+                        return Response{.response                       = {},
+                                        .response_serialization_format  = {},
+                                        .err_code                       = dg::network_exception::REST_REQUEST_EXPIRED_TOKEN};
+                    }
+
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                std::expected<dg::network_user::user_id_t, exception_t> user_id = dg::network_user::get_user_id_from_token(semantic_request->auth2_token);
+
+                if (!user_id.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = user_id.error()};
+                }
+
+                std::expected<dg::network_user::user_permission_level_t, exception_t> permission_level = dg::network_user::get_permission_level(user_id.value());
+
+                if (!permission_level.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                if (permission_level.value() < dg::network_user::PERMISSION_LEVEL_APPGET){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_BAD_PERMISSION};
+                }
+
+                std::expected<dg::vector<dg::network_postgres_db::model::DedicatedLog>, exception_t> log_vec = dg::network_postgres_db::get_dedicated_log(semantic_request->dedicated_log_id,
+                                                                                                                                                          semantic_request->fr,
+                                                                                                                                                          semantic_request->to,
+                                                                                                                                                          semantic_request->limit);
+                
+                if (!log_vec.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                std::expected<dg::string, exception_t> user_payload = this->make_user_payload(log_vec.value());
+
+                if (!user_payload.has_value()){
+                    return Response{.response                       = {},
+                                    .response_serialization_format  = {},
+                                    .err_code                       = dg::network_exception::REST_REQUEST_OTHER_ERROR};
+                }
+
+                return Response{.response                       = std::move(user_payload.value()),
+                                .response_serialization_format  = JSON_SERIALIZATION_FORMAT,
+                                .err_code                       = dg::network_exception::SUCCESS};
+            }
+    };
 
     class TileInitResolutor: public virtual dg::network_rest_frame::server::RequestHandlerInterface{
 
