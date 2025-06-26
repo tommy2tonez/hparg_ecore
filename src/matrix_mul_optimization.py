@@ -107,34 +107,26 @@ class MatMulPolicy:
     def get_order() -> list[list[int]]:
         pass 
 
-#how precisely could we do this?
-#by using dynamic programming
-#for every newly generated projection space (idx 0 (two sums) idx 1), we'd add that -> to the back of the list
+#we are trying to do 2 sum, a sparse binary tree to do a dimensional reduction, a.k.a. a dot product of a two vectors
+#problems, the context of the base is not uniformly distributed, this is the only problem
+#one could argue that a sparse binary tree should suffice if the context of the base is uniformly distributed in an arbitrary space
 
-#we'd want to maintain a definition of straightness of projection space / storage_sz for every combination, kind of a logit density mining operation
-#because we dont really know the patterns, we'd want to learn this pattern and extends that to another large size patterns 
-#this is a very important project that we'd want to get done within this week
+#so I guess our problem is to "rediffract" the base context, by using a milkshake operation
 
-#alright, do we see the pattern yet???
-#we have 1 sum 2 sum 3 sum 4 sum
-#now we are trying to make 5 sum 6 sum 7 sum 8 sum 9 sum 10 sum
-#how about 11 sum 12 sum 13 sum 14 sum 15 sum
-#the cycle of sum actually repeats
-#we kind of building sum on top of sum, by running statistics, and climb the ladder of sum length
-#alright, this is actually another learning problem, the problem of network bindings because we cant really bind the network reasonably
+#a milkshake operation is essentially x + f(x) (in the transformer)
+#thing is that this milk shake operation does not force the f(x) to pollute the original context if f(x) does not improve the succeeding context
 
-#and we'd want to clue from there
+#we'd want to replace the + operation by a two-sum operation (which was described in the multivariate_taylor_series)
+#as for the milk shake operation, essentially we'd want to do two_sum three sum + rotate + rinse and repeat, this is another transformer
 
-#the problem is actually centrality, we have advanced vocab thanks to centrality, we are running "pagerank" on the network
-#we need to find the policy for efficient matrix multiplication to aid the centrality in approxing the vocab
-#we need to run the search algorithm to find deviation space, we'd probably want to run the search on different datasets to avoid numerical problems (or using a multiprecision lib)
-#if we have completed these, we'd probably have a conscious AI
-#AI in my view is radixed as, finite buffer AI + thru everything context AI
-#finite buffer AI is human
-#thru_everything_context AI is doing projection of a bunch, there is no temporary buffer
-#in order to get there, we'd need the finite buffer AI on every training node to listen to the strings (this is hard)
+#we need to understand that the . operation is to do fast projection of col states, an intermediate representation in one dimensional space to loosely describe the col states + heading the col states in a transforming direction
+#we'd want to improve the . operation and the + operation solely   
 
-#100% stock projection is possible, we'd be multi-millionaire to run this on cloud soon, stay tuned !!!
+#after we have found our new matrix multiplication technique, we'd want to optimize that by using an optimizer to transform the operations -> SIMD + cuda friendly operations, by reordering + reapprox the operation order to tune with the current hardware instruction set 
+#we'd want to find the sweet spot between the storage size and projection accuracy, we'd want to have a function to give an optimal instruction of transforming given a specific storage size
+#we'd probably want to do search, we can't be too greedy about the number of keyvalues included in the instrument
+#so we'd want to either use multi-precision to offset the cost or we'd want to use multiple instruments to sing to the projection space
+#we'd make a purchase before August 22nd, mark my words !!!
 
 def optimize_matmul(dot_product_sz: int,
                     domain_points: object,
