@@ -102,6 +102,58 @@ def generic_sum(x_list: list[Logit], projection_storage_sz: int) -> Logit:
     else:
         raise RuntimeException()
 
+#without loss of generality
+#16 -> 4 x 4
+
+#attempt to accumulate col by using sparse graph (binary tree of twosum) -> [0, 1, 2, 3] -> [0], [0, 1, 2, 3] -> [1], [0, 1, 2, 3] -> [2], [0, 1, 2, 3] -> 3
+#rotate -> shake again -> pairwise two sum
+#-> rotate -> rinse and repeat
+
+## of rotations (or loop), iteration_sz must be of pow2 size (I just have that hinge)
+#two dimensions     == two binary tree of two sums
+#three dimensions   == ...
+
+def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
+
+    list_sz: int = len(logit_list)
+
+    if not is_pow2(list_sz):
+        raise Exception()
+
+    # if list_sz == 4:
+    #     return logit_list
+
+    if iteration_sz == 0:
+        return logit_list
+
+    dim_sz: int                                                 = sqrt(list_sz)
+    two_dimensional_logit_list: list[list[Logit]]               = shape_as(logit_list, [dim_sz, dim_sz])
+    transformed_two_dimensional_logit_list: list[list[Logit]]   = []
+
+    for i in range(dim_sz):
+        feature_vec: list[list[Logit]]  = list()
+        shaked_row: list[Logit]         = two_shake(two_dimensional_logit_list[i], , iteration_sz)
+
+        for j in range(dim_sz):
+            accumulated_logit: Logit            = twosum_binary_tree_accumulate(shaked_row) #uniform rule for accumulation, in other words, we can reuse the rules for other rows (or cols), we can use threesums or foursums to reduce the tree height which would help with the context loss (we can argue otherwise if we can prove that if the two_shake rs is uniformly distributed in an arbitrary space, we can continue such properties)
+            another_accumulated_logit: Logit    = twosum_binary_tree_accumulate(shaked_row) #uniform rule for accumulation
+
+            feature_vec.append([accumulated_logit, another_accumulated_logit])
+
+        transformed_two_dimensional_logit_list.append(feature_vec)
+
+    transformed_two_dimensional_logit_list  = rotate(shape_as(transformed_two_dimensional_logit_list, [dim_sz, dim_sz]))
+    transformed_two_dimensional_logit_list  = [two_shake(flatten(feature_vec), , iteration_sz) for feature_vec in transformed_two_dimensional_logit_list] #
+
+    flattened_transformed_list: list[Logit] = flatten(transformed_two_dimensional_logit_list)
+    rs_list: list[Logit]                    = list()
+
+    for i in range(list_sz):
+        new_logit: Logit = three_sum(logit_list[i], flattened_transformed_list[i * 2], flattened_transformed_list[i * 2 + 1]) #alright, we are doing threesum because dimensional reduction of row, col -> 1 dimension is unstable, so we'd have to project that -> 2 dimensions, each row now contains a fuzzy representation of the entire matrix
+        rs_list.append(new_logit)
+
+    return two_shake(rotate(rs_list), , iteration_sz - 1)
+
 class MatMulPolicy:
 
     def get_order() -> list[list[int]]:
@@ -127,6 +179,29 @@ class MatMulPolicy:
 #we'd probably want to do search, we can't be too greedy about the number of keyvalues included in the instrument
 #so we'd want to either use multi-precision to offset the cost or we'd want to use multiple instruments to sing to the projection space
 #we'd make a purchase before August 22nd, mark my words !!!
+
+#I have been thinking about the centrality algorithms (betweenness centrality + pagerank + differential + etc.), their effects on ML for too long
+#it seems like we are doing matrix multiplication, dot product very wrong
+
+#recall that in a normal centrality algorithm, we have fixed nodes, we are propagating the values from neighbor nodes -> the current node
+#the problem is that our dot product is in one dimension, and we rotate the matrix to do centrality
+
+#so there are two problems:
+#the problem of context collision of dot product, and the problem of rotation (this is not exactly a problem)
+
+#so an attempt to solve this would be
+
+#we have a matrix
+#2 dimensional projection dot product (combinatorial <rox> . <col> -> <a, b> instead of <a>) -> tranformed matrix
+#-> rotate transformed matrix, do another good shake on the transformed matrix rows and do a centrality threesum operation on the original matrix
+#then we'd want to rotate the original matrix
+#-> we have a matrix
+
+#we are working on square units
+
+#the hinge of this assignment is keeping the "semantic" of the inputs, we have to be able to prove that our inputs are progressively moving in the direction of the output without losing their context in the way
+#so a mid-way representation of input-output is not forced, but a product of choices
+
 
 def optimize_matmul(dot_product_sz: int,
                     domain_points: object,
