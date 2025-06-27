@@ -134,7 +134,6 @@ def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
     transformed_two_dimensional_logit_list: list[list[Logit]]   = []
 
     #our generic formula's gonna look like this
-    #we need to improve the twosum + threesum + foursum operation (we are only focusing on the finite finite Taylor Series patterns, we aren't looking in the direction of finite infinite yet)
 
     for i in range(dim_sz):
         feature_vec: list[list[Logit]]  = list()
@@ -151,19 +150,13 @@ def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
         transformed_two_dimensional_logit_list.append(feature_vec)
 
     transformed_two_dimensional_logit_list  = rotate(shape_as(transformed_two_dimensional_logit_list, [dim_sz, dim_sz]))
-    transformed_two_dimensional_logit_list  = [two_shake(flatten(feature_vec), , iteration_sz) for feature_vec in transformed_two_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
+    transformed_two_dimensional_logit_list  = [fold_two(two_shake(flatten(feature_vec), , iteration_sz)) for feature_vec in transformed_two_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
 
     flattened_transformed_list: list[Logit] = flatten(transformed_two_dimensional_logit_list)
     rs_list: list[Logit]                    = list()
 
     for i in range(list_sz):
-        #we are not exactly wrong, because the twoshake of the row would polymorphic the output, yet I'd want to do another accumulation
-        #the problem of machine learning is precisely that, we can assume that two_shake would "polymorphic" every entry given the matrix or we can assume that it is a set up for the twosum_binary_tree_accumulate 
-        #alright, we are doing threesum because dimensional reduction of row, col -> 1 dimension is unstable, so we'd have to project that -> 2 dimensions, each row now contains a fuzzy representation of the entire matrix
-
-        # accumulated_logit: Logit    = twosum_binary_tree_accumulate(transformed_two_dimensional_logit_list[i])
-
-        new_logit: Logit = three_sum(logit_list[i], flattened_transformed_list[i * 2], flattened_transformed_list[i * 2 + 1])
+        new_logit: Logit = two_sum(logit_list[i], flattened_transformed_list[i])
         rs_list.append(new_logit)
 
     return two_shake(rotate(rs_list), , iteration_sz - 1)
