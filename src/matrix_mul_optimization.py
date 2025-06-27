@@ -120,6 +120,7 @@ def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
     if not is_pow2(list_sz):
         raise Exception()
 
+    #something
     # if list_sz == 4:
     #     return logit_list
 
@@ -154,6 +155,7 @@ def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
 
     return two_shake(rotate(rs_list), , iteration_sz - 1)
 
+#
 class MatMulPolicy:
 
     def get_order() -> list[list[int]]:
