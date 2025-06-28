@@ -152,6 +152,10 @@ def get_numerical_representation(logit_list: list[Logit], projection_storage_sz:
 
     return twosum_tree_accumulate(logit_list, projection_storage_sz) #essentially a binary tree to do two sum, logit_list is the base of the binary tree
 
+def shuffle(logit_list: list[Logit]) -> list[Logit]:
+
+    pass
+
 #1 1 
 #2 2 
 #4 4
@@ -184,6 +188,9 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
     # if iteration_sz == 0:
     #     return logit_list
 
+    #we are missing a base case of < than a certain size, this is a very important implementation that I've yet to research
+    #essentially, we'd want to do a centrality + making sure that logit_list: list[Logit] cell position is stable (if the logit_list[1] is referring to a certain context, the output[1] has to be not worse than that)
+
     dim_sz: int                                                 = sqrt(list_sz)
     two_dimensional_logit_list: list[list[Logit]]               = shape_as(logit_list, [dim_sz, dim_sz])
     transformed_four_dimensional_logit_list: list[list[Logit]]  = []
@@ -195,8 +202,12 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
         shaked_row: list[Logit]         = quad_shake(two_dimensional_logit_list[i], , iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
 
         for j in range(dim_sz):
+            #the question is probably how difficult that is the project a row -> 4 dimensional vector in a continuous, sensible space, we would want to minimize that as an engineer 
+            #if we shuffle the row, we'd put more burden on the shoulder of the shaked_row responsibility to make the representation "sensible"
+            #because a quad_shake already sets up for the get_numerical_representation to succeed, I dont think this is a necessity
+
             first_dimension_representation: Logit   = get_numerical_representation(shaked_row)
-            second_dimension_representation: Logit  = get_numerical_representation(shaked_row)
+            second_dimension_representation: Logit  = get_numerical_representation(shaked_row) #this is easier to get the numerical representation of the row, because we'd want to avoid the extremely skewed cases of 0 1 -> 0 == context lost, assume that the quad_shake is not there, a shuffle() is a necessity, quad_shake() is to reduce the burden of distribution of context (so if this is easier then the converged curves of having the quad_shake() should be more optimal in the case)
             third_dimension_representation: Logit   = get_numerical_representation(shaked_row)
             fourth_dimension_representation: Logit  = get_numerical_representation(shaked_row)
 
@@ -222,9 +233,15 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
     rs_list: list[list[Logit]]              = []
 
     for i in range(dim_sz):
+        #this is the only questionable implementation in terms of keeping the recursive definition
+        #we'll get back to this, I think this should suffice to project the current wall streets calls + puts reasonably
+        #we just sort the input + output and kindof search for the coordinate
+        #remember that we are in the logit density mining business, we'd need to reduce the storage size to achieve more accuracy
+        #name of the game: 1 stock 1 week (out of 10000 stocks), options only
+
         lhs: list[Logit]    = two_dimensional_logit_list[i]
         rhs: list[Logit]    = transformed_four_dimensional_logit_list[i]
-        mixed: list[Logit]  = lhs + rhs + lhs + rhs
+        mixed: list[Logit]  = lhs + lhs + rhs + rhs #duplication is important in the case of emphasizing the importance of the accumulation, we are allocating more leaf logits to make sure that our context is intact before doing another shake
         shaked: list[Logit] = quad_shake(mixed, , iteration_sz)
         folded: list[Logit] = quad_fold(shaked, )
         rs_list             += [folded]
