@@ -122,7 +122,7 @@ def generic_sum(x_list: list[Logit], projection_storage_sz: int) -> Logit:
 #output:    a matched matrix whose every Entry is "well mixed" + "polymorphic" in the sense of sufficient to approx every possible output given the input matrix 
 
 #we are not OK here
-def fold_two(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]:
+def two_fold(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]:
 
     sz: int             = len(logit_list)
 
@@ -134,14 +134,43 @@ def fold_two(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]
 
     return [two_sum(lhs, rhs) for (lhs, rhs) in zip(left, right)]
 
-#we are not OK here
+def quad_fold(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]:
+
+    return two_fold(two_fold(logit_list, ), )
+
+def quad_partition(logit_list: list[Logit]) -> list[Logit]:
+
+    rs = [list(), list(), list(), list()]
+
+    for i in range(len(logit_list)):
+        idx     = i % 4
+        rs[idx] += [logit_list[i]]
+
+    return rs[0] + rs[1] + rs[2] + rs[3] 
+
 def get_numerical_representation(logit_list: list[Logit], projection_storage_sz: int) -> Logit:
 
-    #we are getting a numerical representation of the logit_list, we'd want to make sure that this number is unique, yet this number is memorizable
+    return twosum_tree_accumulate(logit_list, projection_storage_sz) #essentially a binary tree to do two sum, logit_list is the base of the binary tree
 
-    return threesum_tree_accumulate(logit_list, projection_storage_sz)
+#1 1 
+#2 2 
+#4 4
+#16 16
+#256 256 (we need this) 
+#65536 65536
 
-def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
+#this probably still has room for improvement, because we are assuming that the logit_list responsibility is uniform, lhs + rhs would not quad_shake in the sense of uniform distribution as much as we wanted   
+
+#the moral of this function is to shake a square
+
+#by projecting the row context -> 4 dimensions (to avoid context collision), rotate so that each row contains a fuzzy representation of the matrix
+#we'd want to do another quad_shake (recall that because the shake actually keeps the original semantic of the input at the cell, so we'd want to do a quad_partition followed by a quad fold so we can make sure that the context is not worse than it was before the function invoke) 
+#we'd then want to mix the lhs + rhs to do another shake and another fold
+#we'd want to rotate and do another shake, the number of such rotation has to be of even numbers
+
+#this is probably the most important transformation, we'd want to improve the get_numerical_representation (I dont know howtos yet)
+
+def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
 
     list_sz: int = len(logit_list)
 
@@ -152,61 +181,55 @@ def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
     # if list_sz == 4:
     #     return logit_list
 
-    if iteration_sz == 0:
-        return logit_list
+    # if iteration_sz == 0:
+    #     return logit_list
 
     dim_sz: int                                                 = sqrt(list_sz)
     two_dimensional_logit_list: list[list[Logit]]               = shape_as(logit_list, [dim_sz, dim_sz])
-    transformed_two_dimensional_logit_list: list[list[Logit]]   = []
+    transformed_four_dimensional_logit_list: list[list[Logit]]  = []
 
     #our generic formula's gonna look like this
 
     for i in range(dim_sz):
         feature_vec: list[list[Logit]]  = list()
-        shaked_row: list[Logit]         = two_shake(two_dimensional_logit_list[i], , iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
+        shaked_row: list[Logit]         = quad_shake(two_dimensional_logit_list[i], , iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
 
         for j in range(dim_sz):
-            accumulated_logit: Logit            = get_numerical_representation(shaked_row) #uniform rule for accumulation, in other words, we can reuse the rules for other rows (or cols), we can use threesums or foursums to reduce the tree height which would help with the context loss (we can argue otherwise if we can prove that if the two_shake rs is uniformly distributed in an arbitrary space, we can continue such properties)
-                                                                                           #the problem is that we can't assume that, because logit density of projection_storage_sz might not allow that, so threesum or foursum to reduce the burden of the two_shake() is a necessity
+            first_dimension_representation: Logit   = get_numerical_representation(shaked_row)
+            second_dimension_representation: Logit  = get_numerical_representation(shaked_row)
+            third_dimension_representation: Logit   = get_numerical_representation(shaked_row)
+            fourth_dimension_representation: Logit  = get_numerical_representation(shaked_row)
 
-            another_accumulated_logit: Logit    = get_numerical_representation(shaked_row) #uniform rule for accumulation
+            feature_vec.append([first_dimension_representation,
+                                second_dimension_representation,
+                                third_dimension_representation,
+                                fourth_dimension_representation]) #this is very important, we can argue that another rotate would fix this problem but we are logically wrong, the context of the input is already altered by then, this would fix the problem of immediate representation of row
 
-            feature_vec.append([accumulated_logit, another_accumulated_logit]) #this is very important, we can argue that another rotate would fix this problem but we are logically wrong, the context of the input is already altered by then, this would fix the problem of immediate representation of row
+            #we are also OK here, we assume that the quad_shake is sufficient in the sense of uniformly distribution for twosum_binary_tree_accumulate to project a fuzzy representation of the row
 
-            #we are also OK here, we assume that the two_shake is sufficient in the sense of uniformly distribution for twosum_binary_tree_accumulate to project a fuzzy representation of the row
-
-        transformed_two_dimensional_logit_list.append(feature_vec)
+        transformed_four_dimensional_logit_list.append(feature_vec)
 
     #we are OK here
 
-    transformed_two_dimensional_logit_list  = rotate(shape_as(transformed_two_dimensional_logit_list, [dim_sz, dim_sz]))
+    transformed_four_dimensional_logit_list = rotate(shape_as(transformed_four_dimensional_logit_list, [dim_sz, dim_sz]))
 
     #we are OK here
 
-    transformed_two_dimensional_logit_list  = [fold_two(two_shake(flatten(feature_vec), , iteration_sz), ) for feature_vec in transformed_two_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
+    transformed_four_dimensional_logit_list = [quad_fold(quad_shake(quad_partition(flatten(feature_vec)), , iteration_sz), ) for feature_vec in transformed_four_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
 
     #we are still OK here
-    # flattened_transformed_list: list[Logit] = flatten(transformed_two_dimensional_logit_list)
 
-    rs_list: list[list[Logit]] = []
+    rs_list: list[list[Logit]]              = []
 
     for i in range(dim_sz):
         lhs: list[Logit]    = two_dimensional_logit_list[i]
-        rhs: list[Logit]    = transformed_two_dimensional_logit_list[i]
-        mixed: list[Logit]  = lhs + rhs
-        shaked: list[Logit] = two_shake(mixed, , iteration_sz)
-        folded: list[Logit] = fold_two(shaked, )
+        rhs: list[Logit]    = transformed_four_dimensional_logit_list[i]
+        mixed: list[Logit]  = lhs + rhs + lhs + rhs
+        shaked: list[Logit] = quad_shake(mixed, , iteration_sz)
+        folded: list[Logit] = quad_fold(shaked, )
         rs_list             += [folded]
 
-        # new_logit: Logit = two_sum(logit_list[i], flattened_transformed_list[i]) #are we OK here? we are transferring the responsibility of centrality accumulation (shadow of current_node called shadow_current_node) to the two_shake + fold_two
-        #                                                                          #this sounds to me that flattened_transformed_list carries a lot of responsibility as a polymorphic output, yet I think this is still in the "make_sense" territory
-        #                                                                          #this is correct in the sense of "keeping the definition" but definitely not correct in the sense of output distribution
-        #                                                                          #assume that flattened_transformed_list[i] is skewed in an arbitrary space, we'd want to do a row mix transformation
-        #                                                                          #a rational decision would be to cat the list[Logit], do a two_shake and another fold_two
-        #                                                                          #we are promoting a unit size of a cell -> a unit size of a row
-        # rs_list.append(new_logit)
-
-    return two_shake(flatten(rotate(rs_list)), , iteration_sz - 1)
+    return quad_shake(flatten(rotate(rs_list)), , iteration_sz - 1)
 
 #
 class MatMulPolicy:
