@@ -174,6 +174,56 @@ def shuffle(logit_list: list[Logit]) -> list[Logit]:
 
 #this is probably the most important transformation, we'd want to improve the get_numerical_representation (I dont know howtos yet)
 
+def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
+
+    list_sz: int = len(logit_list)
+
+    if list_sz not in [1, 2, 4, 16, 256, 65536]:
+        raise Exception()
+
+    if list_sz == 1:
+        return [one_sum(logit_list[0], projection_storage_sz)]
+
+    if list_sz == 2:
+        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2), two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2)]
+
+    dim_sz: int                                     = sqrt(list_sz)
+    two_dimensional_logit_list: list[list[Logit]]   = shape_as(logit_list, [dim_sz, dim_sz])
+
+    transformed_logit_list_1: list[list[Logit]]     = []
+    transformed_logit_list_2: list[list[Logit]]     = []
+
+    for i in range(dim_sz):
+        feature_vec_1: list[Logit]      = list()
+        feature_vec_2: list[Logit]      = list()
+        shaked_row: list[Logit]         = two_shake(two_dimensional_logit_list[i], , iteration_sz)
+
+        for j in range(dim_sz):
+            first_dimension_representation: Logit   = get_numerical_representation(shaked_row)
+            second_dimension_representation: Logit  = get_numerical_representation(shaked_row)
+
+            feature_vec_1.append(first_dimension_representation)
+            feature_vec_2.append(second_dimension_representation)
+
+        transformed_logit_list_1.append(feature_vec_1)
+        transformed_logit_list_2.append(feature_vec_2)
+
+    rotated_transformed_logit_list_1: list[list[Logit]]     = rotate(transformed_logit_list_1)
+    rotated_transformed_logit_list_2: list[list[Logit]]     = rotate(transformed_logit_list_2)
+
+    shaked_1: list[list[Logit]]                             = shape_as(two_shake(flatten(rotated_transformed_logit_list_1), , iteration_sz), [dim_sz, dim_sz])
+    shaked_2: list[list[Logit]]                             = shape_as(two_shake(flatten(rotated_transformed_logit_list_2), , iteration_sz), [dim_sz, dim_sz])
+    context_logit: list[list[Logit]]                        = shape_as(two_fold(flatten(shaked_1) + flatten(shaked_2)), [dim_sz, dim_sz])
+
+    rs_list: list[list[Logit]]                              = []
+
+    for i in range(dim_sz):
+        lhs: list[Logit]        = two_dimensional_logit_list[i]
+        rhs: list[Logit]        = context_logit[i]
+        rs_list                 += [two_fold(lhs + rhs)]
+
+    return two_shake(flatten(rotate(rs_list)), , iteration_sz - 1)
+
 def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
 
     list_sz: int = len(logit_list)
@@ -185,7 +235,13 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
         return [one_sum(logit_list[0], projection_storage_sz)] 
 
     if list_sz == 2:
-        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2), two_sum(logit_list[1], logit_list[0], projection_storage_sz / 2)]
+        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2), two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2)]
+
+    if list_sz == 4:
+        return two_shake(logit_list, projection_storage_sz, iteration_sz)
+
+    if list_sz == 16:
+        return two_shake(logit_list, projection_storage_sz, iteration_sz)
 
     dim_sz: int                                     = sqrt(list_sz)
     two_dimensional_logit_list: list[list[Logit]]   = shape_as(logit_list, [dim_sz, dim_sz])
@@ -204,7 +260,6 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
         feature_vec_2: list[Logit]      = list()
         feature_vec_3: list[Logit]      = list()
         feature_vec_4: list[Logit]      = list()
-
         shaked_row: list[Logit]         = quad_shake(two_dimensional_logit_list[i], , iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
 
         for j in range(dim_sz):
@@ -246,7 +301,6 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
     #we are OK here
 
     # transformed_four_dimensional_logit_list = [quad_fold(quad_shake(quad_partition(flatten(feature_vec)), , iteration_sz), ) for feature_vec in transformed_four_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
-
     #we are still OK here
 
     rs_list: list[list[Logit]]                              = []
