@@ -178,27 +178,33 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
 
     list_sz: int = len(logit_list)
 
-    if not is_pow2(list_sz):
+    if list_sz not in [1, 2, 4, 16, 256, 65536]:
         raise Exception()
 
-    #something
-    # if list_sz == 4:
-    #     return logit_list
+    if list_sz == 1:
+        return [one_sum(logit_list[0], projection_storage_sz)] 
 
-    # if iteration_sz == 0:
-    #     return logit_list
+    if list_sz == 2:
+        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2), two_sum(logit_list[1], logit_list[0], projection_storage_sz / 2)]
 
-    #we are missing a base case of < than a certain size, this is a very important implementation that I've yet to research
-    #essentially, we'd want to do a centrality + making sure that logit_list: list[Logit] cell position is stable (if the logit_list[1] is referring to a certain context, the output[1] has to be not worse than that)
+    dim_sz: int                                     = sqrt(list_sz)
+    two_dimensional_logit_list: list[list[Logit]]   = shape_as(logit_list, [dim_sz, dim_sz])
 
-    dim_sz: int                                                 = sqrt(list_sz)
-    two_dimensional_logit_list: list[list[Logit]]               = shape_as(logit_list, [dim_sz, dim_sz])
-    transformed_four_dimensional_logit_list: list[list[Logit]]  = []
+    transformed_logit_list_1: list[list[Logit]]     = []
+    transformed_logit_list_2: list[list[Logit]]     = []
+    transformed_logit_list_3: list[list[Logit]]     = []
+    transformed_logit_list_4: list[list[Logit]]     = []
 
     #our generic formula's gonna look like this
+    #alright people, because we are extremely frustrated if the square is not either 1x1 2x1 2x2 4x4 16x16 or 256 x 256
+    #we'd want to change the implementation just for the shake of fitting the squares
 
     for i in range(dim_sz):
-        feature_vec: list[list[Logit]]  = list()
+        feature_vec_1: list[Logit]      = list()
+        feature_vec_2: list[Logit]      = list()
+        feature_vec_3: list[Logit]      = list()
+        feature_vec_4: list[Logit]      = list()
+
         shaked_row: list[Logit]         = quad_shake(two_dimensional_logit_list[i], , iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
 
         for j in range(dim_sz):
@@ -211,40 +217,44 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
             third_dimension_representation: Logit   = get_numerical_representation(shaked_row)
             fourth_dimension_representation: Logit  = get_numerical_representation(shaked_row)
 
-            feature_vec.append([first_dimension_representation,
-                                second_dimension_representation,
-                                third_dimension_representation,
-                                fourth_dimension_representation]) #this is very important, we can argue that another rotate would fix this problem but we are logically wrong, the context of the input is already altered by then, this would fix the problem of immediate representation of row
+            feature_vec_1.append(first_dimension_representation)
+            feature_vec_2.append(second_dimension_representation)
+            feature_vec_3.append(third_dimension_representation)
+            feature_vec_4.append(fourth_dimension_representation)
 
             #we are also OK here, we assume that the quad_shake is sufficient in the sense of uniformly distribution for twosum_binary_tree_accumulate to project a fuzzy representation of the row
 
-        transformed_four_dimensional_logit_list.append(feature_vec)
+        transformed_logit_list_1.append(feature_vec_1)
+        transformed_logit_list_2.append(feature_vec_2)
+        transformed_logit_list_3.append(feature_vec_3)
+        transformed_logit_list_4.append(feature_vec_4)
 
     #we are OK here
 
-    transformed_four_dimensional_logit_list = rotate(shape_as(transformed_four_dimensional_logit_list, [dim_sz, dim_sz]))
+    rotated_transformed_logit_list_1: list[list[Logit]]     = rotate(transformed_logit_list_1)
+    rotated_transformed_logit_list_2: list[list[Logit]]     = rotate(transformed_logit_list_2)
+    rotated_transformed_logit_list_3: list[list[Logit]]     = rotate(transformed_logit_list_3)
+    rotated_transformed_logit_list_4: list[list[Logit]]     = rotate(transformed_logit_list_4)
+
+    shaked_1: list[list[Logit]]                             = shape_as(quad_shake(flatten(rotated_transformed_logit_list_1), , iteration_sz), [dim_sz, dim_sz])
+    shaked_2: list[list[Logit]]                             = shape_as(quad_shake(flatten(rotated_transformed_logit_list_2), , iteration_sz), [dim_sz, dim_sz])
+    shaked_3: list[list[Logit]]                             = shape_as(quad_shake(flatten(rotated_transformed_logit_list_3), , iteration_sz), [dim_sz, dim_sz])
+    shaked_4: list[list[Logit]]                             = shape_as(quad_shake(flatten(rotated_transformed_logit_list_4), , iteration_sz), [dim_sz, dim_sz])
+
+    context_logit: list[list[Logit]]                        = shape_as(quad_fold(flatten(shaked_1) + flatten(shaked_2) + flatten(shaked_3) + flatten(shaked_4), ), [dim_sz, dim_sz])
 
     #we are OK here
 
-    transformed_four_dimensional_logit_list = [quad_fold(quad_shake(quad_partition(flatten(feature_vec)), , iteration_sz), ) for feature_vec in transformed_four_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
+    # transformed_four_dimensional_logit_list = [quad_fold(quad_shake(quad_partition(flatten(feature_vec)), , iteration_sz), ) for feature_vec in transformed_four_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
 
     #we are still OK here
 
-    rs_list: list[list[Logit]]              = []
+    rs_list: list[list[Logit]]                              = []
 
     for i in range(dim_sz):
-        #this is the only questionable implementation in terms of keeping the recursive definition
-        #we'll get back to this, I think this should suffice to project the current wall streets calls + puts reasonably
-        #we just sort the input + output and kindof search for the coordinate
-        #remember that we are in the logit density mining business, we'd need to reduce the storage size to achieve more accuracy
-        #name of the game: 1 stock 1 week (out of 10000 stocks), options only
-
         lhs: list[Logit]    = two_dimensional_logit_list[i]
-        rhs: list[Logit]    = transformed_four_dimensional_logit_list[i]
-        mixed: list[Logit]  = lhs + lhs + rhs + rhs #duplication is important in the case of emphasizing the importance of the accumulation, we are allocating more leaf logits to make sure that our context is intact before doing another shake
-        shaked: list[Logit] = quad_shake(mixed, , iteration_sz)
-        folded: list[Logit] = quad_fold(shaked, )
-        rs_list             += [folded]
+        rhs: list[Logit]    = context_logit[i]
+        rs_list             += [two_fold(lhs + rhs)]
 
     return quad_shake(flatten(rotate(rs_list)), , iteration_sz - 1)
 
