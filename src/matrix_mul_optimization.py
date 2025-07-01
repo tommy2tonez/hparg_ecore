@@ -1,14 +1,90 @@
 
 #
 
-def floor_projection_storage_sz(in_feature_sz: int, max_storage_sz: int) -> int:
-    pass
+def get_projection_storage_size(in_feature_sz: int, derivative_order_sz: int) -> int:
+
+    if in_feature_sz == 0:
+        return 0
+
+    if derivative_order_sz == 0:
+        return 0
+
+    if in_feature_sz == 1:
+        return derivative_order_sz 
+
+    return get_projection_storage_size(in_feature_sz - 1, derivative_order_sz) * derivative_order_sz 
+
+def make_taylor_projection_storage(in_feature_sz: int, derivative_order_sz: int) -> list[float]:
+
+    return [float(0) for _ in range(get_projection_storage_size(in_feature_sz, derivative_order_sz))]
+
+def taylor_project(x: float, coeff_arr: list[float]) -> float:
+
+    rs: float = 0
+
+    for i in range(len(coeff_arr)):
+        factorial_multiplier: float = float(1) / math.factorial(i)
+        x_multiplier: float         = math.pow(x, i)
+        coeff_multiplier: float     = coeff_arr[i]
+        rs                          += factorial_multiplier * x_multiplier * coeff_multiplier
+
+    return rs
+
+def multidimensional_taylor_project(x: list[float], derivative_order_sz: int, storage_vec: list[float]) -> float:
+
+    if derivative_order_sz == 0:
+        raise Exception()
+
+    if len(x) == 0:
+        raise Exception()
+
+    required_storage_sz: int = get_projection_storage_size(len(x), derivative_order_sz)
+
+    if required_storage_sz != len(storage_vec):
+        raise Exception()
+
+    if len(x) == 1:
+        return taylor_project(x[0], storage_vec) 
+
+    width: int                          = get_projection_storage_size(len(x) - 1, derivative_order_sz)
+    projection_storage_vec: list[float] = []
+
+    #f(x) = f(0) + f'(0) * t + f''(0) * 1/2 * t^2 + ...
+    #we are removing the x[0], x[1] ... up to x[n - 1] by recursing the projection of derivatives
+
+    for i in range(derivative_order_sz):
+        first: int                      = width * i
+        last: int                       = width * (i + 1)
+        sub_storage_vec: list[float]    = storage_vec[first: last]
+        projected_derivative: float     = multidimensional_taylor_project(x[:-1], derivative_order_sz, sub_storage_vec)
+        projection_storage_vec          += [projected_derivative]
+
+    return taylor_project(x[-1], projection_storage_vec)
+
+def get_optimal_derivative_order_size(in_feature_sz: int, max_storage_sz: int) -> int:
+
+    MAX_DERIVATIVE_ORDER_SZ: int = 10
+
+    for i in range(MAX_DERIVATIVE_ORDER_SZ):
+        order_sz: int               = MAX_DERIVATIVE_ORDER_SZ - i
+        projection_storage_sz: int  = get_projection_storage_size(in_feature_sz, order_sz)
+
+        if (projection_storage_sz <= max_storage_sz):
+            return order_sz
+
+    raise Exception()
+
+def get_projection_storage_sz(in_feature_sz: int, max_storage_sz: int) -> int:
+
+    return get_projection_storage_size(in_feature_sz, get_optimal_derivative_order_size(in_feature_sz, max_storage_sz))
 
 def make_projection_storage(sz: int) -> list[float]:
-    pass
 
-def multi_dimensional_projection(in_features: list[float], projection_storage: list[float]) -> float:
-    pass 
+    return [float(0) for _ in range(sz)]
+
+def multidimensional_projection(x: list[float], projection_storage: list[float]) -> float:
+
+    return multidimensional_taylor_project(x, get_optimal_derivative_order_size(len(x), len(projection_storage)), projection_storage) 
 
 class Logit:
 
@@ -26,7 +102,7 @@ class Logit:
         if self.leaf_value != None:
             return self.leaf_value
         elif self.descendant_vec != None:
-            return multi_dimensional_projection([descendant.get_value() for descendant in self.descendant_vec], self.projection_storage_vec)
+            return multidimensional_projection([descendant.get_value() for descendant in self.descendant_vec], self.projection_storage_vec)
         else:
             raise RuntimeException()
 
@@ -47,7 +123,7 @@ def get_leaf(val: float) -> Logit:
 
 def one_sum(lhs: Logit, projection_storage_sz: int) -> Logit:
 
-    actual_projection_storage_sz: int   = floor_projection_storage_sz(1, projection_storage_sz)
+    actual_projection_storage_sz: int   = get_projection_storage_sz(1, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
         raise RuntimeException()
@@ -58,7 +134,7 @@ def one_sum(lhs: Logit, projection_storage_sz: int) -> Logit:
 
 def two_sum(lhs: Logit, rhs: Logit, projection_storage_sz: int) -> Logit:
 
-    actual_projection_storage_sz: int   = floor_projection_storage_sz(2, projection_storage_sz)
+    actual_projection_storage_sz: int   = get_projection_storage_sz(2, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
         raise RuntimeException()
@@ -69,7 +145,7 @@ def two_sum(lhs: Logit, rhs: Logit, projection_storage_sz: int) -> Logit:
 
 def three_sum(x: Logit, x1: Logit, x2: Logit, projection_storage_sz: int) -> Logit:
 
-    actual_projection_storage_sz: int   = floor_projection_storage_sz(3, projection_storage_sz)
+    actual_projection_storage_sz: int   = get_projection_storage_sz(3, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
         raise RuntimeException()
@@ -102,26 +178,61 @@ def generic_sum(x_list: list[Logit], projection_storage_sz: int) -> Logit:
     else:
         raise RuntimeException()
 
-#without loss of generality
-#16 -> 4 x 4
+def twosum_tree_accumulate(x_list: list[Logit], projection_storage_sz: int) -> Logit:
 
-#attempt to accumulate col by using sparse graph (binary tree of twosum) -> [0, 1, 2, 3] -> [0], [0, 1, 2, 3] -> [1], [0, 1, 2, 3] -> [2], [0, 1, 2, 3] -> 3
-#rotate -> shake again -> pairwise two sum
-#-> rotate -> rinse and repeat
+    if len(x_list) == 0:
+        raise Exception()
 
-## of rotations (or loop), iteration_sz must be of pow2 size (I just have that hinge)
-#two dimensions     == two binary tree of two sums
-#three dimensions   == ...
+    if len(x_list) == 1:
+        return one_sum(x_list[0], projection_storage_sz) 
 
-#this two_shake operation is very important, because every entry in the logit_list is actually a unit, we have yet to tell if this is 1 logit or 1 tile
+    if len(x_list) % 2 != 0:
+        raise Exception()
 
-#the problem about the machine learning recursive definition is that we have to be increasingly paranoid about keeping the definition
+    lhs_list: list[Logit]   = x_list[:len(x_list) / 2] 
+    rhs_list: list[Logit]   = x_list[len(x_list) / 2:]
 
-#what is the two_shake operation actually does:
-#input:     a 1 dimensional matrix
-#output:    a matched matrix whose every Entry is "well mixed" + "polymorphic" in the sense of sufficient to approx every possible output given the input matrix 
+    return two_sum(twosum_tree_accumulate(lhs_list, projection_storage_sz),
+                   twosum_tree_accumulate(rhs_list, projection_storage_sz),
+                   projection_storage_sz)
 
-#we are not OK here
+def threesum_tree_accumulate(x_list: list[Logit], projection_storage_sz: int) -> Logit:
+
+    if len(x_list) == 0:
+        raise Exception()
+
+    if len(x_list) == 1:
+        return one_sum(x_list[0], projection_storage_sz)
+
+    if len(x_list) % 3 != 0:
+        raise Exception()
+
+    width: int                  = len(x_list) / 3
+    first_list: list[Logit]     = x_list[:width]
+    second_list: list[Logit]    = x_list[width: width * 2]
+    third_list: list[Logit]     = x_list[width * 2:]
+
+    return three_sum(threesum_tree_accumulate(first_list, projection_storage_sz),
+                     threesum_tree_accumulate(second_list, projection_storage_sz),
+                     threesum_tree_accumulate(third_list, projection_storage_sz),
+                     projection_storage_sz) 
+
+#everything before this line is accurate, this is the base of everything, we'd want to further improve the taylor projection by actually changing the projecting range, but we'll be talking about that later
+#essentially, we'd want to make things sharp instead of curvy like the Taylor Projection
+
+#because the projection_storage_sz would actually be too unrealistic for a word vec of 1024 words
+#the only way we could patch this is by running centrality
+#centrality, on one hand, actually builds a very high level vocabulary from low level words 
+#like images inputted into our brain from pixel muscle -> brain connection -> word detection -> semanticalization -> etc.
+#centrality, on the other hand, solves the problem of projection storage sz
+
+#the problem of centrality is precisely that, we can't assume that the words at the beginning are the absolute words, every transforming phase, the words make sense, so it's important to keep the semantic of the row + col at every given step of the iteration
+#otherwise, we'd be forced to alter the semantic of the next matrix in a destructive interference way
+
+#we'd attempt to solve the problem by making sure that every intermediate centrality node is not saturated in the sense of progressively transforming the aggregating cell
+#this is the mentioned problem, when I was talking about we were putting too much pressure on the joints 
+#yet we have found a solution of perfect square recursion
+
 def two_fold(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]:
 
     sz: int             = len(logit_list)
@@ -132,33 +243,99 @@ def two_fold(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]
     left: list[Logit]   = logit_list[:(sz / 2)]
     right: list[Logit]  = logit_list[(sz / 2):]
 
-    return [two_sum(lhs, rhs) for (lhs, rhs) in zip(left, right)]
+    return [two_sum(lhs, rhs, projection_storage_sz) for (lhs, rhs) in zip(left, right)]
 
 def quad_fold(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]:
 
-    return two_fold(two_fold(logit_list, ), )
+    return two_fold(two_fold(logit_list, projection_storage_sz), projection_storage_sz)
 
-def quad_partition(logit_list: list[Logit]) -> list[Logit]:
+def to_logit_vec(tensor: object) -> list[Logit]:
 
-    rs = [list(), list(), list(), list()]
+    if type(tensor) == type([]):
+        return functools.reduce(lambda a, b: a + b, [to_logit_vec(sub_tensor) for sub_tensor in tensor], [])
 
-    for i in range(len(logit_list)):
-        idx     = i % 4
-        rs[idx] += [logit_list[i]]
+    if type(tensor) == type(Logit()):
+        return tensor
 
-    return rs[0] + rs[1] + rs[2] + rs[3] 
+    raise Exception()
 
-def get_numerical_representation(logit_list: list[Logit], projection_storage_sz: int) -> Logit:
+def flatten_space(space: list[int]) -> list[int]:
 
-    return twosum_tree_accumulate(logit_list, projection_storage_sz) #essentially a binary tree to do two sum, logit_list is the base of the binary tree
+    if len(space) == 0:
+        raise Exception()
 
-def get_numerical_representation_3(logit_list: list[Logit], projection_storage_sz: int) -> Logit:
+    sz: int = 1
 
-    return threesum_tree_accumulate(logit_list, projection_storage_sz) #essentially a binary tree to do two sum, logit_list is the base of the binary tree
+    for i in range(len(space)):
+        rs *= space[i]
 
-def shuffle(logit_list: list[Logit]) -> list[Logit]:
+    return rs; 
 
-    pass
+def shape_as(tensor: object, space: list[int]) -> object:
+
+    if len(space) == 0:
+        raise Exception()
+
+    logit_vec: list[Logit]      = to_logit_vec(tensor)
+
+    if flatten_space(space)[0] != len(logit_vec):
+        raise Exception()
+
+    if len(space) == 1:        
+        return logit_vec
+
+    sub_space: list[int]        = space[1:]
+    flattened_sub_space_sz: int = flatten_space(sub_space)[0]
+    rs: list[object]            = []
+
+    for i in range(space[0]):
+        first: int          = flattened_sub_space_sz * i
+        last: int           = flattened_sub_space_sz * (i + 1)
+        sub_tensor: object  = logit_vec[first: last]
+        rs                  += [shape_as(sub_tensor, sub_space)]
+
+    return rs
+
+def make_empty(space: list[int]) -> object:
+
+    if len(space) == 0:
+        raise Exception()
+
+    if len(space) == 1:
+        return [object() for _ in range(space[0])]
+
+    return [make_empty(space[1:]) for i in range(space[0])] 
+
+def make_empty_as(tensor: object) -> object:
+
+    return make_empty(get_tensor_space(tensor)) 
+
+def rotate(tensor: object) -> object:
+
+    space: list[int]    = get_tensor_space(tensor)
+
+    if len(space) != 2:
+        raise Exception()
+
+    new_tensor: list    = make_empty(space[::-1])
+
+    for i in range(space[0]):
+        for j in range(space[1]):
+            new_tensor[j][i] = tensor[i][j]
+
+    return new_tensor
+
+def flatten(tensor: object) -> list[Logit]:
+
+    return to_logit_vec(tensor)
+
+def sqrt(val: int) -> int:
+    
+    return int(math.sqrt(val))
+
+def cube_root(val: int) -> int:
+
+    return int(val ** (1.f / 3))
 
 def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
 
@@ -171,22 +348,22 @@ def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
         return [one_sum(logit_list[0], projection_storage_sz)]
 
     if list_sz == 2:
-        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2), two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2)]
+        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz),
+                two_sum(logit_list[0], logit_list[1], projection_storage_sz)]
 
     dim_sz: int                                     = sqrt(list_sz)
     two_dimensional_logit_list: list[list[Logit]]   = shape_as(logit_list, [dim_sz, dim_sz])
-
     transformed_logit_list_1: list[list[Logit]]     = []
     transformed_logit_list_2: list[list[Logit]]     = []
 
     for i in range(dim_sz):
         feature_vec_1: list[Logit]      = list()
         feature_vec_2: list[Logit]      = list()
-        shaked_row: list[Logit]         = two_shake(two_dimensional_logit_list[i], , iteration_sz)
+        shaked_row: list[Logit]         = two_shake(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
 
         for j in range(dim_sz):
-            first_dimension_representation: Logit   = get_numerical_representation(shaked_row)
-            second_dimension_representation: Logit  = get_numerical_representation(shaked_row)
+            first_dimension_representation: Logit   = twosum_tree_accumulate(shaked_row, projection_storage_sz)
+            second_dimension_representation: Logit  = twosum_tree_accumulate(shaked_row, projection_storage_sz)
 
             feature_vec_1.append(first_dimension_representation)
             feature_vec_2.append(second_dimension_representation)
@@ -194,21 +371,22 @@ def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
         transformed_logit_list_1.append(feature_vec_1)
         transformed_logit_list_2.append(feature_vec_2)
 
-    rotated_transformed_logit_list_1: list[list[Logit]]     = rotate(transformed_logit_list_1)
-    rotated_transformed_logit_list_2: list[list[Logit]]     = rotate(transformed_logit_list_2)
-
-    shaked_1: list[list[Logit]]                             = shape_as(two_shake(flatten(rotated_transformed_logit_list_1), , iteration_sz), [dim_sz, dim_sz])
-    shaked_2: list[list[Logit]]                             = shape_as(two_shake(flatten(rotated_transformed_logit_list_2), , iteration_sz), [dim_sz, dim_sz])
-    context_logit: list[list[Logit]]                        = shape_as(two_fold(flatten(shaked_1) + flatten(shaked_2)), [dim_sz, dim_sz])
-
-    rs_list: list[list[Logit]]                              = []
+    rotated_transformed_logit_list_1: list[list[Logit]] = rotate(transformed_logit_list_1)
+    rotated_transformed_logit_list_2: list[list[Logit]] = rotate(transformed_logit_list_2)
+    rs_list: list[list[Logit]]                          = []
 
      for i in range(dim_sz):
         lhs: list[Logit]        = two_dimensional_logit_list[i]
-        rhs: list[Logit]        = context_logit[i]
-        rs_list                 += [two_fold(lhs + rhs)]
+        rhs_1: list[Logit]      = two_shake(rotated_transformed_logit_list_1[i], projection_storage_sz, iteration_sz)
+        rhs_2: list[Logit]      = two_shake(rotated_transformed_logit_list_2[i], projection_storage_sz, iteration_sz)
+        new_row: list[Logit]    = []
 
-    return two_shake(flatten(rotate(rs_list)), , iteration_sz - 1)
+        for j in range(dim_sz):
+            new_row += [three_sum(lhs[j], rhs_1[j], rhs_2[j], projection_storage_sz)] #we are probably wrong here, I dont know yet, yet the joints for the rotated_transformed_logit_1 and rotated_transformed_logit_2 might loose the global context in the way
+
+        rs_list                 += [new_row]
+
+    return two_shake(flatten(rotate(rs_list)), projection_storage_sz, iteration_sz - 1)
 
 def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
 
@@ -221,7 +399,8 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
         return [one_sum(logit_list[0], projection_storage_sz)] 
 
     if list_sz == 2:
-        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2), two_sum(logit_list[0], logit_list[1], projection_storage_sz / 2)]
+        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz),
+                two_sum(logit_list[0], logit_list[1], projection_storage_sz)]
 
     if list_sz == 4:
         return two_shake(logit_list, projection_storage_sz, iteration_sz)
@@ -237,77 +416,59 @@ def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz
     transformed_logit_list_3: list[list[Logit]]     = []
     transformed_logit_list_4: list[list[Logit]]     = []
 
-    #our generic formula's gonna look like this
-    #alright people, because we are extremely frustrated if the square is not either 1x1 2x1 2x2 4x4 16x16 or 256 x 256
-    #we'd want to change the implementation just for the shake of fitting the squares
-
     for i in range(dim_sz):
         feature_vec_1: list[Logit]      = list()
         feature_vec_2: list[Logit]      = list()
         feature_vec_3: list[Logit]      = list()
         feature_vec_4: list[Logit]      = list()
-        shaked_row: list[Logit]         = quad_shake(two_dimensional_logit_list[i], , iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
+        shaked_row: list[Logit]         = quad_shake(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
 
         for j in range(dim_sz):
-            #the question is probably how difficult that is the project a row -> 4 dimensional vector in a continuous, sensible space, we would want to minimize that as an engineer 
-            #if we shuffle the row, we'd put more burden on the shoulder of the shaked_row responsibility to make the representation "sensible"
-            #because a quad_shake already sets up for the get_numerical_representation to succeed, I dont think this is a necessity
-
-            first_dimension_representation: Logit   = get_numerical_representation(shaked_row)
-            second_dimension_representation: Logit  = get_numerical_representation(shaked_row) #this is easier to get the numerical representation of the row, because we'd want to avoid the extremely skewed cases of 0 1 -> 0 == context lost, assume that the quad_shake is not there, a shuffle() is a necessity, quad_shake() is to reduce the burden of distribution of context (so if this is easier then the converged curves of having the quad_shake() should be more optimal in the case)
-            third_dimension_representation: Logit   = get_numerical_representation(shaked_row)
-            fourth_dimension_representation: Logit  = get_numerical_representation(shaked_row)
+            first_dimension_representation: Logit   = twosum_tree_accumulate(shaked_row, projection_storage_sz)
+            second_dimension_representation: Logit  = twosum_tree_accumulate(shaked_row, projection_storage_sz)
+            third_dimension_representation: Logit   = twosum_tree_accumulate(shaked_row, projection_storage_sz)
+            fourth_dimension_representation: Logit  = twosum_tree_accumulate(shaked_row, projection_storage_sz)
 
             feature_vec_1.append(first_dimension_representation)
             feature_vec_2.append(second_dimension_representation)
             feature_vec_3.append(third_dimension_representation)
             feature_vec_4.append(fourth_dimension_representation)
 
-            #we are also OK here, we assume that the quad_shake is sufficient in the sense of uniformly distribution for twosum_binary_tree_accumulate to project a fuzzy representation of the row
-
         transformed_logit_list_1.append(feature_vec_1)
         transformed_logit_list_2.append(feature_vec_2)
         transformed_logit_list_3.append(feature_vec_3)
         transformed_logit_list_4.append(feature_vec_4)
 
-    #we are OK here
-
     rotated_transformed_logit_list_1: list[list[Logit]]     = rotate(transformed_logit_list_1)
     rotated_transformed_logit_list_2: list[list[Logit]]     = rotate(transformed_logit_list_2)
     rotated_transformed_logit_list_3: list[list[Logit]]     = rotate(transformed_logit_list_3)
     rotated_transformed_logit_list_4: list[list[Logit]]     = rotate(transformed_logit_list_4)
-
-    shaked_1: list[list[Logit]]                             = shape_as(quad_shake(flatten(rotated_transformed_logit_list_1), , iteration_sz), [dim_sz, dim_sz])
-    shaked_2: list[list[Logit]]                             = shape_as(quad_shake(flatten(rotated_transformed_logit_list_2), , iteration_sz), [dim_sz, dim_sz])
-    shaked_3: list[list[Logit]]                             = shape_as(quad_shake(flatten(rotated_transformed_logit_list_3), , iteration_sz), [dim_sz, dim_sz])
-    shaked_4: list[list[Logit]]                             = shape_as(quad_shake(flatten(rotated_transformed_logit_list_4), , iteration_sz), [dim_sz, dim_sz])
-
-    #I just have the hinge that we are missing something
-    #a tessaract representing the summary of a row state, a quad fold is probably premature
-    #imagine that we have 4 rows representing the summary of the matrix
-    #we are puting too much responsibility on the twosum joints (it is like resistance vs current in electrical circuit) of the quad fold to further the summary 
-    #in other words, we can't assume uniform responsibility of cells of the first and second row, it differs to have logit 1 twosum logit 2 vs logit 1 twosum logit 3
-    #we'd fix this problem later
-
-    context_logit: list[list[Logit]]                        = shape_as(quad_fold(flatten(shaked_1) + flatten(shaked_2) + flatten(shaked_3) + flatten(shaked_4), ), [dim_sz, dim_sz])
-
-    #we are OK here
-
-    # transformed_four_dimensional_logit_list = [quad_fold(quad_shake(quad_partition(flatten(feature_vec)), , iteration_sz), ) for feature_vec in transformed_four_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
-    #we are still OK here
-
     rs_list: list[list[Logit]]                              = []
 
     for i in range(dim_sz):
-        lhs: list[Logit]    = two_dimensional_logit_list[i]
-        rhs: list[Logit]    = context_logit[i]
-        rs_list             += [two_fold(lhs + rhs)]
+        lhs: list[Logit]        = two_dimensional_logit_list[i]
+        rhs_1: list[Logit]      = quad_shake(rotated_transformed_logit_list_1[i], projection_storage_sz, iteration_sz)
+        rhs_2: list[Logit]      = quad_shake(rotated_transformed_logit_list_2[i], projection_storage_sz, iteration_sz)
+        rhs_3: list[Logit]      = quad_shake(rotated_transformed_logit_list_3[i], projection_storage_sz, iteration_sz)
+        rhs_4: list[Logit]      = quad_shake(rotated_transformed_logit_list_4[i], projection_storage_sz, iteration_sz)
+        new_row: list[Logit]    = []
 
-    return quad_shake(flatten(rotate(rs_list)), , iteration_sz - 1)
+        for j in range(dim_sz):
+            new_logit: Logit    = two_sum(lhs, 
+                                          two_sum(two_sum(rhs_1, rhs_2, projection_storage_sz),
+                                                  two_sum(rhs_3, rhs_4, projection_storage_sz),
+                                                  projection_storage_sz),
+                                          projection_storage_sz)
+
+            new_row += [new_logit]
+
+        rs_list                 += [new_row]
+
+    return quad_shake(flatten(rotate(rs_list)), projection_storage_sz, iteration_sz - 1)
 
 #this is probably the most important implementation in the 21st century
 #point is that we are using three dimensional projection to increase the projection logics + decreasing the tree height, this is super very important to increase intellect
-#we are projecting the row context -> a tessaract => aggregating all tessaract to project a summary of the matrix for every cell, this is used as a centrality node, which is aggregated back to the old node by using a two_sum operation
+#we are projecting the row context -> a tessaract => aggregating all tessaracts to project a summary of the matrix for every cell, this is used as a centrality node, which is aggregated back to the old node by using a two_sum operation
 #we implemented the context_logit wrong, we are putting too much responsibility on the two_sum hinge which would break (imagine maxflow) if the context cannot be distributed to the base, we can't say that the next iteration's gonna fix the problem, that's not how logic works, everything in the iteration is accounted for
 #we'd want to actually cat the tessaracts on one row and do another shake, yet this would break the property of perfect squares (we have yet to find the way)
 
@@ -317,14 +478,14 @@ def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
 
     if list_sz not in [1, 3, 9, 81, 6531]:
         raise Exception()
-    
+
     if list_sz == 1:
         return [one_sum(logit_list[0], projection_storage_sz)]
 
     if list_sz == 3:
-        return [three_sum(logit_list[0], logit_list[1], logit_list[2], projection_storage_sz / 3), 
-                three_sum(logit_list[0], logit_list[1], logit_list[2], projection_storage_sz / 3),
-                three_sum(logit_list[0], logit_list[1], logit_list[3], projection_storage_sz / 3)]
+        return [three_sum(logit_list[0], logit_list[1], logit_list[2], projection_storage_sz), 
+                three_sum(logit_list[0], logit_list[1], logit_list[2], projection_storage_sz),
+                three_sum(logit_list[0], logit_list[1], logit_list[3], projection_storage_sz)]
 
     dim_sz: int                                     = cube_root(list_sz)
     two_dimensional_logit_list: list[list[Logit]]   = shape_as(logit_list, [dim_sz, dim_sz])
@@ -334,73 +495,56 @@ def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
     transformed_logit_list_3: list[list[Logit]]     = []
     transformed_logit_list_4: list[list[Logit]]     = []
 
-    #our generic formula's gonna look like this
-    #alright people, because we are extremely frustrated if the square is not either 1x1 2x1 2x2 4x4 16x16 or 256 x 256
-    #we'd want to change the implementation just for the shake of fitting the squares
-
     for i in range(dim_sz):
         feature_vec_1: list[Logit]      = list()
         feature_vec_2: list[Logit]      = list()
         feature_vec_3: list[Logit]      = list()
         feature_vec_4: list[Logit]      = list()
-        shaked_row: list[Logit]         = tri_shake(two_dimensional_logit_list[i], , iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
+        shaked_row: list[Logit]         = tri_shake(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
 
         for j in range(dim_sz):
-            #the question is probably how difficult that is the project a row -> 4 dimensional vector in a continuous, sensible space, we would want to minimize that as an engineer 
-            #if we shuffle the row, we'd put more burden on the shoulder of the shaked_row responsibility to make the representation "sensible"
-            #because a quad_shake already sets up for the get_numerical_representation to succeed, I dont think this is a necessity
-
-            first_dimension_representation: Logit   = get_numerical_representation_3(shaked_row)
-            second_dimension_representation: Logit  = get_numerical_representation_3(shaked_row) #this is easier to get the numerical representation of the row, because we'd want to avoid the extremely skewed cases of 0 1 -> 0 == context lost, assume that the quad_shake is not there, a shuffle() is a necessity, quad_shake() is to reduce the burden of distribution of context (so if this is easier then the converged curves of having the quad_shake() should be more optimal in the case)
-            third_dimension_representation: Logit   = get_numerical_representation_3(shaked_row)
-            fourth_dimension_representation: Logit  = get_numerical_representation_3(shaked_row)
+            first_dimension_representation: Logit   = threesum_tree_accumulate(shaked_row, projection_storage_sz)
+            second_dimension_representation: Logit  = threesum_tree_accumulate(shaked_row, projection_storage_sz)
+            third_dimension_representation: Logit   = threesum_tree_accumulate(shaked_row, projection_storage_sz) 
+            fourth_dimension_representation: Logit  = threesum_tree_accumulate(shaked_row, projection_storage_sz) 
 
             feature_vec_1.append(first_dimension_representation)
             feature_vec_2.append(second_dimension_representation)
             feature_vec_3.append(third_dimension_representation)
             feature_vec_4.append(fourth_dimension_representation)
 
-            #we are also OK here, we assume that the quad_shake is sufficient in the sense of uniformly distribution for twosum_binary_tree_accumulate to project a fuzzy representation of the row
-
         transformed_logit_list_1.append(feature_vec_1)
         transformed_logit_list_2.append(feature_vec_2)
         transformed_logit_list_3.append(feature_vec_3)
         transformed_logit_list_4.append(feature_vec_4)
 
-    #we are OK here
-
     rotated_transformed_logit_list_1: list[list[Logit]]     = rotate(transformed_logit_list_1)
     rotated_transformed_logit_list_2: list[list[Logit]]     = rotate(transformed_logit_list_2)
     rotated_transformed_logit_list_3: list[list[Logit]]     = rotate(transformed_logit_list_3)
     rotated_transformed_logit_list_4: list[list[Logit]]     = rotate(transformed_logit_list_4)
-
-    shaked_1: list[list[Logit]]                             = shape_as(tri_shake(flatten(rotated_transformed_logit_list_1), , iteration_sz), [dim_sz, dim_sz])
-    shaked_2: list[list[Logit]]                             = shape_as(tri_shake(flatten(rotated_transformed_logit_list_2), , iteration_sz), [dim_sz, dim_sz])
-    shaked_3: list[list[Logit]]                             = shape_as(tri_shake(flatten(rotated_transformed_logit_list_3), , iteration_sz), [dim_sz, dim_sz])
-    shaked_4: list[list[Logit]]                             = shape_as(tri_shake(flatten(rotated_transformed_logit_list_4), , iteration_sz), [dim_sz, dim_sz])
-
-    #I just have the hinge that we are missing something
-    #a tessaract representing the summary of a row state, a quad fold is probably premature
-    #imagine that we have 4 rows representing the summary of the matrix
-    #we are puting too much responsibility on the twosum joints (it is like resistance vs current in electrical circuit) of the quad fold to further the summary 
-    #in other words, we can't assume uniform responsibility of cells of the first and second row, it differs to have logit 1 twosum logit 2 vs logit 1 twosum logit 3
-    #we'd fix this problem later
-
-    context_logit: list[list[Logit]]                        = shape_as(tri_shake(flatten(shaked_1) + flatten(shaked_2) + flatten(shaked_3) + flatten(shaked_4), ), [dim_sz, dim_sz])
-
-    #we are OK here
-
-    # transformed_four_dimensional_logit_list = [quad_fold(quad_shake(quad_partition(flatten(feature_vec)), , iteration_sz), ) for feature_vec in transformed_four_dimensional_logit_list] #this is not a smaller square, which can either do not have a recursive base or not a square
-    #we are still OK here
-
     rs_list: list[list[Logit]]                              = []
 
     for i in range(dim_sz):
-        lhs: list[Logit]    = two_dimensional_logit_list[i]
-        rhs: list[Logit]    = context_logit[i]
-        rs_list             += [two_fold(lhs + rhs)]
+        lhs: list[Logit]        = two_dimensional_logit_list[i]
+        rhs_1: list[Logit]      = tri_shake(rotated_transformed_logit_list_1[i], projection_storage_sz, iteration_sz)
+        rhs_2: list[Logit]      = tri_shake(rotated_transformed_logit_list_2[i], projection_storage_sz, iteration_sz)
+        rhs_3: list[Logit]      = tri_shake(rotated_transformed_logit_list_3[i], projection_storage_sz, iteration_sz)
+        rhs_4: list[Logit]      = tri_shake(rotated_transformed_logit_list_4[i], projection_storage_sz, iteration_sz)
+        new_row: list[Logit]    = []
 
-    return tri_shake(flatten(rotate(rs_list)), , iteration_sz - 1)
+        for j in range(dim_sz):
+            new_logit: Logit    = two_sum(lhs, 
+                                          two_sum(two_sum(rhs_1, rhs_2, projection_storage_sz),
+                                                  two_sum(rhs_3, rhs_4, projection_storage_sz),
+                                                  projection_storage_sz),
+                                          projection_storage_sz)
+
+            new_row += [new_logit]
+
+        rs_list                 += [new_row]
+
+    return tri_shake(flatten(rotate(rs_list)), projection_storage_sz , iteration_sz - 1)
+
 #
 class MatMulPolicy:
 
