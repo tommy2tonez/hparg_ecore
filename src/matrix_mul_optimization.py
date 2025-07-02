@@ -493,53 +493,63 @@ def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
     transformed_logit_list_1: list[list[Logit]]     = []
     transformed_logit_list_2: list[list[Logit]]     = []
     transformed_logit_list_3: list[list[Logit]]     = []
-    transformed_logit_list_4: list[list[Logit]]     = []
 
     for i in range(dim_sz):
         feature_vec_1: list[Logit]      = list()
         feature_vec_2: list[Logit]      = list()
         feature_vec_3: list[Logit]      = list()
-        feature_vec_4: list[Logit]      = list()
         shaked_row: list[Logit]         = tri_shake(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
 
         for j in range(dim_sz):
             first_dimension_representation: Logit   = threesum_tree_accumulate(shaked_row, projection_storage_sz)
             second_dimension_representation: Logit  = threesum_tree_accumulate(shaked_row, projection_storage_sz)
             third_dimension_representation: Logit   = threesum_tree_accumulate(shaked_row, projection_storage_sz) 
-            fourth_dimension_representation: Logit  = threesum_tree_accumulate(shaked_row, projection_storage_sz) 
 
             feature_vec_1.append(first_dimension_representation)
             feature_vec_2.append(second_dimension_representation)
             feature_vec_3.append(third_dimension_representation)
-            feature_vec_4.append(fourth_dimension_representation)
 
         transformed_logit_list_1.append(feature_vec_1)
         transformed_logit_list_2.append(feature_vec_2)
         transformed_logit_list_3.append(feature_vec_3)
-        transformed_logit_list_4.append(feature_vec_4)
+
+    #everything before this line is not changable
+
+    #in order for the induction to work, we have to assume that every cell in the matrix is self-representable, we'd have to assume that the matrix would learn the way
+    #this means that we'd have to increase the cell information, essentially increasing the dimensions of the cells not their storage in order for this to work
+    #imagine that this is a real graph, every cell in the matrix is a node, and we are doing centrality on the graph
+
+    #this morning I was doing an analysis of joint pressure
+    #it seems like the problem only arises (specifically the maltransform) if the context logit (twosum(twosum(rhs_1, rhs_2), twosum(rh3, rh4))) is saturated
+    #                                                                         the context logit is not logically representable (everything in two dimensions isn't sensible, it's very super hard to describe things in two dimensions without context collisions or decreasing the euclidean relevancy)
+
+    #we'd attempt to fix the problem by actually doing a four sum projection, because it would fix the joint pressure by splitting the intermediate representation (the centrality representation) into a three dimensional context (not only that this increases the representable dimensions, but also increase the amount of minimum storable, so this is a win-win) 
+
+    #the second problem is the shake of the individual summary frames, we are losing the global context from the tessaracts
 
     rotated_transformed_logit_list_1: list[list[Logit]]     = rotate(transformed_logit_list_1)
     rotated_transformed_logit_list_2: list[list[Logit]]     = rotate(transformed_logit_list_2)
     rotated_transformed_logit_list_3: list[list[Logit]]     = rotate(transformed_logit_list_3)
-    rotated_transformed_logit_list_4: list[list[Logit]]     = rotate(transformed_logit_list_4)
     rs_list: list[list[Logit]]                              = []
 
     for i in range(dim_sz):
-        lhs: list[Logit]        = two_dimensional_logit_list[i]
-        rhs_1: list[Logit]      = tri_shake(rotated_transformed_logit_list_1[i], projection_storage_sz, iteration_sz)
-        rhs_2: list[Logit]      = tri_shake(rotated_transformed_logit_list_2[i], projection_storage_sz, iteration_sz)
-        rhs_3: list[Logit]      = tri_shake(rotated_transformed_logit_list_3[i], projection_storage_sz, iteration_sz)
-        rhs_4: list[Logit]      = tri_shake(rotated_transformed_logit_list_4[i], projection_storage_sz, iteration_sz)
-        new_row: list[Logit]    = []
+        lhs: list[Logit]                = two_dimensional_logit_list[i]
+        ctx_list: list[Logit]           = rotated_transformed_logit_list_1[i] + rotated_transformed_logit_list_2[i] + rotated_transformed_logit_list_3[i]
+        shaked_ctx_list: list[Logit]    = tri_shake(ctx_list, projection_storage_sz, iteration_sz) #I was mentioning this
+        new_row: list[Logit]            = []
 
         for j in range(dim_sz):
-            new_logit: Logit    = two_sum(lhs, 
-                                          two_sum(two_sum(rhs_1, rhs_2, projection_storage_sz),
-                                                  two_sum(rhs_3, rhs_4, projection_storage_sz),
-                                                  projection_storage_sz),
-                                          projection_storage_sz)
+            idx_1: int          = j
+            idx_2: int          = idx_1 + dim_sz
+            idx_3: int          = idx_2 + dim_sz
 
-            new_row += [new_logit]
+            new_logit: Logit    = four_sum(lhs[j],
+                                           shaked_ctx_list[idx_1],
+                                           shaked_ctx_list[idx_2],
+                                           shaked_ctx_list[idx_3],
+                                           projection_storage_sz)
+
+            new_row             += [new_logit]
 
         rs_list                 += [new_row]
 
