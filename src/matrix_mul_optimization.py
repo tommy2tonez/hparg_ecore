@@ -583,10 +583,13 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
     dim_sz: int                                         = sqrt(list_sz)
     two_dimensional_logit_list: list[list[LogitPack]]   = shape_as(logit_list, [dim_sz, dim_sz])
     transformed_logit_list: list[list[LogitPack]]       = []
+    transformed_logit_list_2: list[list[LogitPack]]     = []
 
     for i in range(dim_sz):
-        shaked_row: list[LogitPack] = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
+        shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
         transformed_logit_list.append(shaked_row)
+        shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
+        transformed_logit_list_2.append(shaked_row_2)
 
     transformed_logit_list          = rotate(transformed_logit_list)
     rs_list: list[list[LogitPack]]  = []
@@ -595,10 +598,12 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
         org_list: list[LogitPack]           = two_dimensional_logit_list[i]
         ctx_list: list[LogitPack]           = transformed_logit_list[i]
         shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, iteration_sz)
+        other_ctx_list: list[LogitPack]     = transformed_logit_list_2[i]
+
         new_row: list[LogitPack]            = []
 
         for j in range(dim_sz):
-            new_logit: LogitPack    = pack_two_sum(org_list[j], ctx_list[j], projection_storage_sz, iteration_sz) #this is where I can't prove, the recursive property is detached at this point
+            new_logit: LogitPack    = pack_threesum(org_list[j], ctx_list[j], other_ctx_list[j], projection_storage_sz, iteration_sz) #this is where I can't prove, the recursive property is detached at this point, because I can't prove if it is more efficient than a pure row transformation, I'd have to add that as an optional information to make sure that we are covering the corner cases 
             new_row                 += [new_logit]
 
         rs_list                             += [new_row]
