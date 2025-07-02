@@ -555,16 +555,20 @@ def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
 
     return tri_shake(flatten(rotate(rs_list)), projection_storage_sz , iteration_sz - 1)
 
-#what if I'm telling you that a minor twist would change the entire industry of logit transforming
-#hint, it's the unit problem, we are transforming 1 logit, how about a pack of 8 logits as a base 
-#what is the mathematical connections between this and our taylor projection?
-#I dont have a faintest clue
-#what I do know is that a multidimensional word is better than a one dimensional word for a given datatype (uint8_t) for example, we can have 8 dimensions of 1 bit or 4 dimensions of 2 bits or 1 dimension of 8 bits
-#and that one dimensional word is a centrality node in our tensor graph
+#what amazed me is these lines of code being actually sufficient to approximate a very intellectual being
+#we are missing a map + reduce function to evaluate the directions of these guys (we'd want to train on a complete dataset at once)
+#yet we are still using the search implementation to train neural networks
+#the algorithm is not hard to be understood, it's essentially a very dense network running on centrality, each node contains a multidimensional word to communicate with their neighbors efficiently
+#we are training to extract the centrality algorithm, so there are centrality rules that could be reused, like in linear one row == multiple cols
 
-#the problem now is that are we summarizing correctly?
-#in other words, we don't have the dimension problems but now the logit saturation problem, we aren't having enough space to store the summary of an arbitrary row 
-#I guess I'd write the equation later, yet I think this should be OK for our stock projection proof of concept, we are running low on money guys 
+#when I was trying to prove if the global_ctx_list > row_ctx_list, it's a hard proof to work on
+#assume that shake_x is sufficient to approx everything
+#we are stuck at the pack_threesum, we can prove that the result of the pack_threesum is better than that of the row_ctx version right after the evaluation
+#yet we can't prove that another shake (or pack_threesum) would reduce the quality of the logits which would hinder the induction proof
+#alright, so the problem is that the pack_threesum being not sufficient to continue the "sufficient to approx everything" (this is the logic loophole)
+
+#in other words, the returning result is an intermediate result, not an argument to the next which can be directly compared
+#so we actually went on with both, the row_ctx and the global_ctx version, which can only be better, not worse
 
 def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
 
@@ -599,7 +603,6 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
         ctx_list: list[LogitPack]           = transformed_logit_list[i]
         shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, iteration_sz)
         other_ctx_list: list[LogitPack]     = transformed_logit_list_2[i]
-
         new_row: list[LogitPack]            = []
 
         for j in range(dim_sz):
