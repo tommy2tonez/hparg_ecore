@@ -535,7 +535,7 @@ def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
     for i in range(dim_sz):
         lhs: list[Logit]                = two_dimensional_logit_list[i]
         ctx_list: list[Logit]           = rotated_transformed_logit_list_1[i] + rotated_transformed_logit_list_2[i] + rotated_transformed_logit_list_3[i]
-        shaked_ctx_list: list[Logit]    = tri_shake(ctx_list, projection_storage_sz, iteration_sz) #I was mentioning this
+        shaked_ctx_list: list[Logit]    = tri_shake(ctx_list, projection_storage_sz, iteration_sz)
         new_row: list[Logit]            = []
 
         for j in range(dim_sz):
@@ -555,7 +555,23 @@ def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
 
     return tri_shake(flatten(rotate(rs_list)), projection_storage_sz , iteration_sz - 1)
 
-#
+#what if I'm telling you that a minor twist would change the entire industry of logit transforming
+#hint, it's the unit problem, we are transforming 1 logit, how about a pack of 8 logits as a base 
+
+def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
+
+    list_sz: int = len(logit_list)
+
+    if list_sz not in [1, 2, 4, 16, 256, 65536]:
+        raise Exception()
+
+    if list_sz == 1:
+        return [pack_one_sum(logit_list[0], projection_storage_sz)]
+
+    if list_sz == 2:
+        return [pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz),
+                pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz)] 
+
 class MatMulPolicy:
 
     def get_order() -> list[list[int]]:
