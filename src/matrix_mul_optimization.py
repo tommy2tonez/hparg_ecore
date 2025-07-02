@@ -557,6 +557,14 @@ def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
 
 #what if I'm telling you that a minor twist would change the entire industry of logit transforming
 #hint, it's the unit problem, we are transforming 1 logit, how about a pack of 8 logits as a base 
+#what is the mathematical connections between this and our taylor projection?
+#I dont have a faintest clue
+#what I do know is that a multidimensional word is better than a one dimensional word for a given datatype (uint8_t) for example, we can have 8 dimensions of 1 bit or 4 dimensions of 2 bits or 1 dimension of 8 bits
+#and that one dimensional word is a centrality node in our tensor graph
+
+#the problem now is that are we summarizing correctly?
+#in other words, we don't have the dimension problems but now the logit saturation problem, we aren't having enough space to store the summary of an arbitrary row 
+#I guess I'd write the equation later, yet I think this should be OK for our stock projection proof of concept, we are running low on money guys 
 
 def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
 
@@ -570,7 +578,32 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
 
     if list_sz == 2:
         return [pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz),
-                pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz)] 
+                pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz)]
+
+    dim_sz: int                                         = sqrt(list_sz)
+    two_dimensional_logit_list: list[list[LogitPack]]   = shape_as(logit_list, [dim_sz, dim_sz])
+    transformed_logit_list: list[list[LogitPack]]       = []
+
+    for i in range(dim_sz):
+        shaked_row: list[LogitPack] = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
+        transformed_logit_list.append(shaked_row)
+
+    transformed_logit_list          = rotate(transformed_logit_list)
+    rs_list: list[list[LogitPack]]  = []
+
+    for i in range(dim_sz):
+        org_list: list[LogitPack]           = two_dimensional_logit_list[i]
+        ctx_list: list[LogitPack]           = transformed_logit_list[i]
+        shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, iteration_sz)
+        new_row: list[LogitPack]            = []
+
+        for j in range(dim_sz):
+            new_logit: LogitPack    = pack_two_sum(org_list[j], ctx_list[j], projection_storage_sz, iteration_sz) #this is where I can't prove, the recursive property is detached at this point
+            new_row                 += [new_logit]
+
+        rs_list                             += [new_row]
+
+    return shake_x(flatten(rotate(rs_list)), projection_storage_sz, iteration_sz - 1) 
 
 class MatMulPolicy:
 
