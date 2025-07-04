@@ -659,6 +659,46 @@ def pack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, project
 #the remaining problem is the map-reduce problem, we'd want to "stitch" the projection space by projecting all output for a set of inputs, and accumulate the deviation and move in the direction
 #and the Wanted problem, the mis-stitch would require a reverse operation + etc., a train that keeps moving forward and removing the commits as fast as possible
 
+#this is a very important lecture
+#the increasing the dimension from 1 dimension -> 3 dimensions would still have the same <storage> or pointer numerical range, but the euclidean relevancy are hugely changed in the senses of sorting relevant things together or allowing that to happen, this is very important for the succeeding projections
+#the optimal solution would probably somewhere around 12 dimensions hyperspace in string theory
+
+#the question that I've always wanted to answer is "given a context space (domain space) and their optimal all pairs relevancy scores," could we somehow arrange them in an arbitrary euclidean space that their euclidean distances == relevancy scores
+
+#alright, so the solution would be making a graph to connect all points, draw a circle or a sphere to pick the next position for the neighbors  
+#if the neighbor has not been previously mentioned, we are OK, we are fine, mission accomplished
+#but if the neighbor has been previously mentioned, we'd have to find the best position in the stack to make sure we could minimize the distance
+#we are back to our beloved problem, the rotating two arms problem, which is used for one-dimensionalizing the projection space, so essentially, the second point could be anywhere in the space 
+#a greedy approach would be to bind the neighbors that have not been previously mentioned, and run the multiarms algorithm to find the coordinate where the cosine distance is minimal compared to the original all-pair scores space
+#the exact answer to this question is rather very hard to mathematically describe, we just dont have the words for that yet, so our best bet is increasing the dimensions and hope that it actually works (theoretically, increasing the dimensions can only be better, not worse, for the lower dimension answer is a subset of that)
+
+#the two arms is actually the answer to everything, we can prove that the tip the two arms chain could reach every point in the graph, thus further the induction of placing a certain point on the graph 
+#we'd need to chain the arms in order to prove that arm_1, arm_2, arm_3, etc.
+#                                                   [   two_arm ]
+#                                                         [   two_arm  ]
+#yet this is only the greedy approach, because we can't really change the previous coordinates, but rather placing the next coordinates on the graph where it would be locally best
+
+#alright, so what if we could somehow featurize an input as binaries, 0 means doesn't have the feature, 1 means has the feature
+#we could prove the completeness of relevancy projection, but the question of whether this is equivalent to the relevancy score is an entire another topic to talk about
+
+#how about we approach this at a different perspective, angle?
+#how about we assume that we have found the euclidean projection space for the previous n - 1 pairs, we are to further the induction for the current coordinate
+#okay, we'd have to keep a dictionary of all possible previouses, and we'd want to maintain that for the current coordinate
+#it is an intersection of the previous possible set and the current set of restrictions, we'd have to write the formula for this
+#theoretically we could solve this by using discretization of projection space + recursion (dynamic programming), we just dont have the exact number for this
+#this is actually an optimizable, we'd want to demote the projection space to speed up the search time
+
+#why does this sound like nucleus and electron?
+
+#we need to think of the LogitPack as an operating brain, we are gossiping the information to stitch the complete picture
+#so what's the problem? our brain cannot be changed from first -> last like the transformer, because it would loose the context in the way, the brain at the latter phases is not as general in the sense of entropy as the brain at the former phases
+
+#we'd need to map each initial cell -> an arbitrary brain (which we'd call LogitPack), this is the embedding layer in torch
+#we'd do gossiping, or centrality on the set of brains, and project the brain back to the original cell form 
+
+#the function is correctly implemented in the sense of brain gossiping
+#we'd want to implement another function on top of this function to do f(x) -> y, f'(y) -> x
+
 def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
 
     list_sz: int = len(logit_list)
