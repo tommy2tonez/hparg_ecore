@@ -570,6 +570,95 @@ def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz:
 #in other words, the returning result is an intermediate result, not an argument to the next which can be directly compared
 #so we actually went on with both, the row_ctx and the global_ctx version, which can only be better, not worse
 
+def fourpack_onesum(lhs: LogitPack) -> LogitPack:
+
+    if lhs.size() != 4:
+        raise Exception() 
+
+    lhs_0_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_0_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_0_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_0_3: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+
+    return LogitPack([lhs_0_0, lhs_0_1, lhs_0_2, lhs_0_3])
+
+def fourpack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
+
+    if lhs.size() != 4:
+        raise Exception()
+
+    if rhs.size() != 4:
+        raise Exception()
+
+    lhs_0_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_0_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_0_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    rhs_0_0: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+    rhs_0_1: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+    rhs_0_2: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+
+    rs_0: Logit     = six_sum(lhs_0_0, lhs_0_1, lhs_0_2, rhs_0_0, rhs_0_1, rhs_0_2, projection_storage_sz)
+
+    lhs_1_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_1_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_1_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    rhs_1_0: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+    rhs_1_1: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+    rhs_1_2: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+
+    rs_1: Logit     = six_sum(lhs_1_0, lhs_1_1, lhs_1_2, rhs_1_0, rhs_1_1, rhs_1_2, projection_storage_sz)   
+
+    lhs_2_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_2_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_2_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    rhs_2_0: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+    rhs_2_1: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+    rhs_2_2: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+
+    rs_2: Logit     = six_sum(lhs_2_0, lhs_2_1, lhs_2_2, rhs_2_0, rhs_2_1, rhs_2_2, projection_storage_sz)
+
+    lhs_3_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_3_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    lhs_3_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
+    rhs_3_0: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+    rhs_3_1: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+    rhs_3_2: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
+
+    rs_3: Logit     = six_sum(lhs_3_0, lhs_3_1, lhs_3_2, rhs_3_0, rhs_3_1, rhs_3_2, projection_storage_sz)
+
+    return LogitPack([rs_0, rs_1, rs_2, rs_3])
+
+#alright, it's a coincidence but it seems like 420.69 is unevitable
+
+def fourpack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, projection_storage_sz: int) -> LogitPack:
+
+    return fourpack_twosum(fourpack_twosum(first, second, projection_storage_sz), third, projection_storage_sz)
+
+def pack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
+
+    if lhs.size() == 4 and rhs.size() == 4:
+        return fourpack_twosum(lhs, rhs, projection_storage_sz)
+
+    raise Exception()
+
+def pack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, projection_storage_sz: int) -> LogitPack:
+
+    if first.size() == 4 and second.size() == 4 and third.size() == 4:
+        return fourpack_threesum(first, second, third, projection_storage_sz)
+
+    raise Exception()
+
+#alright, probably there are a lot of different ways to approximate a projection space, but I'd stick with the continuous differential approach
+#the sole improvement that we made is making every cell a tessaract, this helps with the centrality communication (if two random nodes are one-dimensionals, they'd be talking in a very bad language, ambiguous, not clear), we made the two nodes 4 dimensionals
+
+#we faced the storage_sz constraints, ideally, when we join two tessaracts, we'd want to keep the sum <= 4
+#yet 4 sums would be two two-dimensional-nodes
+#so we'd want to make it 6-sum, because it would be 2 three-dimensional-nodes, which is OK
+#we further improved it by making it a tessaract and project the tessaract to 3 dimensions, so it could only be better not worse 
+
+#the remaining problem is the map-reduce problem, we'd want to "stitch" the projection space by projecting all output for a set of inputs, and accumulate the deviation and move in the direction
+#and the Wanted problem, the mis-stitch would require a reverse operation + etc., a train that keeps moving forward and removing the commits as fast as possible
+
 def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
 
     list_sz: int = len(logit_list)
@@ -606,7 +695,7 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
         new_row: list[LogitPack]            = []
 
         for j in range(dim_sz):
-            new_logit: LogitPack    = pack_threesum(org_list[j], ctx_list[j], other_ctx_list[j], projection_storage_sz, iteration_sz) #this is where I can't prove, the recursive property is detached at this point, because I can't prove if it is more efficient than a pure row transformation, I'd have to add that as an optional information to make sure that we are covering the corner cases 
+            new_logit: LogitPack    = pack_threesum(org_list[j], other_ctx_list[j], shaked_ctx_list[j], projection_storage_sz, iteration_sz) #this is where I can't prove, the recursive property is detached at this point, because I can't prove if it is more efficient than a pure row transformation, I'd have to add that as an optional information to make sure that we are covering the corner cases 
             new_row                 += [new_logit]
 
         rs_list                             += [new_row]
