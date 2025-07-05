@@ -711,6 +711,20 @@ def pack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, project
 #an attempt to train a very large network would result in a very very undesirable result
 #this is precisely why compression rate of 0.1% is important, we dont know how to reach the level of intellectual otherwise
 
+#problems:
+#the joints from the lower layers would collapse due to context saturation
+#we'd have to keep the original context throughout the centrality gossip
+
+#essentially, we'd want to have a channel for gossiping and a channel to store the org_x
+#alright, another upgrade from keeping the original would be having a sliding decay window of context trails, just to make sure that we aren't stressing the lower layers, it'd be very bad in terms of logit density distribution
+#                                                                                                             because the upper layers having the same storage sz are not doing as much job as the lower layers (or it is bottlenecked by the lower layers) 
+
+#we'd be working on this brain for a month or two to get some financial aids first
+#it's not that complicated
+#the formula is simple: centrality, 3 dimensional array, tessaracts, a centrality algorithm, Multidimensional Taylor projections + trailing memorizations + map-reduce search + multiprecision lib + a tons of compute power to compute | project at unprecended speed + erase commits at that speed also
+#recall the train in Wanted, no trains get stopped on the bridge
+#we wont be getting lots of money, a couple hundred mils is good enough for us to keep the project going + hire some people
+
 def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
 
     list_sz: int = len(logit_list)
