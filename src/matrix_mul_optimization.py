@@ -699,6 +699,18 @@ def pack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, project
 #the function is correctly implemented in the sense of brain gossiping
 #we'd want to implement another function on top of this function to do f(x) -> y, f'(y) -> x
 
+#the joining of the two centrality nodes is probably the hinge that is difficult to solve
+#theoretically, the algorithm works as projection_storage_sz approaches -> oo
+#we'd definitely need to offset the theoretical
+
+#because we are very precise people, we'd want to use finite decimal place implementation from BigNum, a missing 1000th decimal place would have a devastating effect on the network
+#and we'd want to use map-reduce to train the network, essentially we are projecting all the outputs for the current network given the inputs, comparing to that of the instrument, and inch forward in the direction
+#in order for that to happen, we'd need to strictly stay on the differential territory, there is no softmax, no square_root, no etc., just Taylor Series and friends 
+
+#the problem of these networks is that we can't be greedy, we'd want to stay on the 1KB -> 64KB network to get the best of the network, and kind of scale from the smaller networks
+#an attempt to train a very large network would result in a very very undesirable result
+#this is precisely why compression rate of 0.1% is important, we dont know how to reach the level of intellectual otherwise
+
 def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
 
     list_sz: int = len(logit_list)
