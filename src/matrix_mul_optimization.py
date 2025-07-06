@@ -721,9 +721,25 @@ def pack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, project
 
 #we'd be working on this brain for a month or two to get some financial aids first
 #it's not that complicated
-#the formula is simple: centrality, 3 dimensional array, tessaracts, a centrality algorithm, Multidimensional Taylor projections + trailing memorizations + map-reduce search + multiprecision lib + a tons of compute power to compute | project at unprecended speed + erase commits at that speed also
+#the formula is simple: centrality, 3 dimensional array, tessaracts, a centrality algorithm, Multidimensional Taylor projections + trailing memorizations + map-reduce search + multiprecision lib + tons of compute power to compute | project at unprecended speed + erase commits at that speed also
 #recall the train in Wanted, no trains get stopped on the bridge
 #we wont be getting lots of money, a couple hundred mils is good enough for us to keep the project going + hire some people
+
+#we are missing a plus operation, a diagonal operation, and a channel operation
+
+#at the high level, we are having our original context floating around and a gossip context
+#a gossip context is a product of another gossip context and another original context
+#this is getting confusing
+
+#a window of original context interaction to make sure that we are "reminding" the matrix of their initial missions, not to have destructive interferences because we can't transcend from the original context
+#this requires a carefully engineered reminding window to work
+
+#a centrality node join == two gossip values interacting, by a plus operation (alright, they got this right) 
+#the plus acts as a calibration layer for communication, the original context is there to cancel the ripple effect of mis-calibrated
+
+#the solely two sum operation only works as the storage sz approaches infinity, we are forcing a recontext at this point to make sure that our base joints are intact
+#we'd want to offset that by forcing the two sum to approximate a calibration layer, which we'd want to peel the calibration layer one by one
+#so instead of having the twosum to be accurate 100% about the projecting context, we just need it to approx a delta to move the current context into a valid context  
 
 def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
 
