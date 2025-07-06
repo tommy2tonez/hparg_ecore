@@ -741,19 +741,21 @@ def pack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, project
 #we'd want to offset that by forcing the two sum to approximate a calibration layer, which we'd want to peel the calibration layer one by one
 #so instead of having the twosum to be accurate 100% about the projecting context, we just need it to approx a delta to move the current context into a valid context  
 
+#not normally what i'd say but this is way more complicated than I think
+
 def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
+
+    if iteration_sz == 0:
+        return logit_list 
 
     list_sz: int = len(logit_list)
 
-    if list_sz not in [1, 2, 4, 16, 256, 65536]:
+    if list_sz not in [2, 4, 16, 256, 65536]:
         raise Exception()
-
-    if list_sz == 1:
-        return [pack_one_sum(logit_list[0], projection_storage_sz)]
 
     if list_sz == 2:
         return [pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz),
-                pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz)]
+                pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz)] #this is it, this is where we bet our $100 MM dollar on, this is the very line that would decide literally everything, this is the only line that could be improved also
 
     dim_sz: int                                         = sqrt(list_sz)
     two_dimensional_logit_list: list[list[LogitPack]]   = shape_as(logit_list, [dim_sz, dim_sz])
@@ -762,9 +764,9 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
 
     for i in range(dim_sz):
         shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
-        transformed_logit_list.append(shaked_row)
+        transformed_logit_list          += [shaked_row]
         shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
-        transformed_logit_list_2.append(shaked_row_2)
+        transformed_logit_list_2        += [shaked_row_2]
 
     transformed_logit_list          = rotate(transformed_logit_list)
     rs_list: list[list[LogitPack]]  = []
@@ -777,12 +779,35 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
         new_row: list[LogitPack]            = []
 
         for j in range(dim_sz):
-            new_logit: LogitPack    = pack_threesum(org_list[j], other_ctx_list[j], shaked_ctx_list[j], projection_storage_sz, iteration_sz) #this is where I can't prove, the recursive property is detached at this point, because I can't prove if it is more efficient than a pure row transformation, I'd have to add that as an optional information to make sure that we are covering the corner cases 
+            new_logit: LogitPack    = sum_accum(org_list[j], other_ctx_list[j], shaked_ctx_list[j]) #this I what could prove
+                                                                                                    #because the sum operation is a calibration operation
+                                                                                                    #so essentially we are peeling one layer followed by the next layer like an onion
+                                                                                                    #this is very hard to visualize but we'd have to think of the output back to the input kind of projection space initially it is f(x) -> x, followed by f(x) -> x + y0, f(x) -> x + y0 + y1 + ... f(x) -> y
+                                                                                                    #instead of accurately projecting one accurate layer, we'd just need to project a very thin layer that is always correct
+                                                                                                    #we have to think of the projection space as a unit, not indepedent values
+                                                                                                    #the problem of maxflow is the https://leetcode.com/problems/game-of-life/description/
+                                                                                                    #alright, if we aren't projecting the very thin layer correctly, the next layer is going to be corrupted, this is precisely where the reminder kicks in, we dont want to add more parameters or arguments to the sum_accum
+                                                                                                    #just to make sure that we are not row-major people, we'd literally want to do a rotate and essentially this again to project the thin layer correctly (we are afraid that the thin layer information is not in the row, not the logit density)
+                                                                                                    #I can't prove that would cancel the destructive interference from the row just yet, yet it'd definitely wire connections that'd help us with bouncing the string projection space (we are doing search, we dont really care about the small picture but the overall logit flowables)
             new_row                 += [new_logit]
 
-        rs_list                             += [new_row]
+        rs_list += [new_row]
 
-    return shake_x(flatten(rotate(rs_list)), projection_storage_sz, iteration_sz - 1) 
+    rotated_two_dimensional_logit_list: list[list[LogitPack]]   = rotate(two_dimensional_logit_list)
+    other_rs_list: list[list[LogitPack]]                        = []
+
+    for i in range(dim_sz):
+        org_list: list[LogitPack]   = rotated_two_dimensional_logit_list[i]
+        ctx_list: list[LogitPack]   = shake_x(org_list, projection_storage_sz, iteration_sz)
+        new_row: list[LogitPack]    = []
+
+        for j in range(dim_sz):
+            new_logit: LogitPack    = ctx_list[j]
+            new_row                 += [new_logit]
+
+        other_rs_list += [new_row]
+    
+    return shake_x(pairwise_sum_accum(flatten(rotate(rs_list)), flatten(other_rs_list)), projection_storage_sz, iteration_sz - 1) 
 
 class MatMulPolicy:
 
