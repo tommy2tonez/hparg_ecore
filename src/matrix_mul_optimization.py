@@ -771,7 +771,10 @@ def sum_accum(*args) -> LogitPack:
 
 #not normally what i'd say but this is way more complicated than I think
 
-def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_sz: int) -> list[LogitPack]:
+def shake_x(logit_list: list[LogitPack],
+            projection_storage_sz: int,
+            iteration_sz: int,
+            decay_rate: int) -> list[LogitPack]:
 
     if iteration_sz == 0:
         return logit_list 
@@ -786,7 +789,7 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
         delta_pack_1: LogitPack = pack_two_sum(logit_list[1], logit_list[0], projection_storage_sz)
         new_logit_0: LogitPack  = sum_accum(logit_list[0], delta_pack_0)
         new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
-        rs: list[LogitPack]     = shake_x([new_logit_0, new_logit_1], projection_storage_sz, iteration_sz - 1)
+        rs: list[LogitPack]     = shake_x([new_logit_0, new_logit_1], projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate)
 
         return rs #this is it, this is where we bet our $100 MM dollar on, this is the very line that would decide literally everything, this is the only line that could be improved also
                   #this has to be a sum operation, this is concluded after I literally sleeping on the matter
@@ -804,11 +807,11 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
     transformed_logit_list_3: list[list[LogitPack]]             = []
 
     for i in range(dim_sz):
-        shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
+        shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz, decay_rate)
         transformed_logit_list          += [shaked_row]
-        shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
+        shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz, decay_rate)
         transformed_logit_list_2        += [shaked_row_2]
-        shaked_row_3: list[LogitPack]   = shake_x(rotated_two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
+        shaked_row_3: list[LogitPack]   = shake_x(rotated_two_dimensional_logit_list[i], projection_storage_sz, iteration_sz, decay_rate)
         transformed_logit_list_3        += [shaked_row_3]
 
     transformed_logit_list          = rotate(transformed_logit_list)
@@ -818,7 +821,7 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
     for i in range(dim_sz):
         org_list: list[LogitPack]           = two_dimensional_logit_list[i]
         ctx_list: list[LogitPack]           = transformed_logit_list[i]
-        shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, iteration_sz)
+        shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, iteration_sz, decay_rate)
         other_ctx_list: list[LogitPack]     = transformed_logit_list_2[i]
         other_ctx_list_2: list[LogitPack]   = transformed_logit_list_3[i] 
         new_row: list[LogitPack]            = []
@@ -839,12 +842,16 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
                                                                      #I can't prove that would cancel the destructive interference from the row just yet, yet it'd definitely wire connections that'd help us with bouncing the string projection space (we are doing search, we dont really care about the small picture but the overall logit flowables)
                                                                      #if we do solely row, we'd force the global context to flow in the row direction (I'm talking in the rotated relative sense) which would introduce "congestion" at the variables which would cause logit saturation
                                                                      #we'd want to ease the burden of "knowledge transfer" from those cells by building "logit roads" from col, row and col_row
+                                                                     #because the logit saturation at the bases are way more serious | important that that of the upper layers, we'd have to offset the storage by using a decay_rate to balance out the logit density equation
+                                                                     #https://leetcode.com/problems/first-bad-version/
+                                                                     #I dont really have another way to solve this problem, because we are transforming the projection space, from hard + something -> med + something -> easy + something -> etc.
+                                                                     #what we know for sure is that if the former versions could not withhold the strings, the latter versions gonna fail, which we would want to solve by increasing more logits for the former layers, there would be a reduntdant logit layer, which we'd offset by using decay_rate
  
             new_row                 += [new_logit]
 
         rs_list += [new_row]
 
-    return shake_x(flatten(rotate(rs_list)), projection_storage_sz, iteration_sz - 1) 
+    return shake_x(flatten(rotate(rs_list)), projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate) 
 
 class MatMulPolicy:
 
