@@ -634,10 +634,27 @@ def fourpack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, pro
 
     return fourpack_twosum(fourpack_twosum(first, second, projection_storage_sz), third, projection_storage_sz)
 
+def threepack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
+
+    if lhs.size() != 3:
+        raise Exception()
+
+    if rhs.size() != 3:
+        raise Exception()
+
+    rs_0: Logit     = six_sum(lhs[0], lhs[1], lhs[2], rhs[0], rhs[1], rhs[2], projection_storage_sz)
+    rs_1: Logit     = six_sum(lhs[0], lhs[1], lhs[2], rhs[0], rhs[1], rhs[2], projection_storage_sz)
+    rs_2: Logit     = six_sum(lhs[0], lhs[1], lhs[2], rhs[0], rhs[1], rhs[2], projection_storage_sz)
+
+    return LogitPack([rs_0, rs_1, rs_2]) 
+
 def pack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
 
     if lhs.size() == 4 and rhs.size() == 4:
         return fourpack_twosum(lhs, rhs, projection_storage_sz)
+
+    if lhs.size() == 3 and rhs.size() == 3:
+        return threepack_twosum(lhs, rhs, projection_storage_sz)
 
     raise Exception()
 
@@ -647,6 +664,17 @@ def pack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, project
         return fourpack_threesum(first, second, third, projection_storage_sz)
 
     raise Exception()
+
+def sum_accum_2(lhs: LogitPack, rhs: LogitPack) -> LogitPack:
+
+    if lhs.size() != rhs.size():
+        raise Exception()
+
+    return LogitPack([sum(pair) for pair in zip(lhs.as_list(), rhs.as_list())])
+
+def sum_accum(*args) -> LogitPack:
+
+    return functools.reduce(sum_accum_2, args[1:], args[0]) 
 
 #alright, probably there are a lot of different ways to approximate a projection space, but I'd stick with the continuous differential approach
 #the sole improvement that we made is making every cell a tessaract, this helps with the centrality communication (if two random nodes are one-dimensionals, they'd be talking in a very bad language, ambiguous, not clear), we made the two nodes 4 dimensionals
@@ -754,21 +782,37 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
         raise Exception()
 
     if list_sz == 2:
-        return [pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz),
-                pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz)] #this is it, this is where we bet our $100 MM dollar on, this is the very line that would decide literally everything, this is the only line that could be improved also
+        delta_pack_0: LogitPack = pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz)
+        delta_pack_1: LogitPack = pack_two_sum(logit_list[1], logit_list[0], projection_storage_sz)
+        new_logit_0: LogitPack  = sum_accum(logit_list[0], delta_pack_0)
+        new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
+        rs: list[LogitPack]     = shake_x([new_logit_0, new_logit_1], projection_storage_sz, iteration_sz - 1)
 
-    dim_sz: int                                         = sqrt(list_sz)
-    two_dimensional_logit_list: list[list[LogitPack]]   = shape_as(logit_list, [dim_sz, dim_sz])
-    transformed_logit_list: list[list[LogitPack]]       = []
-    transformed_logit_list_2: list[list[LogitPack]]     = []
+        return rs #this is it, this is where we bet our $100 MM dollar on, this is the very line that would decide literally everything, this is the only line that could be improved also
+                  #this has to be a sum operation, this is concluded after I literally sleeping on the matter
+                  #the problem with these operations is that we can't do accurate projection, so we have to peel the layer from f(x) -> x to f(x) -> x + y1 + ... to f(x) -> y
+                  #and the return of the function has to be "continuable" in the sense of another operation on the layer, not completely de-semanticalize the input semantic space
+                  #this has to be 3 dimensional followed by a 6 sum operation, I cant just prove that tessaract -> 3 dimensionals -> 6 dimensionals -> 4 dimensional is equivalent
+                  #I believe there is a proof of "linearability" and flowables, I still think that a 6 sum projection is kind of "constrainted" and the 4 sum re-projection helps with the re-distribution of the context to another context space that fits in the boundaries of the 6 sum projection, I dont really know the exact formula for this
+                  #we'll do a cube instead of a tessaract for each cell followed by a 6 dimensional projection, we'll reconsider the "other approaches" that seems smart 
+
+    dim_sz: int                                                 = sqrt(list_sz)
+    two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
+    rotated_two_dimensional_logit_list: list[list[LogitPack]]   = rotate(two_dimensional_logit_list)
+    transformed_logit_list: list[list[LogitPack]]               = []
+    transformed_logit_list_2: list[list[LogitPack]]             = []
+    transformed_logit_list_3: list[list[LogitPack]]             = []
 
     for i in range(dim_sz):
         shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
         transformed_logit_list          += [shaked_row]
         shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
         transformed_logit_list_2        += [shaked_row_2]
+        shaked_row_3: list[LogitPack]   = shake_x(rotated_two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
+        transformed_logit_list_3        += [shaked_row_3]
 
     transformed_logit_list          = rotate(transformed_logit_list)
+    transformed_logit_list_3        = rotate(transformed_logit_list_3)
     rs_list: list[list[LogitPack]]  = []
 
     for i in range(dim_sz):
@@ -776,38 +820,31 @@ def shake_x(logit_list: list[LogitPack], projection_storage_sz: int, iteration_s
         ctx_list: list[LogitPack]           = transformed_logit_list[i]
         shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, iteration_sz)
         other_ctx_list: list[LogitPack]     = transformed_logit_list_2[i]
+        other_ctx_list_2: list[LogitPack]   = transformed_logit_list_3[i] 
         new_row: list[LogitPack]            = []
 
         for j in range(dim_sz):
-            new_logit: LogitPack    = sum_accum(org_list[j], other_ctx_list[j], shaked_ctx_list[j]) #this I what could prove
-                                                                                                    #because the sum operation is a calibration operation
-                                                                                                    #so essentially we are peeling one layer followed by the next layer like an onion
-                                                                                                    #this is very hard to visualize but we'd have to think of the output back to the input kind of projection space initially it is f(x) -> x, followed by f(x) -> x + y0, f(x) -> x + y0 + y1 + ... f(x) -> y
-                                                                                                    #instead of accurately projecting one accurate layer, we'd just need to project a very thin layer that is always correct
-                                                                                                    #we have to think of the projection space as a unit, not indepedent values
-                                                                                                    #the problem of maxflow is the https://leetcode.com/problems/game-of-life/description/
-                                                                                                    #alright, if we aren't projecting the very thin layer correctly, the next layer is going to be corrupted, this is precisely where the reminder kicks in, we dont want to add more parameters or arguments to the sum_accum
-                                                                                                    #just to make sure that we are not row-major people, we'd literally want to do a rotate and essentially this again to project the thin layer correctly (we are afraid that the thin layer information is not in the row, not the logit density)
-                                                                                                    #I can't prove that would cancel the destructive interference from the row just yet, yet it'd definitely wire connections that'd help us with bouncing the string projection space (we are doing search, we dont really care about the small picture but the overall logit flowables)
+            new_logit: LogitPack    = sum_accum(org_list[j],
+                                                other_ctx_list[j],
+                                                shaked_ctx_list[j],
+                                                other_ctx_list_2[j]) #this I what could prove
+                                                                     #because the sum operation is a calibration operation
+                                                                     #so essentially we are peeling one layer followed by the next layer like an onion
+                                                                     #this is very hard to visualize but we'd have to think of the output back to the input kind of projection space initially it is f(x) -> x, followed by f(x) -> x + y0, f(x) -> x + y0 + y1 + ... f(x) -> y
+                                                                     #instead of accurately projecting one accurate layer, we'd just need to project a very thin layer that is always correct
+                                                                     #we have to think of the projection space as a unit, not indepedent values
+                                                                     #the problem of maxflow is the https://leetcode.com/problems/game-of-life/description/
+                                                                     #alright, if we aren't projecting the very thin layer correctly, the next layer is going to be corrupted, this is precisely where the reminder kicks in, we dont want to add more parameters or arguments to the sum_accum
+                                                                     #just to make sure that we are not row-major people, we'd literally want to do a rotate and essentially this again to project the thin layer correctly (we are afraid that the thin layer information is not in the row, not the logit density)
+                                                                     #I can't prove that would cancel the destructive interference from the row just yet, yet it'd definitely wire connections that'd help us with bouncing the string projection space (we are doing search, we dont really care about the small picture but the overall logit flowables)
+                                                                     #if we do solely row, we'd force the global context to flow in the row direction (I'm talking in the rotated relative sense) which would introduce "congestion" at the variables which would cause logit saturation
+                                                                     #we'd want to ease the burden of "knowledge transfer" from those cells by building "logit roads" from col, row and col_row
+ 
             new_row                 += [new_logit]
 
         rs_list += [new_row]
 
-    rotated_two_dimensional_logit_list: list[list[LogitPack]]   = rotate(two_dimensional_logit_list)
-    other_rs_list: list[list[LogitPack]]                        = []
-
-    for i in range(dim_sz):
-        org_list: list[LogitPack]   = rotated_two_dimensional_logit_list[i]
-        ctx_list: list[LogitPack]   = shake_x(org_list, projection_storage_sz, iteration_sz)
-        new_row: list[LogitPack]    = []
-
-        for j in range(dim_sz):
-            new_logit: LogitPack    = ctx_list[j]
-            new_row                 += [new_logit]
-
-        other_rs_list += [new_row]
-    
-    return shake_x(pairwise_sum_accum(flatten(rotate(rs_list)), flatten(other_rs_list)), projection_storage_sz, iteration_sz - 1) 
+    return shake_x(flatten(rotate(rs_list)), projection_storage_sz, iteration_sz - 1) 
 
 class MatMulPolicy:
 
