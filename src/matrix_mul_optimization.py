@@ -797,7 +797,9 @@ def shake_x(logit_list: list[LogitPack],
                   #and the return of the function has to be "continuable" in the sense of another operation on the layer, not completely de-semanticalize the input semantic space
                   #this has to be 3 dimensional followed by a 6 sum operation, I cant just prove that tessaract -> 3 dimensionals -> 6 dimensionals -> 4 dimensional is equivalent
                   #I believe there is a proof of "linearability" and flowables, I still think that a 6 sum projection is kind of "constrainted" and the 4 sum re-projection helps with the re-distribution of the context to another context space that fits in the boundaries of the 6 sum projection, I dont really know the exact formula for this
-                  #we'll do a cube instead of a tessaract for each cell followed by a 6 dimensional projection, we'll reconsider the "other approaches" that seems smart 
+                  #we'll do a cube instead of a tessaract for each cell followed by a 6 dimensional projection, we'll reconsider the "other approaches" that seems smart
+                  #we can prove that one projection should suffice in this case without a calibration operation, for the reason being that we are doing implicit calibration on the taylor projection space
+                  #this is also the more stable way of doing base projections, whether we like that or not, we should not recurse the iteration size here for it is a very important operation
 
     dim_sz: int                                                 = sqrt(list_sz)
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
