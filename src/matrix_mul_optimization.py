@@ -800,6 +800,8 @@ def shake_x(logit_list: list[LogitPack],
                   #we'll do a cube instead of a tessaract for each cell followed by a 6 dimensional projection, we'll reconsider the "other approaches" that seems smart
                   #we can prove that one projection should suffice in this case without a calibration operation, for the reason being that we are doing implicit calibration on the taylor projection space
                   #this is also the more stable way of doing base projections, whether we like that or not, we should not recurse the iteration size here for it is a very important operation
+                  #when I said this is the only way, it is the only way if we'd want to reach the level of intellect
+                  #there has been not a good answer for literally years, we'll build this map reduce search ASAP. There are tons of applications thats worth over $BB, China automatic electrical car is actually one of those markets
 
     dim_sz: int                                                 = sqrt(list_sz)
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
