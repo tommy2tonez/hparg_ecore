@@ -789,7 +789,7 @@ def shake_x(logit_list: list[LogitPack],
         delta_pack_1: LogitPack = pack_two_sum(logit_list[1], logit_list[0], projection_storage_sz)
         new_logit_0: LogitPack  = sum_accum(logit_list[0], delta_pack_0)
         new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
-        rs: list[LogitPack]     = shake_x([new_logit_0, new_logit_1], projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate)
+        rs: list[LogitPack]     = [new_logit_0, new_logit_1]
 
         return rs #this is it, this is where we bet our $100 MM dollar on, this is the very line that would decide literally everything, this is the only line that could be improved also
                   #this has to be a sum operation, this is concluded after I literally sleeping on the matter
