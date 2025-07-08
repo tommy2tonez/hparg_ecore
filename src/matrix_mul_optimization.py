@@ -782,16 +782,20 @@ def sum_accum(*args) -> LogitPack:
     #deviation negotiator implementation
     #error correction (I dont really know how, a very fast moving train with finite commits, we'd need to remove commits that are least impactful to the neural network, and add commits + etc.)
     #this is what I have yet to come up with
-    #is it a mining operation? or is it a correction operation? I rather think that this is a mining operation, we are mining the "best deviation" for a given commit count, says that we have found a deviation of 2 at 1024th commits, the previous is deviation of 10, so we'd pass that to the dictionary, so that if another guy picks up the pace at the 1024th commit, he'd work on the neural network
+    #is it a mining operation? or is it a correction operation? I rather think that this is a mining operation, we are mining the best deviation for a given commit count, says that we have found a deviation of 2 at 1024th commit, the previous is deviation of 10, so we'd pass that to the dictionary, so that if another guy picks up the pace at the 1024th commit, he'd work on the neural network
+        #the only clue that we have is probably radixing the neural network based on (1st: their deviation/ commits, their commits cosine similarity, the ranks of those, we'd want to do "GROUP BY" for users to choose the pace they'd want to pick up from)
+        #we'd pay the miners based on their time, and not their results, so essentially, they'd donate 1 GPU hour for probably ~20 dollars or sth, I dont know, we are communist people, we are very generous
+        #as long as they pick up the pace from one of the suggested paces, they'd get paid
+
     #a supervisor network of smaller size to hint the next moves
-    #essentially this is a map-reduce operation with we operate mostly on the supernode, kind of offload the coordinates to our peer, collect the deviations, and pass that to the randomization supervisor, which would run the statistics and guide the next coordinates or randomization moves based on previous statistical values
+    #essentially this is a map-reduce operation with we operating mostly on the supernode, kind of offloading the coordinates to our peer -> collect the deviations, and pass that to the randomization supervisor, which would run the statistics and guide the next coordinates or randomization moves based on previous statistical values
 
 #quality assurance:
     #discretization of the projection space, check if there is a continuity established in the projection space for the given discretization size
     #compare the projection space to the instrument, make sure that we are 99.99999% accurate
 
 #if we have done those three bullet points, I think we'd be billionaires in no time, precisely 1 year
-#I'm kind of tired and lazy right now, so I guess I'd implement this later, this is literally tons of engineerings
+#I'm kind of tired and lazy right now, so I guess I'd implement this later, this is literally tons of engineering
 
 def shake_x(logit_list: list[LogitPack],
             projection_storage_sz: int,
@@ -866,6 +870,8 @@ def shake_x(logit_list: list[LogitPack],
                                                                      #alright, if we aren't projecting the very thin layer correctly, the next layer is going to be corrupted, this is precisely where the reminder kicks in, we dont want to add more parameters or arguments to the sum_accum
                                                                      #just to make sure that we are not row-major people, we'd literally want to do a rotate and essentially this again to project the thin layer correctly (we are afraid that the thin layer information is not in the row, not the logit density)
                                                                      #I can't prove that would cancel the destructive interference from the row just yet, yet it'd definitely wire connections that'd help us with bouncing the string projection space (we are doing search, we dont really care about the small picture but the overall logit flowables)
+                                                                     #I can actually prove that this would actually be better, and not worse in the sense of row-only (we are kind of the decision-branching people)
+
                                                                      #if we do solely row, we'd force the global context to flow in the row direction (I'm talking in the rotated relative sense) which would introduce "congestion" at the variables which would cause logit saturation
                                                                      #we'd want to ease the burden of "knowledge transfer" from those cells by building "logit roads" from col, row and col_row
                                                                      #because the logit saturation at the bases are way more serious | important that that of the upper layers, we'd have to offset the storage by using a decay_rate to balance out the logit density equation
