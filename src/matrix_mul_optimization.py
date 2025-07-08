@@ -770,6 +770,28 @@ def sum_accum(*args) -> LogitPack:
 #so instead of having the twosum to be accurate 100% about the projecting context, we just need it to approx a delta to move the current context into a valid context  
 
 #not normally what i'd say but this is way more complicated than I think
+#this very normal concept would take at least 1 year of engineering to get right
+
+#neural network responsibiltiy
+    #the implementations that we are going to cover is Decimal on host + cuda
+    #number range (logit numerical range, logit flexibility range), numerical stability
+    #logit flowables
+
+#search implementation:
+    #map + reduce
+    #deviation negotiator implementation
+    #error correction (I dont really know how, a very fast moving train with finite commits, we'd need to remove commits that are least impactful to the neural network, and add commits + etc.)
+    #this is what I have yet to come up with
+    #is it a mining operation? or is it a correction operation? I rather think that this is a mining operation, we are mining the "best deviation" for a given commit count, says that we have found a deviation of 2 at 1024th commits, the previous is deviation of 10, so we'd pass that to the dictionary, so that if another guy picks up the pace at the 1024th commit, he'd work on the neural network
+    #a supervisor network of smaller size to hint the next moves
+    #essentially this is a map-reduce operation with we operate mostly on the supernode, kind of offload the coordinates to our peer, collect the deviations, and pass that to the randomization supervisor, which would run the statistics and guide the next coordinates or randomization moves based on previous statistical values
+
+#quality assurance:
+    #discretization of the projection space, check if there is a continuity established in the projection space for the given discretization size
+    #compare the projection space to the instrument, make sure that we are 99.99999% accurate
+
+#if we have done those three bullet points, I think we'd be billionaires in no time, precisely 1 year
+#I'm kind of tired and lazy right now, so I guess I'd implement this later, this is literally tons of engineerings
 
 def shake_x(logit_list: list[LogitPack],
             projection_storage_sz: int,
@@ -850,7 +872,7 @@ def shake_x(logit_list: list[LogitPack],
                                                                      #https://leetcode.com/problems/first-bad-version/
                                                                      #I dont really have another way to solve this problem, because we are transforming the projection space, from hard + something -> med + something -> easy + something -> etc.
                                                                      #what we know for sure is that if the former versions could not withhold the strings, the latter versions gonna fail, which we would want to solve by increasing more logits for the former layers, there would be a reduntdant logit layer, which we'd offset by using decay_rate
- 
+
             new_row                 += [new_logit]
 
         rs_list += [new_row]
