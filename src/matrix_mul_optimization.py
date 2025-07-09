@@ -836,6 +836,37 @@ def shake_x(logit_list: list[LogitPack],
     transformed_logit_list_2: list[list[LogitPack]]             = []
     transformed_logit_list_3: list[list[LogitPack]]             = []
 
+    #I got an email from one of my colleagues, to actually rotate in the diagonal direction, essentially, for cell 0,0 we'd be doing aggregation from (row0, col0), (row1, col1), (row2, col2), (row3, col3), etc.
+    #this is difficult to solve
+    #the problem is the + problem (I meant row col +), everything within the + has to contains the information of the matrix 
+    #we'll attempt to solve this problem later by using fixed suffix arrays to do bijective map of indices 
+    #for now this is sufficient to be usable
+
+    #this is the country pitch that I was mentioning
+    #the problem with building flowables is that we can't actually remove the previous flowables, yet we'd want to do a random bijective suffix array map followed by another shake and do a sum accumulator
+    #this is hard and complicated
+    #this sounds like a patch for skin-tone, because it is
+
+    #I think the right configuration has to be 32 bytes Decimal, derivative order of 3 or 4, 6 dimensional projection 
+    #I dont know the exact picture but I guess those are the numbers
+
+    #the matrix would be very unstable if we are to exceed the size of 1 << 16 size
+    #we'd need to compress before training, and we need to mine the logit density of the neural network that is responsible for the lossless or lossy compression
+    #we'd want to have a mind buffer and a soul buffer, or precisely, we'd want to mine the mind buffer and the soul buffer
+    #a mind buffer essentially does not store all the previouses, but rather the most important information (kind of skewed compression) to complete a given task (or project the next word) without 100% accurate projections
+    #a mind buffer is the state buffer of the brain
+    #a soul buffer is the immediate doable projector of the mind buffer (Thanos really pushed his daughter over the edges) 
+
+    #it's very simple, we guess the mind buffer and the soul buffer, we run statistics, we find deviation space, we move in the direction
+    #the question is the sliding window of the mind buffer (which can not be done in parallel), which we'd want to do total context diffraction (buffer + new_context -> new_buffer), or partial context diffraction (buffer + new_context -> partial_old_buffer + partial_new_buffer)
+
+    #we'd expect this to fit in a L1 cache, be distributed to a lot of concurrent workers to do projections + accumulate the deviations
+    #remember, the 99.9999% accurate projection only works with very low logit density, we can't really expect that we are building a database of synth waves brains, it's better to query a database at this point
+
+    #this matrix is not only the only way to mine logit density or deviation space, this is probably the most feasible way to run, leverage cuda speed, do projections in parallel (we are talking in the rows + cols sense)
+    #and this matrix is the only known map-reduce-trainable matrix
+    #so it's kind of important in the sense of being the first to do differential search in a continuous space
+
     for i in range(dim_sz):
         shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz, decay_rate)
         transformed_logit_list          += [shaked_row]
@@ -871,7 +902,6 @@ def shake_x(logit_list: list[LogitPack],
                                                                      #just to make sure that we are not row-major people, we'd literally want to do a rotate and essentially this again to project the thin layer correctly (we are afraid that the thin layer information is not in the row, not the logit density)
                                                                      #I can't prove that would cancel the destructive interference from the row just yet, yet it'd definitely wire connections that'd help us with bouncing the string projection space (we are doing search, we dont really care about the small picture but the overall logit flowables)
                                                                      #I can actually prove that this would actually be better, and not worse in the sense of row-only (we are kind of the decision-branching people)
-
                                                                      #if we do solely row, we'd force the global context to flow in the row direction (I'm talking in the rotated relative sense) which would introduce "congestion" at the variables which would cause logit saturation
                                                                      #we'd want to ease the burden of "knowledge transfer" from those cells by building "logit roads" from col, row and col_row
                                                                      #because the logit saturation at the bases are way more serious | important that that of the upper layers, we'd have to offset the storage by using a decay_rate to balance out the logit density equation
