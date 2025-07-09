@@ -165,6 +165,28 @@ def four_sum(x: Logit, x1: Logit, x2: Logit, x3: Logit, projection_storage_sz: i
 
     return Logit(feature_vec, [x, x1, x2, x3], None)
 
+def five_sum(x: Logit, x1: Logit, x2: Logit, x3: Logit, x4: Logit, projection_storage_sz: int) -> Logit:
+
+    actual_projection_storage_sz: int   = floor_projection_storage_sz(5, projection_storage_sz)
+
+    if actual_projection_storage_sz == 0:
+        raise RuntimeException()
+
+    feature_vec: list[float]            = make_projection_storage(actual_projection_storage_sz)
+
+    return Logit(feature_vec, [x, x1, x2, x3, x4], None)
+
+def six_sum(x: Logit, x1: Logit, x2: Logit, x3: Logit, x4: Logit, x5: Logit, projection_storage_sz: int) -> Logit:
+
+    actual_projection_storage_sz: int   = floor_projection_storage_sz(6, projection_storage_sz)
+
+    if actual_projection_storage_sz == 0:
+        raise RuntimeException()
+
+    feature_vec: list[float]            = make_projection_storage(actual_projection_storage_sz)
+
+    return Logit(feature_vec, [x, x1, x2, x3, x4, x5], None)
+
 def generic_sum(x_list: list[Logit], projection_storage_sz: int) -> Logit:
 
     if len(x_list) == 1:
@@ -175,79 +197,12 @@ def generic_sum(x_list: list[Logit], projection_storage_sz: int) -> Logit:
         return three_sum(x_list[0], x_list[1], x_list[2], projection_storage_sz)
     elif len(x_list) == 4:
         return four_sum(x_list[0], x_list[1], x_list[2], x_list[3], projection_storage_sz)
+    elif len(x_list) == 5:
+        return five_sum(x_list[0], x_list[1], x_list[2], x_list[3], x_list[4], projection_storage_sz)
+    elif len(x_list) == 6:
+        return six_sum(x_list[0], x_list[1], x_list[2], x_list[3], x_list[4], x_list[5], projection_storage_sz)  
     else:
         raise RuntimeException()
-
-def twosum_tree_accumulate(x_list: list[Logit], projection_storage_sz: int) -> Logit:
-
-    if len(x_list) == 0:
-        raise Exception()
-
-    if len(x_list) == 1:
-        return one_sum(x_list[0], projection_storage_sz) 
-
-    if len(x_list) % 2 != 0:
-        raise Exception()
-
-    lhs_list: list[Logit]   = x_list[:len(x_list) / 2] 
-    rhs_list: list[Logit]   = x_list[len(x_list) / 2:]
-
-    return two_sum(twosum_tree_accumulate(lhs_list, projection_storage_sz),
-                   twosum_tree_accumulate(rhs_list, projection_storage_sz),
-                   projection_storage_sz)
-
-def threesum_tree_accumulate(x_list: list[Logit], projection_storage_sz: int) -> Logit:
-
-    if len(x_list) == 0:
-        raise Exception()
-
-    if len(x_list) == 1:
-        return one_sum(x_list[0], projection_storage_sz)
-
-    if len(x_list) % 3 != 0:
-        raise Exception()
-
-    width: int                  = len(x_list) / 3
-    first_list: list[Logit]     = x_list[:width]
-    second_list: list[Logit]    = x_list[width: width * 2]
-    third_list: list[Logit]     = x_list[width * 2:]
-
-    return three_sum(threesum_tree_accumulate(first_list, projection_storage_sz),
-                     threesum_tree_accumulate(second_list, projection_storage_sz),
-                     threesum_tree_accumulate(third_list, projection_storage_sz),
-                     projection_storage_sz) 
-
-#everything before this line is accurate, this is the base of everything, we'd want to further improve the taylor projection by actually changing the projecting range, but we'll be talking about that later
-#essentially, we'd want to make things sharp instead of curvy like the Taylor Projection
-
-#because the projection_storage_sz would actually be too unrealistic for a word vec of 1024 words
-#the only way we could patch this is by running centrality
-#centrality, on one hand, actually builds a very high level vocabulary from low level words 
-#like images inputted into our brain from pixel muscle -> brain connection -> word detection -> semanticalization -> etc.
-#centrality, on the other hand, solves the problem of projection storage sz
-
-#the problem of centrality is precisely that, we can't assume that the words at the beginning are the absolute words, every transforming phase, the words make sense, so it's important to keep the semantic of the row + col at every given step of the iteration
-#otherwise, we'd be forced to alter the semantic of the next matrix in a destructive interference way
-
-#we'd attempt to solve the problem by making sure that every intermediate centrality node is not saturated in the sense of progressively transforming the aggregating cell
-#this is the mentioned problem, when I was talking about we were putting too much pressure on the joints 
-#yet we have found a solution of perfect square recursion
-
-def two_fold(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]:
-
-    sz: int             = len(logit_list)
-
-    if sz % 2 != 0:
-        raise Exception()
-
-    left: list[Logit]   = logit_list[:(sz / 2)]
-    right: list[Logit]  = logit_list[(sz / 2):]
-
-    return [two_sum(lhs, rhs, projection_storage_sz) for (lhs, rhs) in zip(left, right)]
-
-def quad_fold(logit_list: list[Logit], projection_storage_sz: int) -> list[Logit]:
-
-    return two_fold(two_fold(logit_list, projection_storage_sz), projection_storage_sz)
 
 def to_logit_vec(tensor: object) -> list[Logit]:
 
@@ -336,239 +291,6 @@ def sqrt(val: int) -> int:
 def cube_root(val: int) -> int:
 
     return int(val ** (1.f / 3))
-
-def two_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
-
-    list_sz: int = len(logit_list)
-
-    if list_sz not in [1, 2, 4, 16, 256, 65536]:
-        raise Exception()
-
-    if list_sz == 1:
-        return [one_sum(logit_list[0], projection_storage_sz)]
-
-    if list_sz == 2:
-        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz),
-                two_sum(logit_list[0], logit_list[1], projection_storage_sz)]
-
-    dim_sz: int                                     = sqrt(list_sz)
-    two_dimensional_logit_list: list[list[Logit]]   = shape_as(logit_list, [dim_sz, dim_sz])
-    transformed_logit_list_1: list[list[Logit]]     = []
-    transformed_logit_list_2: list[list[Logit]]     = []
-
-    for i in range(dim_sz):
-        feature_vec_1: list[Logit]      = list()
-        feature_vec_2: list[Logit]      = list()
-        shaked_row: list[Logit]         = two_shake(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
-
-        for j in range(dim_sz):
-            first_dimension_representation: Logit   = twosum_tree_accumulate(shaked_row, projection_storage_sz)
-            second_dimension_representation: Logit  = twosum_tree_accumulate(shaked_row, projection_storage_sz)
-
-            feature_vec_1.append(first_dimension_representation)
-            feature_vec_2.append(second_dimension_representation)
-
-        transformed_logit_list_1.append(feature_vec_1)
-        transformed_logit_list_2.append(feature_vec_2)
-
-    rotated_transformed_logit_list_1: list[list[Logit]] = rotate(transformed_logit_list_1)
-    rotated_transformed_logit_list_2: list[list[Logit]] = rotate(transformed_logit_list_2)
-    rs_list: list[list[Logit]]                          = []
-
-     for i in range(dim_sz):
-        lhs: list[Logit]        = two_dimensional_logit_list[i]
-        rhs_1: list[Logit]      = two_shake(rotated_transformed_logit_list_1[i], projection_storage_sz, iteration_sz)
-        rhs_2: list[Logit]      = two_shake(rotated_transformed_logit_list_2[i], projection_storage_sz, iteration_sz)
-        new_row: list[Logit]    = []
-
-        for j in range(dim_sz):
-            new_row += [three_sum(lhs[j], rhs_1[j], rhs_2[j], projection_storage_sz)] #we are probably wrong here, I dont know yet, yet the joints for the rotated_transformed_logit_1 and rotated_transformed_logit_2 might loose the global context in the way
-
-        rs_list                 += [new_row]
-
-    return two_shake(flatten(rotate(rs_list)), projection_storage_sz, iteration_sz - 1)
-
-def quad_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
-
-    list_sz: int = len(logit_list)
-
-    if list_sz not in [1, 2, 4, 16, 256, 65536]:
-        raise Exception()
-
-    if list_sz == 1:
-        return [one_sum(logit_list[0], projection_storage_sz)] 
-
-    if list_sz == 2:
-        return [two_sum(logit_list[0], logit_list[1], projection_storage_sz),
-                two_sum(logit_list[0], logit_list[1], projection_storage_sz)]
-
-    if list_sz == 4:
-        return two_shake(logit_list, projection_storage_sz, iteration_sz)
-
-    if list_sz == 16:
-        return two_shake(logit_list, projection_storage_sz, iteration_sz)
-
-    dim_sz: int                                     = sqrt(list_sz)
-    two_dimensional_logit_list: list[list[Logit]]   = shape_as(logit_list, [dim_sz, dim_sz])
-
-    transformed_logit_list_1: list[list[Logit]]     = []
-    transformed_logit_list_2: list[list[Logit]]     = []
-    transformed_logit_list_3: list[list[Logit]]     = []
-    transformed_logit_list_4: list[list[Logit]]     = []
-
-    for i in range(dim_sz):
-        feature_vec_1: list[Logit]      = list()
-        feature_vec_2: list[Logit]      = list()
-        feature_vec_3: list[Logit]      = list()
-        feature_vec_4: list[Logit]      = list()
-        shaked_row: list[Logit]         = quad_shake(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz)
-
-        for j in range(dim_sz):
-            first_dimension_representation: Logit   = twosum_tree_accumulate(shaked_row, projection_storage_sz)
-            second_dimension_representation: Logit  = twosum_tree_accumulate(shaked_row, projection_storage_sz)
-            third_dimension_representation: Logit   = twosum_tree_accumulate(shaked_row, projection_storage_sz)
-            fourth_dimension_representation: Logit  = twosum_tree_accumulate(shaked_row, projection_storage_sz)
-
-            feature_vec_1.append(first_dimension_representation)
-            feature_vec_2.append(second_dimension_representation)
-            feature_vec_3.append(third_dimension_representation)
-            feature_vec_4.append(fourth_dimension_representation)
-
-        transformed_logit_list_1.append(feature_vec_1)
-        transformed_logit_list_2.append(feature_vec_2)
-        transformed_logit_list_3.append(feature_vec_3)
-        transformed_logit_list_4.append(feature_vec_4)
-
-    rotated_transformed_logit_list_1: list[list[Logit]]     = rotate(transformed_logit_list_1)
-    rotated_transformed_logit_list_2: list[list[Logit]]     = rotate(transformed_logit_list_2)
-    rotated_transformed_logit_list_3: list[list[Logit]]     = rotate(transformed_logit_list_3)
-    rotated_transformed_logit_list_4: list[list[Logit]]     = rotate(transformed_logit_list_4)
-    rs_list: list[list[Logit]]                              = []
-
-    for i in range(dim_sz):
-        lhs: list[Logit]        = two_dimensional_logit_list[i]
-        rhs_1: list[Logit]      = quad_shake(rotated_transformed_logit_list_1[i], projection_storage_sz, iteration_sz)
-        rhs_2: list[Logit]      = quad_shake(rotated_transformed_logit_list_2[i], projection_storage_sz, iteration_sz)
-        rhs_3: list[Logit]      = quad_shake(rotated_transformed_logit_list_3[i], projection_storage_sz, iteration_sz)
-        rhs_4: list[Logit]      = quad_shake(rotated_transformed_logit_list_4[i], projection_storage_sz, iteration_sz)
-        new_row: list[Logit]    = []
-
-        for j in range(dim_sz):
-            new_logit: Logit    = two_sum(lhs, 
-                                          two_sum(two_sum(rhs_1, rhs_2, projection_storage_sz),
-                                                  two_sum(rhs_3, rhs_4, projection_storage_sz),
-                                                  projection_storage_sz),
-                                          projection_storage_sz)
-
-            new_row += [new_logit]
-
-        rs_list                 += [new_row]
-
-    return quad_shake(flatten(rotate(rs_list)), projection_storage_sz, iteration_sz - 1)
-
-#this is probably the most important implementation in the 21st century
-#point is that we are using three dimensional projection to increase the projection logics + decreasing the tree height, this is super very important to increase intellect
-#we are projecting the row context -> a tessaract => aggregating all tessaracts to project a summary of the matrix for every cell, this is used as a centrality node, which is aggregated back to the old node by using a two_sum operation
-#we implemented the context_logit wrong, we are putting too much responsibility on the two_sum hinge which would break (imagine maxflow) if the context cannot be distributed to the base, we can't say that the next iteration's gonna fix the problem, that's not how logic works, everything in the iteration is accounted for
-#we'd want to actually cat the tessaracts on one row and do another shake, yet this would break the property of perfect squares (we have yet to find the way)
-
-def tri_shake(logit_list: list[Logit], projection_storage_sz: int, iteration_sz: int) -> list[Logit]:
-
-    list_sz: int = len(logit_list)
-
-    if list_sz not in [1, 3, 9, 81, 6531]:
-        raise Exception()
-
-    if list_sz == 1:
-        return [one_sum(logit_list[0], projection_storage_sz)]
-
-    if list_sz == 3:
-        return [three_sum(logit_list[0], logit_list[1], logit_list[2], projection_storage_sz), 
-                three_sum(logit_list[0], logit_list[1], logit_list[2], projection_storage_sz),
-                three_sum(logit_list[0], logit_list[1], logit_list[3], projection_storage_sz)]
-
-    dim_sz: int                                     = cube_root(list_sz)
-    two_dimensional_logit_list: list[list[Logit]]   = shape_as(logit_list, [dim_sz, dim_sz])
-
-    transformed_logit_list_1: list[list[Logit]]     = []
-    transformed_logit_list_2: list[list[Logit]]     = []
-    transformed_logit_list_3: list[list[Logit]]     = []
-
-    for i in range(dim_sz):
-        feature_vec_1: list[Logit]      = list()
-        feature_vec_2: list[Logit]      = list()
-        feature_vec_3: list[Logit]      = list()
-        shaked_row: list[Logit]         = tri_shake(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz) #we are OK here, we are still in the assume phase of the recursive definition
-
-        for j in range(dim_sz):
-            first_dimension_representation: Logit   = threesum_tree_accumulate(shaked_row, projection_storage_sz)
-            second_dimension_representation: Logit  = threesum_tree_accumulate(shaked_row, projection_storage_sz)
-            third_dimension_representation: Logit   = threesum_tree_accumulate(shaked_row, projection_storage_sz) 
-
-            feature_vec_1.append(first_dimension_representation)
-            feature_vec_2.append(second_dimension_representation)
-            feature_vec_3.append(third_dimension_representation)
-
-        transformed_logit_list_1.append(feature_vec_1)
-        transformed_logit_list_2.append(feature_vec_2)
-        transformed_logit_list_3.append(feature_vec_3)
-
-    #everything before this line is not changable
-
-    #in order for the induction to work, we have to assume that every cell in the matrix is self-representable, we'd have to assume that the matrix would learn the way
-    #this means that we'd have to increase the cell information, essentially increasing the dimensions of the cells not their storage in order for this to work
-    #imagine that this is a real graph, every cell in the matrix is a node, and we are doing centrality on the graph
-
-    #this morning I was doing an analysis of joint pressure
-    #it seems like the problem only arises (specifically the maltransform) if the context logit (twosum(twosum(rhs_1, rhs_2), twosum(rh3, rh4))) is saturated
-    #                                                                         the context logit is not logically representable (everything in two dimensions isn't sensible, it's very super hard to describe things in two dimensions without context collisions or decreasing the euclidean relevancy)
-
-    #we'd attempt to fix the problem by actually doing a four sum projection, because it would fix the joint pressure by splitting the intermediate representation (the centrality representation) into a three dimensional context (not only that this increases the representable dimensions, but also increase the amount of minimum storable, so this is a win-win) 
-
-    #the second problem is the shake of the individual summary frames, we are losing the global context from the tessaracts
-
-    rotated_transformed_logit_list_1: list[list[Logit]]     = rotate(transformed_logit_list_1)
-    rotated_transformed_logit_list_2: list[list[Logit]]     = rotate(transformed_logit_list_2)
-    rotated_transformed_logit_list_3: list[list[Logit]]     = rotate(transformed_logit_list_3)
-    rs_list: list[list[Logit]]                              = []
-
-    for i in range(dim_sz):
-        lhs: list[Logit]                = two_dimensional_logit_list[i]
-        ctx_list: list[Logit]           = rotated_transformed_logit_list_1[i] + rotated_transformed_logit_list_2[i] + rotated_transformed_logit_list_3[i]
-        shaked_ctx_list: list[Logit]    = tri_shake(ctx_list, projection_storage_sz, iteration_sz)
-        new_row: list[Logit]            = []
-
-        for j in range(dim_sz):
-            idx_1: int          = j
-            idx_2: int          = idx_1 + dim_sz
-            idx_3: int          = idx_2 + dim_sz
-
-            new_logit: Logit    = four_sum(lhs[j],
-                                           shaked_ctx_list[idx_1],
-                                           shaked_ctx_list[idx_2],
-                                           shaked_ctx_list[idx_3],
-                                           projection_storage_sz)
-
-            new_row             += [new_logit]
-
-        rs_list                 += [new_row]
-
-    return tri_shake(flatten(rotate(rs_list)), projection_storage_sz , iteration_sz - 1)
-
-#what amazed me is these lines of code being actually sufficient to approximate a very intellectual being
-#we are missing a map + reduce function to evaluate the directions of these guys (we'd want to train on a complete dataset at once)
-#yet we are still using the search implementation to train neural networks
-#the algorithm is not hard to be understood, it's essentially a very dense network running on centrality, each node contains a multidimensional word to communicate with their neighbors efficiently
-#we are training to extract the centrality algorithm, so there are centrality rules that could be reused, like in linear one row == multiple cols
-
-#when I was trying to prove if the global_ctx_list > row_ctx_list, it's a hard proof to work on
-#assume that shake_x is sufficient to approx everything
-#we are stuck at the pack_threesum, we can prove that the result of the pack_threesum is better than that of the row_ctx version right after the evaluation
-#yet we can't prove that another shake (or pack_threesum) would reduce the quality of the logits which would hinder the induction proof
-#alright, so the problem is that the pack_threesum being not sufficient to continue the "sufficient to approx everything" (this is the logic loophole)
-
-#in other words, the returning result is an intermediate result, not an argument to the next which can be directly compared
-#so we actually went on with both, the row_ctx and the global_ctx version, which can only be better, not worse
 
 def fourpack_onesum(lhs: LogitPack) -> LogitPack:
 
@@ -676,127 +398,6 @@ def sum_accum(*args) -> LogitPack:
 
     return functools.reduce(sum_accum_2, args[1:], args[0]) 
 
-#alright, probably there are a lot of different ways to approximate a projection space, but I'd stick with the continuous differential approach
-#the sole improvement that we made is making every cell a tessaract, this helps with the centrality communication (if two random nodes are one-dimensionals, they'd be talking in a very bad language, ambiguous, not clear), we made the two nodes 4 dimensionals
-
-#we faced the storage_sz constraints, ideally, when we join two tessaracts, we'd want to keep the sum <= 4
-#yet 4 sums would be two two-dimensional-nodes
-#so we'd want to make it 6-sum, because it would be 2 three-dimensional-nodes, which is OK
-#we further improved it by making it a tessaract and project the tessaract to 3 dimensions, so it could only be better not worse 
-
-#the remaining problem is the map-reduce problem, we'd want to "stitch" the projection space by projecting all output for a set of inputs, and accumulate the deviation and move in the direction
-#and the Wanted problem, the mis-stitch would require a reverse operation + etc., a train that keeps moving forward and removing the commits as fast as possible
-
-#this is a very important lecture
-#the increasing the dimension from 1 dimension -> 3 dimensions would still have the same <storage> or pointer numerical range, but the euclidean relevancy are hugely changed in the senses of sorting relevant things together or allowing that to happen, this is very important for the succeeding projections
-#the optimal solution would probably somewhere around 12 dimensions hyperspace in string theory
-
-#the question that I've always wanted to answer is "given a context space (domain space) and their optimal all pairs relevancy scores," could we somehow arrange them in an arbitrary euclidean space that their euclidean distances == relevancy scores
-
-#alright, so the solution would be making a graph to connect all points, draw a circle or a sphere to pick the next position for the neighbors  
-#if the neighbor has not been previously mentioned, we are OK, we are fine, mission accomplished
-#but if the neighbor has been previously mentioned, we'd have to find the best position in the stack to make sure we could minimize the distance
-#we are back to our beloved problem, the rotating two arms problem, which is used for one-dimensionalizing the projection space, so essentially, the second point could be anywhere in the space 
-#a greedy approach would be to bind the neighbors that have not been previously mentioned, and run the multiarms algorithm to find the coordinate where the cosine distance is minimal compared to the original all-pair scores space
-#the exact answer to this question is rather very hard to mathematically describe, we just dont have the words for that yet, so our best bet is increasing the dimensions and hope that it actually works (theoretically, increasing the dimensions can only be better, not worse, for the lower dimension answer is a subset of that)
-
-#the two arms is actually the answer to everything, we can prove that the tip the two arms chain could reach every point in the graph, thus further the induction of placing a certain point on the graph 
-#we'd need to chain the arms in order to prove that arm_1, arm_2, arm_3, etc.
-#                                                   [   two_arm ]
-#                                                         [   two_arm  ]
-#yet this is only the greedy approach, because we can't really change the previous coordinates, but rather placing the next coordinates on the graph where it would be locally best
-
-#alright, so what if we could somehow featurize an input as binaries, 0 means doesn't have the feature, 1 means has the feature
-#we could prove the completeness of relevancy projection, but the question of whether this is equivalent to the relevancy score is an entire another topic to talk about
-
-#how about we approach this at a different perspective, angle?
-#how about we assume that we have found the euclidean projection space for the previous n - 1 pairs, we are to further the induction for the current coordinate
-#okay, we'd have to keep a dictionary of all possible previouses, and we'd want to maintain that for the current coordinate
-#it is an intersection of the previous possible set and the current set of restrictions, we'd have to write the formula for this
-#theoretically we could solve this by using discretization of projection space + recursion (dynamic programming), we just dont have the exact number for this
-#this is actually an optimizable, we'd want to demote the projection space to speed up the search time
-
-#why does this sound like nucleus and electron?
-
-#we need to think of the LogitPack as an operating brain, we are gossiping the information to stitch the complete picture
-#so what's the problem? our brain cannot be changed from first -> last like the transformer, because it would loose the context in the way, the brain at the latter phases is not as general in the sense of entropy as the brain at the former phases
-
-#we'd need to map each initial cell -> an arbitrary brain (which we'd call LogitPack), this is the embedding layer in torch
-#we'd do gossiping, or centrality on the set of brains, and project the brain back to the original cell form 
-
-#the function is correctly implemented in the sense of brain gossiping
-#we'd want to implement another function on top of this function to do f(x) -> y, f'(y) -> x
-
-#the joining of the two centrality nodes is probably the hinge that is difficult to solve
-#theoretically, the algorithm works as projection_storage_sz approaches -> oo
-#we'd definitely need to offset the theoretical
-
-#because we are very precise people, we'd want to use finite decimal place implementation from BigNum, a missing 1000th decimal place would have a devastating effect on the network
-#and we'd want to use map-reduce to train the network, essentially we are projecting all the outputs for the current network given the inputs, comparing to that of the instrument, and inch forward in the direction
-#in order for that to happen, we'd need to strictly stay on the differential territory, there is no softmax, no square_root, no etc., just Taylor Series and friends 
-
-#the problem of these networks is that we can't be greedy, we'd want to stay on the 1KB -> 64KB network to get the best of the network, and kind of scale from the smaller networks
-#an attempt to train a very large network would result in a very very undesirable result
-#this is precisely why compression rate of 0.1% is important, we dont know how to reach the level of intellectual otherwise
-
-#problems:
-#the joints from the lower layers would collapse due to context saturation
-#we'd have to keep the original context throughout the centrality gossip
-
-#essentially, we'd want to have a channel for gossiping and a channel to store the org_x
-#alright, another upgrade from keeping the original would be having a sliding decay window of context trails, just to make sure that we aren't stressing the lower layers, it'd be very bad in terms of logit density distribution
-#                                                                                                             because the upper layers having the same storage sz are not doing as much job as the lower layers (or it is bottlenecked by the lower layers) 
-
-#we'd be working on this brain for a month or two to get some financial aids first
-#it's not that complicated
-#the formula is simple: centrality, 3 dimensional array, tessaracts, a centrality algorithm, Multidimensional Taylor projections + trailing memorizations + map-reduce search + multiprecision lib + tons of compute power to compute | project at unprecended speed + erase commits at that speed also
-#recall the train in Wanted, no trains get stopped on the bridge
-#we wont be getting lots of money, a couple hundred mils is good enough for us to keep the project going + hire some people
-
-#we are missing a plus operation, a diagonal operation, and a channel operation
-
-#at the high level, we are having our original context floating around and a gossip context
-#a gossip context is a product of another gossip context and another original context
-#this is getting confusing
-
-#a window of original context interaction to make sure that we are "reminding" the matrix of their initial missions, not to have destructive interferences because we can't transcend from the original context
-#this requires a carefully engineered reminding window to work
-
-#a centrality node join == two gossip values interacting, by a plus operation (alright, they got this right) 
-#the plus acts as a calibration layer for communication, the original context is there to cancel the ripple effect of mis-calibrated
-
-#the solely two sum operation only works as the storage sz approaches infinity, we are forcing a recontext at this point to make sure that our base joints are intact
-#we'd want to offset that by forcing the two sum to approximate a calibration layer, which we'd want to peel the calibration layer one by one
-#so instead of having the twosum to be accurate 100% about the projecting context, we just need it to approx a delta to move the current context into a valid context  
-
-#not normally what i'd say but this is way more complicated than I think
-#this very normal concept would take at least 1 year of engineering to get right
-
-#neural network responsibiltiy
-    #the implementations that we are going to cover is Decimal on host + cuda
-    #number range (logit numerical range, logit flexibility range), numerical stability
-    #logit flowables
-
-#search implementation:
-    #map + reduce
-    #deviation negotiator implementation
-    #error correction (I dont really know how, a very fast moving train with finite commits, we'd need to remove commits that are least impactful to the neural network, and add commits + etc.)
-    #this is what I have yet to come up with
-    #is it a mining operation? or is it a correction operation? I rather think that this is a mining operation, we are mining the best deviation for a given commit count, says that we have found a deviation of 2 at 1024th commit, the previous is deviation of 10, so we'd pass that to the dictionary, so that if another guy picks up the pace at the 1024th commit, he'd work on the neural network
-        #the only clue that we have is probably radixing the neural network based on (1st: their deviation/ commits, their commits cosine similarity, the ranks of those, we'd want to do "GROUP BY" for users to choose the pace they'd want to pick up from)
-        #we'd pay the miners based on their time, and not their results, so essentially, they'd donate 1 GPU hour for probably ~20 dollars or sth, I dont know, we are communist people, we are very generous
-        #as long as they pick up the pace from one of the suggested paces, they'd get paid
-
-    #a supervisor network of smaller size to hint the next moves
-    #essentially this is a map-reduce operation with we operating mostly on the supernode, kind of offloading the coordinates to our peer -> collect the deviations, and pass that to the randomization supervisor, which would run the statistics and guide the next coordinates or randomization moves based on previous statistical values
-
-#quality assurance:
-    #discretization of the projection space, check if there is a continuity established in the projection space for the given discretization size
-    #compare the projection space to the instrument, make sure that we are 99.99999% accurate
-
-#if we have done those three bullet points, I think we'd be billionaires in no time, precisely 1 year
-#I'm kind of tired and lazy right now, so I guess I'd implement this later, this is literally tons of engineering
-
 def shake_x(logit_list: list[LogitPack],
             projection_storage_sz: int,
             iteration_sz: int,
@@ -817,17 +418,8 @@ def shake_x(logit_list: list[LogitPack],
         new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
         rs: list[LogitPack]     = [new_logit_0, new_logit_1]
 
-        return rs #this is it, this is where we bet our $100 MM dollar on, this is the very line that would decide literally everything, this is the only line that could be improved also
-                  #this has to be a sum operation, this is concluded after I literally sleeping on the matter
-                  #the problem with these operations is that we can't do accurate projection, so we have to peel the layer from f(x) -> x to f(x) -> x + y1 + ... to f(x) -> y
-                  #and the return of the function has to be "continuable" in the sense of another operation on the layer, not completely de-semanticalize the input semantic space
-                  #this has to be 3 dimensional followed by a 6 sum operation, I cant just prove that tessaract -> 3 dimensionals -> 6 dimensionals -> 4 dimensional is equivalent
-                  #I believe there is a proof of "linearability" and flowables, I still think that a 6 sum projection is kind of "constrainted" and the 4 sum re-projection helps with the re-distribution of the context to another context space that fits in the boundaries of the 6 sum projection, I dont really know the exact formula for this
-                  #we'll do a cube instead of a tessaract for each cell followed by a 6 dimensional projection, we'll reconsider the "other approaches" that seems smart
-                  #we can prove that one projection should suffice in this case without a calibration operation, for the reason being that we are doing implicit calibration on the taylor projection space
-                  #this is also the more stable way of doing base projections, whether we like that or not, we should not recurse the iteration size here for it is a very important operation
-                  #when I said this is the only way, it is the only way if we'd want to reach the level of intellect
-                  #there has been not a good answer for literally years, we'll build this map reduce search ASAP. There are tons of applications thats worth over $BB, China automatic electrical car is actually one of those markets
+        return shake_x(rs, projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate) #because the projection of the range space, not domain space, denotes the relevancy of the euclideanly relevant projected coordinates (coordinates without the x), we'd have to do this operation, not for the add operation (calibration) but for the projection of the range not domain
+                                                                                             #so the final answer would be this
 
     dim_sz: int                                                 = sqrt(list_sz)
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
@@ -835,37 +427,6 @@ def shake_x(logit_list: list[LogitPack],
     transformed_logit_list: list[list[LogitPack]]               = []
     transformed_logit_list_2: list[list[LogitPack]]             = []
     transformed_logit_list_3: list[list[LogitPack]]             = []
-
-    #I got an email from one of my colleagues, to actually rotate in the diagonal direction, essentially, for cell 0,0 we'd be doing aggregation from (row0, col0), (row1, col1), (row2, col2), (row3, col3), etc.
-    #this is difficult to solve
-    #the problem is the + problem (I meant row col +), everything within the + has to contains the information of the matrix 
-    #we'll attempt to solve this problem later by using fixed suffix arrays to do bijective map of indices 
-    #for now this is sufficient to be usable
-
-    #this is the country pitch that I was mentioning
-    #the problem with building flowables is that we can't actually remove the previous flowables, yet we'd want to do a random bijective suffix array map followed by another shake and do a sum accumulator
-    #this is hard and complicated
-    #this sounds like a patch for skin-tone, because it is
-
-    #I think the right configuration has to be 32 bytes Decimal, derivative order of 3 or 4, 6 dimensional projection 
-    #I dont know the exact picture but I guess those are the numbers
-
-    #the matrix would be very unstable if we are to exceed the size of 1 << 16 size
-    #we'd need to compress before training, and we need to mine the logit density of the neural network that is responsible for the lossless or lossy compression
-    #we'd want to have a mind buffer and a soul buffer, or precisely, we'd want to mine the mind buffer and the soul buffer
-    #a mind buffer essentially does not store all the previouses, but rather the most important information (kind of skewed compression) to complete a given task (or project the next word) without 100% accurate projections
-    #a mind buffer is the state buffer of the brain
-    #a soul buffer is the immediate doable projector of the mind buffer (Thanos really pushed his daughter over the edges) 
-
-    #it's very simple, we guess the mind buffer and the soul buffer, we run statistics, we find deviation space, we move in the direction
-    #the question is the sliding window of the mind buffer (which can not be done in parallel), which we'd want to do total context diffraction (buffer + new_context -> new_buffer), or partial context diffraction (buffer + new_context -> partial_old_buffer + partial_new_buffer)
-
-    #we'd expect this to fit in a L1 cache, be distributed to a lot of concurrent workers to do projections + accumulate the deviations
-    #remember, the 99.9999% accurate projection only works with very low logit density, we can't really expect that we are building a database of synth waves brains, it's better to query a database at this point
-
-    #this matrix is not only the only way to mine logit density or deviation space, this is probably the most feasible way to run, leverage cuda speed, do projections in parallel (we are talking in the rows + cols sense)
-    #and this matrix is the only known map-reduce-trainable matrix
-    #so it's kind of important in the sense of being the first to do differential search in a continuous space
 
     for i in range(dim_sz):
         shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz, decay_rate)
@@ -879,6 +440,8 @@ def shake_x(logit_list: list[LogitPack],
     transformed_logit_list_3        = rotate(transformed_logit_list_3)
     rs_list: list[list[LogitPack]]  = []
 
+    #we are missing a suffix arrays implementation to offload the row-col pressures
+
     for i in range(dim_sz):
         org_list: list[LogitPack]           = two_dimensional_logit_list[i]
         ctx_list: list[LogitPack]           = transformed_logit_list[i]
@@ -891,38 +454,10 @@ def shake_x(logit_list: list[LogitPack],
             new_logit: LogitPack    = sum_accum(org_list[j],
                                                 other_ctx_list[j],
                                                 shaked_ctx_list[j],
-                                                other_ctx_list_2[j]) #this I what could prove
-                                                                     #because the sum operation is a calibration operation
-                                                                     #so essentially we are peeling one layer followed by the next layer like an onion
-                                                                     #this is very hard to visualize but we'd have to think of the output back to the input kind of projection space initially it is f(x) -> x, followed by f(x) -> x + y0, f(x) -> x + y0 + y1 + ... f(x) -> y
-                                                                     #instead of accurately projecting one accurate layer, we'd just need to project a very thin layer that is always correct
-                                                                     #we have to think of the projection space as a unit, not indepedent values
-                                                                     #the problem of maxflow is the https://leetcode.com/problems/game-of-life/description/
-                                                                     #alright, if we aren't projecting the very thin layer correctly, the next layer is going to be corrupted, this is precisely where the reminder kicks in, we dont want to add more parameters or arguments to the sum_accum
-                                                                     #just to make sure that we are not row-major people, we'd literally want to do a rotate and essentially this again to project the thin layer correctly (we are afraid that the thin layer information is not in the row, not the logit density)
-                                                                     #I can't prove that would cancel the destructive interference from the row just yet, yet it'd definitely wire connections that'd help us with bouncing the string projection space (we are doing search, we dont really care about the small picture but the overall logit flowables)
-                                                                     #I can actually prove that this would actually be better, and not worse in the sense of row-only (we are kind of the decision-branching people)
-                                                                     #if we do solely row, we'd force the global context to flow in the row direction (I'm talking in the rotated relative sense) which would introduce "congestion" at the variables which would cause logit saturation
-                                                                     #we'd want to ease the burden of "knowledge transfer" from those cells by building "logit roads" from col, row and col_row
-                                                                     #because the logit saturation at the bases are way more serious | important that that of the upper layers, we'd have to offset the storage by using a decay_rate to balance out the logit density equation
-                                                                     #https://leetcode.com/problems/first-bad-version/
-                                                                     #I dont really have another way to solve this problem, because we are transforming the projection space, from hard + something -> med + something -> easy + something -> etc.
-                                                                     #what we know for sure is that if the former versions could not withhold the strings, the latter versions gonna fail, which we would want to solve by increasing more logits for the former layers, there would be a reduntdant logit layer, which we'd offset by using decay_rate
+                                                other_ctx_list_2[j])
 
             new_row                 += [new_logit]
 
         rs_list += [new_row]
 
     return shake_x(flatten(rotate(rs_list)), projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate) 
-
-class MatMulPolicy:
-
-    def get_order() -> list[list[int]]:
-        pass 
-
-def optimize_matmul(dot_product_sz: int,
-                    domain_points: object,
-                    projection_points: object,
-                    max_storage_sz: int) -> MatMulPolicy:
-
-    pass
