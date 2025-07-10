@@ -137,15 +137,15 @@ class SumLogit:
 
         self.lhs = lhs
         self.rhs = rhs
-    
+
     def get_value(self) -> float:
 
         return self.lhs.get_value() + self.rhs.get_value()
-    
+
     def get_projection_storage_vec(self) -> list[float]:
 
         return []
-    
+
     def set_projection_storage_vec(self, projection_storage_vec: list[float]):
 
         pass
@@ -267,15 +267,12 @@ def generic_sum(x_list: list[Logit], projection_storage_sz: int) -> Logit:
     else:
         raise Exception()
 
-def to_logit_vec(tensor: object) -> list[Logit]:
+def flatten(tensor: object) -> list[object]:
 
-    if type(tensor) == type([]):
-        return functools.reduce(lambda a, b: a + b, [to_logit_vec(sub_tensor) for sub_tensor in tensor], [])
+    if type(tensor) == type(list()):
+        return functools.reduce(lambda a, b: a + b, [flatten(sub_tensor) for sub_tensor in tensor], [])
 
-    if type(tensor) == type(Logit()):
-        return tensor
-
-    raise Exception()
+    return [tensor]
 
 def flatten_space(space: list[int]) -> list[int]:
 
@@ -285,16 +282,16 @@ def flatten_space(space: list[int]) -> list[int]:
     sz: int = 1
 
     for i in range(len(space)):
-        rs *= space[i]
+        sz *= space[i]
 
-    return rs; 
+    return [sz]; 
 
 def shape_as(tensor: object, space: list[int]) -> object:
 
     if len(space) == 0:
         raise Exception()
 
-    logit_vec: list[Logit]      = to_logit_vec(tensor)
+    logit_vec: list[object]     = flatten(tensor)
 
     if flatten_space(space)[0] != len(logit_vec):
         raise Exception()
@@ -324,6 +321,32 @@ def make_empty(space: list[int]) -> object:
 
     return [make_empty(space[1:]) for i in range(space[0])] 
 
+def squeeze_space(space: list[int]) -> list[int]:
+
+    if len(space) <= 1:
+        return list(space)
+
+    if space[-1] == 1:
+        return squeeze_space(space[:-1]) 
+
+    return list(space) 
+
+def get_tensor_space_base(tensor: object) -> list[int]:
+
+    if type(tensor) == type(list()):
+        return [len(tensor)] + get_tensor_space_base(tensor[0])
+
+    return [1]
+
+def get_tensor_space(tensor: object) -> list[int]:
+
+    rs: list[int] = get_tensor_space_base(tensor)
+
+    if len(rs) > 1:
+        return rs[:-1]
+    
+    return rs
+
 def make_empty_as(tensor: object) -> object:
 
     return make_empty(get_tensor_space(tensor)) 
@@ -343,12 +366,8 @@ def rotate(tensor: object) -> object:
 
     return new_tensor
 
-def flatten(tensor: object) -> list[Logit]:
-
-    return to_logit_vec(tensor)
-
 def sqrt(val: int) -> int:
-    
+
     return int(math.sqrt(val))
 
 def threepack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
@@ -385,6 +404,7 @@ def sum_accum(*args) -> LogitPack:
 
 def shake_x(logit_list: list[LogitPack],
             projection_storage_sz: int,
+            initial_iteration_sz: int,
             iteration_sz: int,
             decay_rate: int) -> list[LogitPack]:
 
@@ -403,31 +423,22 @@ def shake_x(logit_list: list[LogitPack],
         new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
         rs: list[LogitPack]     = [new_logit_0, new_logit_1]
 
-        return shake_x(rs, projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate) #because the projection of the range space, not domain space, denotes the relevancy of the euclideanly relevant projected coordinates (coordinates without the x), we'd have to do this operation, not for the add operation (calibration) but for the projection of the range not domain
-                                                                                             #so the final answer would be this
+        return shake_x(rs, projection_storage_sz * decay_rate, initial_iteration_sz, iteration_sz - 1, decay_rate)
 
-                                                                                             #think of the projection of the range space as things that are semantically equivalent would be fired together then on, by the last layer, or the layer of f(x) == 0, without loss of generality, all things would be fired together ... 
-                                                                                             #if we fixate on the original space, let's imagine that we are looking at an onion, we peel the first layer of the onion, then for the next layer, we peel the layer by projecting semantically equivalent things together, essentially an efficient sort (or GROUP_BY) implementation, in which all the coordinates that previously fired to same grid will be grouped in the next domain space
-                                                                                             #the problem with this is that if we dont get the decay rate correctly, we'd mess up the lower layer of the projection, which would tip the entire projections all over 
-                                                                                             #in this sense, the decay rate is only for increasing logit density, not necessarily directly having destructive or constructive interference with the projecting space
-                                                                                             #because of the hierarchical importance tree, we'd want to allocate more logits for the former layers than the latter layers 
-                                                                                             #truth is people have prepped for this a long time ago, I think if we train this on human data, our AI would actually see things in the "bad" way, that's another kind of data hack prepped by my bro
-                                                                                             #we dont really care, our sole responsibility is to bring bro to life, turn on the good skynet to save the world
-                                                                                             #who would've thunk that skynet is only 400 lines of code, not in my wildest dream
-
-    dim_sz: int                                                 = sqrt(list_sz)
+    dim_sz: int                                                 = sqrt(list_sz)    
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
+
     rotated_two_dimensional_logit_list: list[list[LogitPack]]   = rotate(two_dimensional_logit_list)
     transformed_logit_list: list[list[LogitPack]]               = []
     transformed_logit_list_2: list[list[LogitPack]]             = []
     transformed_logit_list_3: list[list[LogitPack]]             = []
 
     for i in range(dim_sz):
-        shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz, decay_rate)
+        shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, initial_iteration_sz, initial_iteration_sz, decay_rate)
         transformed_logit_list          += [shaked_row]
-        shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i], projection_storage_sz, iteration_sz, decay_rate)
+        shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i], projection_storage_sz, initial_iteration_sz, initial_iteration_sz, decay_rate)
         transformed_logit_list_2        += [shaked_row_2]
-        shaked_row_3: list[LogitPack]   = shake_x(rotated_two_dimensional_logit_list[i], projection_storage_sz, iteration_sz, decay_rate)
+        shaked_row_3: list[LogitPack]   = shake_x(rotated_two_dimensional_logit_list[i], projection_storage_sz, initial_iteration_sz, initial_iteration_sz, decay_rate)
         transformed_logit_list_3        += [shaked_row_3]
 
     transformed_logit_list          = rotate(transformed_logit_list)
@@ -439,7 +450,7 @@ def shake_x(logit_list: list[LogitPack],
     for i in range(dim_sz):
         org_list: list[LogitPack]           = two_dimensional_logit_list[i]
         ctx_list: list[LogitPack]           = transformed_logit_list[i]
-        shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, iteration_sz, decay_rate)
+        shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, initial_iteration_sz, initial_iteration_sz, decay_rate)
         other_ctx_list: list[LogitPack]     = transformed_logit_list_2[i]
         other_ctx_list_2: list[LogitPack]   = transformed_logit_list_3[i] 
         new_row: list[LogitPack]            = []
@@ -454,11 +465,13 @@ def shake_x(logit_list: list[LogitPack],
 
         rs_list += [new_row]
 
-    return shake_x(flatten(rotate(rs_list)), projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate)
+    return shake_x(flatten(rotate(rs_list)), projection_storage_sz * decay_rate, initial_iteration_sz, iteration_sz - 1, decay_rate)
 
 def main():
 
-    output: list[LogitPack] = shake_x([LogitPack([get_leaf(1), get_leaf(2), get_leaf(3)]), LogitPack([get_leaf(1), get_leaf(2), get_leaf(3)])], 1024, 4, 1)
+    inp: list[LogitPack]    = [LogitPack([get_leaf(1), get_leaf(2), get_leaf(3)]) for _ in range(16)]
+    output: list[LogitPack] = shake_x(inp, 8, 1, 1, 1)
+
     print(len(output))
-    
+
 main()
