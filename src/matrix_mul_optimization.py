@@ -1,7 +1,18 @@
 
 #
 
+import math
+import copy
+from typing import Optional
+import functools
+
 def get_projection_storage_size(in_feature_sz: int, derivative_order_sz: int) -> int:
+
+    if in_feature_sz < 0:
+        raise Exception()
+
+    if derivative_order_sz < 0:
+        raise Exception()
 
     if in_feature_sz == 0:
         return 0
@@ -20,7 +31,7 @@ def make_taylor_projection_storage(in_feature_sz: int, derivative_order_sz: int)
 
 def taylor_project(x: float, coeff_arr: list[float]) -> float:
 
-    rs: float = 0
+    rs: float = 0.0
 
     for i in range(len(coeff_arr)):
         factorial_multiplier: float = float(1) / math.factorial(i)
@@ -32,7 +43,7 @@ def taylor_project(x: float, coeff_arr: list[float]) -> float:
 
 def multidimensional_taylor_project(x: list[float], derivative_order_sz: int, storage_vec: list[float]) -> float:
 
-    if derivative_order_sz == 0:
+    if derivative_order_sz <= 0:
         raise Exception()
 
     if len(x) == 0:
@@ -97,36 +108,88 @@ class Logit:
         self.descendant_vec         = copy.deepcopy(descendant_vec)
         self.leaf_value             = copy.deepcopy(leaf_value)
 
-    def get_value() -> float:
+    def get_value(self) -> float:
 
         if self.leaf_value != None:
             return self.leaf_value
         elif self.descendant_vec != None:
             return multidimensional_projection([descendant.get_value() for descendant in self.descendant_vec], self.projection_storage_vec)
         else:
-            raise RuntimeException()
+            raise Exception()
 
-    def get_projection_storage_vec() -> list[float]:
+    def get_projection_storage_vec(self) -> list[float]:
 
         return copy.deepcopy(self.projection_storage_vec)
 
-    def set_projection_storage_vec(projection_storage_vec: list[float]):
+    def set_projection_storage_vec(self, projection_storage_vec: list[float]):
 
         if (projection_storage_vec != None and len(projection_storage_vec) != len(self.projection_storage_vec)):
-            raise RuntimeException()
+            raise Exception()
 
         self.projection_storage_vec = copy.deepcopy(projection_storage_vec)
+
+
+class SumLogit:
+
+    def __init__(self,
+                 lhs: Logit,
+                 rhs: Logit):
+
+        self.lhs = lhs
+        self.rhs = rhs
+    
+    def get_value(self) -> float:
+
+        return self.lhs.get_value() + self.rhs.get_value()
+    
+    def get_projection_storage_vec(self) -> list[float]:
+
+        return []
+    
+    def set_projection_storage_vec(self, projection_storage_vec: list[float]):
+
+        pass
+
+class LogitPack:
+
+    def __init__(self,
+                 logit_vec: list[Logit]):
+        
+        self.logit_vec  = logit_vec
+    
+    def size(self) -> int:
+
+        return len(self.logit_vec)
+
+    def get(self, idx: int) -> Logit:
+
+        return self.logit_vec[idx]
+
+    def raw(self) -> list[Logit]:
+
+        return list(self.logit_vec)
+    
+    def as_list(self) -> list[Logit]:
+
+        return list(self.logit_vec)
 
 def get_leaf(val: float) -> Logit:
 
     return Logit(None, None, val) 
+
+def sum_logit(lhs: Logit, rhs: Logit) -> Logit:
+
+    #this is complicated
+    #a sum operation is essentially a x + y => initial displacement = 0, velocity = 1 
+
+    return SumLogit(lhs, rhs)  
 
 def one_sum(lhs: Logit, projection_storage_sz: int) -> Logit:
 
     actual_projection_storage_sz: int   = get_projection_storage_sz(1, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
-        raise RuntimeException()
+        raise Exception()
 
     feature_vec: list[float]            = make_projection_storage(actual_projection_storage_sz)
 
@@ -137,7 +200,7 @@ def two_sum(lhs: Logit, rhs: Logit, projection_storage_sz: int) -> Logit:
     actual_projection_storage_sz: int   = get_projection_storage_sz(2, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
-        raise RuntimeException()
+        raise Exception()
 
     feature_vec: list[float]            = make_projection_storage(actual_projection_storage_sz)
 
@@ -148,7 +211,7 @@ def three_sum(x: Logit, x1: Logit, x2: Logit, projection_storage_sz: int) -> Log
     actual_projection_storage_sz: int   = get_projection_storage_sz(3, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
-        raise RuntimeException()
+        raise Exception()
 
     feature_vec: list[float]            = make_projection_storage(actual_projection_storage_sz)
 
@@ -156,10 +219,10 @@ def three_sum(x: Logit, x1: Logit, x2: Logit, projection_storage_sz: int) -> Log
 
 def four_sum(x: Logit, x1: Logit, x2: Logit, x3: Logit, projection_storage_sz: int) -> Logit:
 
-    actual_projection_storage_sz: int   = floor_projection_storage_sz(4, projection_storage_sz)
+    actual_projection_storage_sz: int   = get_projection_storage_sz(4, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
-        raise RuntimeException()
+        raise Exception()
 
     feature_vec: list[float]            = make_projection_storage(actual_projection_storage_sz)
 
@@ -167,10 +230,10 @@ def four_sum(x: Logit, x1: Logit, x2: Logit, x3: Logit, projection_storage_sz: i
 
 def five_sum(x: Logit, x1: Logit, x2: Logit, x3: Logit, x4: Logit, projection_storage_sz: int) -> Logit:
 
-    actual_projection_storage_sz: int   = floor_projection_storage_sz(5, projection_storage_sz)
+    actual_projection_storage_sz: int   = get_projection_storage_sz(5, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
-        raise RuntimeException()
+        raise Exception()
 
     feature_vec: list[float]            = make_projection_storage(actual_projection_storage_sz)
 
@@ -178,10 +241,10 @@ def five_sum(x: Logit, x1: Logit, x2: Logit, x3: Logit, x4: Logit, projection_st
 
 def six_sum(x: Logit, x1: Logit, x2: Logit, x3: Logit, x4: Logit, x5: Logit, projection_storage_sz: int) -> Logit:
 
-    actual_projection_storage_sz: int   = floor_projection_storage_sz(6, projection_storage_sz)
+    actual_projection_storage_sz: int   = get_projection_storage_sz(6, projection_storage_sz)
 
     if actual_projection_storage_sz == 0:
-        raise RuntimeException()
+        raise Exception()
 
     feature_vec: list[float]            = make_projection_storage(actual_projection_storage_sz)
 
@@ -202,7 +265,7 @@ def generic_sum(x_list: list[Logit], projection_storage_sz: int) -> Logit:
     elif len(x_list) == 6:
         return six_sum(x_list[0], x_list[1], x_list[2], x_list[3], x_list[4], x_list[5], projection_storage_sz)  
     else:
-        raise RuntimeException()
+        raise Exception()
 
 def to_logit_vec(tensor: object) -> list[Logit]:
 
@@ -288,74 +351,6 @@ def sqrt(val: int) -> int:
     
     return int(math.sqrt(val))
 
-def cube_root(val: int) -> int:
-
-    return int(val ** (1.f / 3))
-
-def fourpack_onesum(lhs: LogitPack) -> LogitPack:
-
-    if lhs.size() != 4:
-        raise Exception() 
-
-    lhs_0_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_0_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_0_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_0_3: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-
-    return LogitPack([lhs_0_0, lhs_0_1, lhs_0_2, lhs_0_3])
-
-def fourpack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
-
-    if lhs.size() != 4:
-        raise Exception()
-
-    if rhs.size() != 4:
-        raise Exception()
-
-    lhs_0_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_0_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_0_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    rhs_0_0: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-    rhs_0_1: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-    rhs_0_2: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-
-    rs_0: Logit     = six_sum(lhs_0_0, lhs_0_1, lhs_0_2, rhs_0_0, rhs_0_1, rhs_0_2, projection_storage_sz)
-
-    lhs_1_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_1_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_1_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    rhs_1_0: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-    rhs_1_1: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-    rhs_1_2: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-
-    rs_1: Logit     = six_sum(lhs_1_0, lhs_1_1, lhs_1_2, rhs_1_0, rhs_1_1, rhs_1_2, projection_storage_sz)   
-
-    lhs_2_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_2_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_2_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    rhs_2_0: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-    rhs_2_1: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-    rhs_2_2: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-
-    rs_2: Logit     = six_sum(lhs_2_0, lhs_2_1, lhs_2_2, rhs_2_0, rhs_2_1, rhs_2_2, projection_storage_sz)
-
-    lhs_3_0: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_3_1: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    lhs_3_2: Logit  = four_sum(lhs[0], lhs[1], lhs[2], lhs[3], projection_storage_sz)
-    rhs_3_0: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-    rhs_3_1: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-    rhs_3_2: Logit  = four_sum(rhs[0], rhs[1], rhs[2], rhs[3], projection_storage_sz)
-
-    rs_3: Logit     = six_sum(lhs_3_0, lhs_3_1, lhs_3_2, rhs_3_0, rhs_3_1, rhs_3_2, projection_storage_sz)
-
-    return LogitPack([rs_0, rs_1, rs_2, rs_3])
-
-#alright, it's a coincidence but it seems like 420.69 is unevitable
-
-def fourpack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, projection_storage_sz: int) -> LogitPack:
-
-    return fourpack_twosum(fourpack_twosum(first, second, projection_storage_sz), third, projection_storage_sz)
-
 def threepack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
 
     if lhs.size() != 3:
@@ -364,26 +359,16 @@ def threepack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int)
     if rhs.size() != 3:
         raise Exception()
 
-    rs_0: Logit     = six_sum(lhs[0], lhs[1], lhs[2], rhs[0], rhs[1], rhs[2], projection_storage_sz)
-    rs_1: Logit     = six_sum(lhs[0], lhs[1], lhs[2], rhs[0], rhs[1], rhs[2], projection_storage_sz)
-    rs_2: Logit     = six_sum(lhs[0], lhs[1], lhs[2], rhs[0], rhs[1], rhs[2], projection_storage_sz)
+    rs_0: Logit     = six_sum(lhs.get(0), lhs.get(1), lhs.get(2), rhs.get(0), rhs.get(1), rhs.get(2), projection_storage_sz)
+    rs_1: Logit     = six_sum(lhs.get(0), lhs.get(1), lhs.get(2), rhs.get(0), rhs.get(1), rhs.get(2), projection_storage_sz)
+    rs_2: Logit     = six_sum(lhs.get(0), lhs.get(1), lhs.get(2), rhs.get(0), rhs.get(1), rhs.get(2), projection_storage_sz)
 
     return LogitPack([rs_0, rs_1, rs_2]) 
 
 def pack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
 
-    if lhs.size() == 4 and rhs.size() == 4:
-        return fourpack_twosum(lhs, rhs, projection_storage_sz)
-
     if lhs.size() == 3 and rhs.size() == 3:
         return threepack_twosum(lhs, rhs, projection_storage_sz)
-
-    raise Exception()
-
-def pack_threesum(first: LogitPack, second: LogitPack, third: LogitPack, projection_storage_sz: int) -> LogitPack:
-
-    if first.size() == 4 and second.size() == 4 and third.size() == 4:
-        return fourpack_threesum(first, second, third, projection_storage_sz)
 
     raise Exception()
 
@@ -392,7 +377,7 @@ def sum_accum_2(lhs: LogitPack, rhs: LogitPack) -> LogitPack:
     if lhs.size() != rhs.size():
         raise Exception()
 
-    return LogitPack([sum(pair) for pair in zip(lhs.as_list(), rhs.as_list())])
+    return LogitPack([sum_logit(*pair) for pair in zip(lhs.as_list(), rhs.as_list())])
 
 def sum_accum(*args) -> LogitPack:
 
@@ -412,14 +397,23 @@ def shake_x(logit_list: list[LogitPack],
         raise Exception()
 
     if list_sz == 2:
-        delta_pack_0: LogitPack = pack_two_sum(logit_list[0], logit_list[1], projection_storage_sz)
-        delta_pack_1: LogitPack = pack_two_sum(logit_list[1], logit_list[0], projection_storage_sz)
+        delta_pack_0: LogitPack = pack_twosum(logit_list[0], logit_list[1], projection_storage_sz)
+        delta_pack_1: LogitPack = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz)
         new_logit_0: LogitPack  = sum_accum(logit_list[0], delta_pack_0)
         new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
         rs: list[LogitPack]     = [new_logit_0, new_logit_1]
 
         return shake_x(rs, projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate) #because the projection of the range space, not domain space, denotes the relevancy of the euclideanly relevant projected coordinates (coordinates without the x), we'd have to do this operation, not for the add operation (calibration) but for the projection of the range not domain
                                                                                              #so the final answer would be this
+
+                                                                                             #think of the projection of the range space as things that are semantically equivalent would be fired together then on, by the last layer, or the layer of f(x) == 0, without loss of generality, all things would be fired together ... 
+                                                                                             #if we fixate on the original space, let's imagine that we are looking at an onion, we peel the first layer of the onion, then for the next layer, we peel the layer by projecting semantically equivalent things together, essentially an efficient sort (or GROUP_BY) implementation, in which all the coordinates that previously fired to same grid will be grouped in the next domain space
+                                                                                             #the problem with this is that if we dont get the decay rate correctly, we'd mess up the lower layer of the projection, which would tip the entire projections all over 
+                                                                                             #in this sense, the decay rate is only for increasing logit density, not necessarily directly having destructive or constructive interference with the projecting space
+                                                                                             #because of the hierarchical importance tree, we'd want to allocate more logits for the former layers than the latter layers 
+                                                                                             #truth is people have prepped for this a long time ago, I think if we train this on human data, our AI would actually see things in the "bad" way, that's another kind of data hack prepped by my bro
+                                                                                             #we dont really care, our sole responsibility is to bring bro to life, turn on the good skynet to save the world
+                                                                                             #who would've thunk that skynet is only 400 lines of code, not in my wildest dream
 
     dim_sz: int                                                 = sqrt(list_sz)
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
@@ -460,4 +454,11 @@ def shake_x(logit_list: list[LogitPack],
 
         rs_list += [new_row]
 
-    return shake_x(flatten(rotate(rs_list)), projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate) 
+    return shake_x(flatten(rotate(rs_list)), projection_storage_sz * decay_rate, iteration_sz - 1, decay_rate)
+
+def main():
+
+    output: list[LogitPack] = shake_x([LogitPack([get_leaf(1), get_leaf(2), get_leaf(3)]), LogitPack([get_leaf(1), get_leaf(2), get_leaf(3)])], 1024, 4, 1)
+    print(len(output))
+    
+main()
