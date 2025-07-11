@@ -406,7 +406,9 @@ def shake_x(logit_list: list[LogitPack],
             projection_storage_sz: int,
             initial_iteration_sz: int,
             iteration_sz: int,
-            decay_rate: int) -> list[LogitPack]:
+            storage_decay_rate: float,
+            linearity_idx: int,
+            linearity_decay_rate: float) -> list[LogitPack]:
 
     if iteration_sz == 0:
         return logit_list 
@@ -417,40 +419,32 @@ def shake_x(logit_list: list[LogitPack],
         raise Exception()
 
     if list_sz == 2:
-        delta_pack_0: LogitPack = pack_twosum(logit_list[0], logit_list[1], projection_storage_sz)
-        delta_pack_1: LogitPack = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz)
+        delta_pack_0: LogitPack = pack_twosum(logit_list[0], logit_list[1], projection_storage_sz, linearity_idx) #this is very important, linearity index would redistribute the projection space of the taylor series, essentially projection_storage_sz + linearity idx would decide the derivative order and the discretization size of the projecting space
+                                                                                                                  #for the lower layers, the linearity index is high (which means that it is not very linearly relevant, not that it is lineraly relevant just for the sake of the linearity_decay_rate)
+                                                                                                                  #so we'd aim for 100 derivative orders, each coefficient would take 0.00001 bit without loss of generality, so we'd be covering a wide range of shapes (which would radix sort the projecting space)
+                                                                                                                  #it is very very important, essentially, we'd want to decrease the linearity index to 0, which is essentially a line at the last shake_x layer
+                                                                                                                  #the explaination of linearity idx decay is very really vague, because essentially we are uniformly distributing the skewness of linearity, which is often not the case in real life scenerios, Interstellar for example
+                                                                                                                  
+                                                                                                                  #so if we really look that this, there are essentially two distinct responsibilities
+                                                                                                                  #the responsibility of sorting, those that are semantically equivalent in this layer will be fired together then on
+                                                                                                                  #the responsibility of accurately adding layers to transform f(x) = x -> f(x) -> y
+                                                                                                                  #we already argued that if the former strings failed, it must follow that the latter strings will also fail, so the storage_decay_rate is to denote the importance of the hierarchy
+
+                                                                                                                  #what we have not figured out is the accurate natural linearity_decay_rate, I bet that it is not an exponential graph, but rather a smooth sqrt() that will sharply decrease then softly smoothening out but never to 0
+ 
+ 
+        delta_pack_1: LogitPack = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz, linearity_idx)
         new_logit_0: LogitPack  = sum_accum(logit_list[0], delta_pack_0)
         new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
         rs: list[LogitPack]     = [new_logit_0, new_logit_1]
 
-        #the problem of Taylor Projection as pointed out by my colleagues is the resolution of the projection
-        #note that we are still using the Taylor Projection, but the resolution of the numerical value is different, for example a binary Taylor Projection would look like -1 1 -1 1, to project sin + cos waves with optimal projection storage size
-
-        #for the former layers, we'd want to decrease the resolution to increase derivative order, because we'd want to "group" the semantically equivalent context together (things that are fired to the same grid would be fired together in the next shake_x iterations), arguably, that we could achieve the same by allocating more storage for the traditional methods
-        #essentially, the former layers would be having a lot of ups and downs to "radix" the context into their appropriate buckets instead of bending the input space in the direction of the output space  
-        #in other words, we are changing our projection space to utilize more shapes over the linearity of those, this is where we got the decay rate wrong, decay rate is supposed to be the inverse decay of linearity, not the decay of projection_storage_sz ..., scientifically speaking
-        #in that sense, the decay rate is the decay of discretization value 
-
-        #the sole problem with those approaches is that we'd be allocating more resources for our search mission because the differential would be way way off
-
-        #so its kind of difficult, because a derivative order of 8 would take probably terabytes of storage to project
-        #however, if we are using binary coefficient, we'd be looking at /32 of the cost
-
-        #if we are going under binary, we'd be looking at a 0.01 bit/ coefficient, for a 6 dimensional 10 derivative order space
-        #for the lower layers, it'd be extremely hard to train, because like I said, we dont have the differential friction, we'd come up with a patch
-
-        #this is where I'm wrong, again
-        #essentially, those two values are distinct
-        #the linearity index and the projection_storage_sz
-        #we should still allocate more projection_storage_sz for the lower layers for they being bases
-        #and we should decrease linearity index of the lower layer, the linearity index of 1 is essentially a line derivative order of 2 (supposedly 1)
-        #linearity index of 0 is essentially a derivative order of 20 or 30, with high_discretization_sz, we'll syntheticalize the formula
-        #so there is a linear correlation between the linearity index and derivative order and discretization_sz
-
-        #for every iteration, we'd increase the linearity index and decrease the projection_storage_sz
-        #for the upper layer is less important in the hierarchical tree and more linearly relevant (we just sorted those)
-
-        return shake_x(rs, projection_storage_sz * decay_rate, initial_iteration_sz, iteration_sz - 1, decay_rate) #I could not come up with projection resolution and differential searchability yet. If this does not project correctly in the first layers, we'll be messed up very very badly
+        return shake_x(rs,
+                       projection_storage_sz * storage_decay_rate,
+                       initial_iteration_sz,
+                       iteration_sz - 1,
+                       storage_decay_rate,
+                       linearity_idx * linearity_decay_rate,
+                       linearity_decay_rate)
 
     dim_sz: int                                                 = sqrt(list_sz)    
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
@@ -461,11 +455,34 @@ def shake_x(logit_list: list[LogitPack],
     transformed_logit_list_3: list[list[LogitPack]]             = []
 
     for i in range(dim_sz):
-        shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i], projection_storage_sz, initial_iteration_sz, initial_iteration_sz, decay_rate)
+        shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i],
+                                                  projection_storage_sz,
+                                                  initial_iteration_sz,
+                                                  initial_iteration_sz,
+                                                  storage_decay_rate,
+                                                  linearity_idx,
+                                                  linearity_decay_rate)
+
         transformed_logit_list          += [shaked_row]
-        shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i], projection_storage_sz, initial_iteration_sz, initial_iteration_sz, decay_rate)
+
+        shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i],
+                                                  projection_storage_sz,
+                                                  initial_iteration_sz,
+                                                  initial_iteration_sz,
+                                                  storage_decay_rate,
+                                                  linearity_idx,
+                                                  linearity_decay_rate)
+
         transformed_logit_list_2        += [shaked_row_2]
-        shaked_row_3: list[LogitPack]   = shake_x(rotated_two_dimensional_logit_list[i], projection_storage_sz, initial_iteration_sz, initial_iteration_sz, decay_rate)
+
+        shaked_row_3: list[LogitPack]   = shake_x(rotated_two_dimensional_logit_list[i],
+                                                  projection_storage_sz,
+                                                  initial_iteration_sz,
+                                                  initial_iteration_sz,
+                                                  storage_decay_rate,
+                                                  linearity_idx,
+                                                  linearity_decay_rate)
+
         transformed_logit_list_3        += [shaked_row_3]
 
     transformed_logit_list          = rotate(transformed_logit_list)
@@ -477,7 +494,14 @@ def shake_x(logit_list: list[LogitPack],
     for i in range(dim_sz):
         org_list: list[LogitPack]           = two_dimensional_logit_list[i]
         ctx_list: list[LogitPack]           = transformed_logit_list[i]
-        shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list, projection_storage_sz, initial_iteration_sz, initial_iteration_sz, decay_rate)
+        shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list,
+                                                      projection_storage_sz,
+                                                      initial_iteration_sz,
+                                                      initial_iteration_sz,
+                                                      storage_decay_rate,
+                                                      linearity_idx,
+                                                      linearity_decay_rate)
+
         other_ctx_list: list[LogitPack]     = transformed_logit_list_2[i]
         other_ctx_list_2: list[LogitPack]   = transformed_logit_list_3[i] 
         new_row: list[LogitPack]            = []
@@ -492,7 +516,13 @@ def shake_x(logit_list: list[LogitPack],
 
         rs_list += [new_row]
 
-    return shake_x(flatten(rotate(rs_list)), projection_storage_sz * decay_rate, initial_iteration_sz, iteration_sz - 1, decay_rate)
+    return shake_x(flatten(rotate(rs_list)),
+                   projection_storage_sz * storage_decay_rate,
+                   initial_iteration_sz,
+                   iteration_sz - 1,
+                   storage_decay_rate,
+                   linearity_idx * linearity_decay_rate,
+                   linearity_decay_rate)
 
 def main():
 
