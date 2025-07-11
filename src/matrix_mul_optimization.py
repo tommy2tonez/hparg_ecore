@@ -423,7 +423,7 @@ def shake_x(logit_list: list[LogitPack],
         new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
         rs: list[LogitPack]     = [new_logit_0, new_logit_1]
 
-        return shake_x(rs, projection_storage_sz * decay_rate, initial_iteration_sz, iteration_sz - 1, decay_rate)
+        return shake_x(rs, projection_storage_sz * decay_rate, initial_iteration_sz, iteration_sz - 1, decay_rate) #I could not come up with projection resolution and differential searchability yet. If this does not project correctly in the first layers, we'll be messed up very very badly
 
     dim_sz: int                                                 = sqrt(list_sz)    
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
