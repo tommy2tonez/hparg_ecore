@@ -407,8 +407,7 @@ def shake_x(logit_list: list[LogitPack],
             initial_iteration_sz: int,
             iteration_sz: int,
             storage_decay_rate: float,
-            linearity_idx: int,
-            linearity_decay_rate: float) -> list[LogitPack]:
+            partitioning_resolution: float) -> list[LogitPack]:
 
     if iteration_sz == 0:
         return logit_list 
@@ -419,37 +418,22 @@ def shake_x(logit_list: list[LogitPack],
         raise Exception()
 
     if list_sz == 2:
-        delta_pack_0: LogitPack = pack_twosum(logit_list[0], logit_list[1], projection_storage_sz, linearity_idx) #this is very important, linearity index would redistribute the projection space of the taylor series, essentially projection_storage_sz + linearity idx would decide the derivative order and the discretization size of the projecting space
-                                                                                                                  #for the lower layers, the linearity index is high (which means that it is not very linearly relevant, not that it is lineraly relevant just for the sake of the linearity_decay_rate)
-                                                                                                                  #so we'd aim for 100 derivative orders, each coefficient would take 0.00001 bit without loss of generality, so we'd be covering a wide range of shapes (which would radix sort the projecting space)
+        delta_pack_0_0: LogitPack   = pack_twosum(logit_list[0], logit_list[1], projection_storage_sz)
+        delta_pack_0_1: LogitPack   = lowres_pack_twosum(logit_list[0], logit_list[1], projection_storage_sz, partitioning_resolution)
 
-                                                                                                                  #now that we are mentioning radix sort, we'd want to add a variable of linearity entropy, it is essentially to redistribute the projection shapes of the succeedings in the sense of radix sort (I have yet to know the elegant way)
-                                                                                                                  #initially, all shapes are not relevant, the next iteration, all shapes that are within certain distances are not relevant, etc. 
-                                                                                                                  #so we kind of "squeeze the space" of the "derivative orders" to continue the radix sort, alright, this is now very confusing
-
-                                                                                                                  #it is very very important, essentially, we'd want to decrease the linearity index to 0, which is essentially a line at the last shake_x layer
-                                                                                                                  #the explaination of linearity idx decay is very really vague, because essentially we are uniformly distributing the skewness of linearity, which is often not the case in real life scenerios, Interstellar for example
-                                                                                                                  
-                                                                                                                  #so if we really look that this, there are essentially two distinct responsibilities
-                                                                                                                  #the responsibility of sorting, those that are semantically equivalent in this layer will be fired together then on
-                                                                                                                  #the responsibility of accurately adding layers to transform f(x) = x -> f(x) -> y
-                                                                                                                  #we already argued that if the former strings failed, it must follow that the latter strings will also fail, so the storage_decay_rate is to denote the importance of the hierarchy
-
-                                                                                                                  #what we have not figured out is the accurate natural linearity_decay_rate, I bet that it is not an exponential graph, but rather a smooth sqrt() that will sharply decrease then softly smoothening out but never to 0
+        delta_pack_1_0: LogitPack   = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz)
+        delta_pack_1_1: LogitPack   = lowres_pack_twosum(logit_list[1], logit_list[0], projection_storage_sz, partitioning_resolution)
  
- 
-        delta_pack_1: LogitPack = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz, linearity_idx)
-        new_logit_0: LogitPack  = sum_accum(logit_list[0], delta_pack_0)
-        new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
-        rs: list[LogitPack]     = [new_logit_0, new_logit_1]
+        new_logit_0: LogitPack      = sum_accum(logit_list[0], delta_pack_0_0, delta_pack_0_1)
+        new_logit_1: LogitPack      = sum_accum(logit_list[1], delta_pack_1_0, delta_pack_1_1)
+        rs: list[LogitPack]         = [new_logit_0, new_logit_1]
 
         return shake_x(rs,
                        projection_storage_sz * storage_decay_rate,
                        initial_iteration_sz,
                        iteration_sz - 1,
                        storage_decay_rate,
-                       linearity_idx * linearity_decay_rate,
-                       linearity_decay_rate)
+                       partitioning_resolution)
 
     dim_sz: int                                                 = sqrt(list_sz)    
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
@@ -465,8 +449,7 @@ def shake_x(logit_list: list[LogitPack],
                                                   initial_iteration_sz,
                                                   initial_iteration_sz,
                                                   storage_decay_rate,
-                                                  linearity_idx,
-                                                  linearity_decay_rate)
+                                                  partitioning_resolution)
 
         transformed_logit_list          += [shaked_row]
 
@@ -475,8 +458,7 @@ def shake_x(logit_list: list[LogitPack],
                                                   initial_iteration_sz,
                                                   initial_iteration_sz,
                                                   storage_decay_rate,
-                                                  linearity_idx,
-                                                  linearity_decay_rate)
+                                                  partitioning_resolution)
 
         transformed_logit_list_2        += [shaked_row_2]
 
@@ -485,8 +467,7 @@ def shake_x(logit_list: list[LogitPack],
                                                   initial_iteration_sz,
                                                   initial_iteration_sz,
                                                   storage_decay_rate,
-                                                  linearity_idx,
-                                                  linearity_decay_rate)
+                                                  partitioning_resolution)
 
         transformed_logit_list_3        += [shaked_row_3]
 
@@ -504,8 +485,7 @@ def shake_x(logit_list: list[LogitPack],
                                                       initial_iteration_sz,
                                                       initial_iteration_sz,
                                                       storage_decay_rate,
-                                                      linearity_idx,
-                                                      linearity_decay_rate)
+                                                      partitioning_resolution)
 
         other_ctx_list: list[LogitPack]     = transformed_logit_list_2[i]
         other_ctx_list_2: list[LogitPack]   = transformed_logit_list_3[i] 
@@ -526,8 +506,7 @@ def shake_x(logit_list: list[LogitPack],
                    initial_iteration_sz,
                    iteration_sz - 1,
                    storage_decay_rate,
-                   linearity_idx * linearity_decay_rate,
-                   linearity_decay_rate)
+                   partitioning_resolution)
 
 def main():
 
