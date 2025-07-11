@@ -419,8 +419,10 @@ def shake_x(logit_list: list[LogitPack],
 
     if list_sz == 2:
         delta_pack_0_0: LogitPack   = pack_twosum(logit_list[0], logit_list[1], projection_storage_sz)
-        delta_pack_0_1: LogitPack   = lowres_pack_twosum(logit_list[0], logit_list[1], projection_storage_sz, partitioning_resolution)
-
+        delta_pack_0_1: LogitPack   = lowres_pack_twosum(logit_list[0], logit_list[1], projection_storage_sz, partitioning_resolution) #low resolution is for repartitioning the projection space because the "patterns" are of lower resolution than the actual number projections (which are taken cared of by the previous operation)
+                                                                                                                                       #https://leetcode.com/problems/word-pattern/description/
+                                                                                                                                       #I have considered very thoroughly about how these could be written, from col row calibration operation to base case projection to etc.
+                                                                                                                                       #it all comes down to the base case projection, if you are more comfortable with 32 dimensional projections, then it should be the base case's problem
         delta_pack_1_0: LogitPack   = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz)
         delta_pack_1_1: LogitPack   = lowres_pack_twosum(logit_list[1], logit_list[0], projection_storage_sz, partitioning_resolution)
  
