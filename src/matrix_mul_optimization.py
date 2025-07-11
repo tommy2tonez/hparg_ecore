@@ -423,6 +423,33 @@ def shake_x(logit_list: list[LogitPack],
         new_logit_1: LogitPack  = sum_accum(logit_list[1], delta_pack_1)
         rs: list[LogitPack]     = [new_logit_0, new_logit_1]
 
+        #the problem of Taylor Projection as pointed out by my colleagues is the resolution of the projection
+        #note that we are still using the Taylor Projection, but the resolution of the numerical value is different, for example a binary Taylor Projection would look like -1 1 -1 1, to project sin + cos waves with optimal projection storage size
+
+        #for the former layers, we'd want to decrease the resolution to increase derivative order, because we'd want to "group" the semantically equivalent context together (things that are fired to the same grid would be fired together in the next shake_x iterations), arguably, that we could achieve the same by allocating more storage for the traditional methods
+        #essentially, the former layers would be having a lot of ups and downs to "radix" the context into their appropriate buckets instead of bending the input space in the direction of the output space  
+        #in other words, we are changing our projection space to utilize more shapes over the linearity of those, this is where we got the decay rate wrong, decay rate is supposed to be the inverse decay of linearity, not the decay of projection_storage_sz ..., scientifically speaking
+        #in that sense, the decay rate is the decay of discretization value 
+
+        #the sole problem with those approaches is that we'd be allocating more resources for our search mission because the differential would be way way off
+
+        #so its kind of difficult, because a derivative order of 8 would take probably terabytes of storage to project
+        #however, if we are using binary coefficient, we'd be looking at /32 of the cost
+
+        #if we are going under binary, we'd be looking at a 0.01 bit/ coefficient, for a 6 dimensional 10 derivative order space
+        #for the lower layers, it'd be extremely hard to train, because like I said, we dont have the differential friction, we'd come up with a patch
+
+        #this is where I'm wrong, again
+        #essentially, those two values are distinct
+        #the linearity index and the projection_storage_sz
+        #we should still allocate more projection_storage_sz for the lower layers for they being bases
+        #and we should decrease linearity index of the lower layer, the linearity index of 1 is essentially a line derivative order of 2 (supposedly 1)
+        #linearity index of 0 is essentially a derivative order of 20 or 30, with high_discretization_sz, we'll syntheticalize the formula
+        #so there is a linear correlation between the linearity index and derivative order and discretization_sz
+
+        #for every iteration, we'd increase the linearity index and decrease the projection_storage_sz
+        #for the upper layer is less important in the hierarchical tree and more linearly relevant (we just sorted those)
+
         return shake_x(rs, projection_storage_sz * decay_rate, initial_iteration_sz, iteration_sz - 1, decay_rate) #I could not come up with projection resolution and differential searchability yet. If this does not project correctly in the first layers, we'll be messed up very very badly
 
     dim_sz: int                                                 = sqrt(list_sz)    
