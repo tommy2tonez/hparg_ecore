@@ -423,6 +423,16 @@ def shake_x(logit_list: list[LogitPack],
                                                                                                                                        #https://leetcode.com/problems/word-pattern/description/
                                                                                                                                        #I have considered very thoroughly about how these could be written, from col row calibration operation to base case projection to etc.
                                                                                                                                        #it all comes down to the base case projection, if you are more comfortable with 32 dimensional projections, then it should be the base case's problem
+                                                                                                                                       #if we look at the multidimensional projections, we'd see a one -> many kind of projection, for each x[-1], there are derivative order base projections, which would help with the projection diffraction
+
+                                                                                                                                       #that's precisely what we'd want to do in this case, because 3 dimensional + 3 dimensional = 6 dimensional projection is already a lot, we'd want to attempt to solve the problem of diffracting context by 
+                                                                                                                                       #improve base case
+                                                                                                                                            #improve the number of features in the base case, like in how we built the Taylor Projection multidimensional complete radix tree, we'd want to do one -> many, one x[-1] for many x[:-1] projections
+                                                                                                                                            #improve the low resolution of the base case, essentially, we'd want to get the shapes right (our coefficient pointer is in a different space that has higher discretization size of Taylor's coefficients, 0.1 bit per coefficient for example) to radix the projections into appropriate buckets, not the numerical values, so the low resolution would be a lossy compressor in the sense
+
+                                                                                                                                       #improve suffix array diffraction of not base case
+                                                                                                                                       #
+
         delta_pack_1_0: LogitPack   = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz)
         delta_pack_1_1: LogitPack   = lowres_pack_twosum(logit_list[1], logit_list[0], projection_storage_sz, partitioning_resolution)
  
