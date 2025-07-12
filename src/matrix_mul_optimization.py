@@ -428,14 +428,30 @@ def shake_x(logit_list: list[LogitPack],
                                                                                                                                        #that's precisely what we'd want to do in this case, because 3 dimensional + 3 dimensional = 6 dimensional projection is already a lot, we'd want to attempt to solve the problem of diffracting context by 
                                                                                                                                        #improve base case
                                                                                                                                             #improve the number of features in the base case, like in how we built the Taylor Projection multidimensional complete radix tree, we'd want to do one -> many, one x[-1] for many x[:-1] projections
-                                                                                                                                            #improve the low resolution of the base case, essentially, we'd want to get the shapes right (our coefficient pointer is in a different space that has higher discretization size of Taylor's coefficients, 0.1 bit per coefficient for example) to radix the projections into appropriate buckets, not the numerical values, so the low resolution would be a lossy compressor in the sense
+                                                                                                                                            #essentially its a permutation operation, <pack_0_0, pack_0_1, pack_0_2>, <pack_1_0, pack_1_1, pack_1_2> -> <pack_1_0 * pack_0_1 + pack_1_1 * pack_0_1 + pack_1_2 * pack_0_1, etc.>
+                                                                                                                                            #we'd want to do that to offset the diffracting responsibility, we'd want to have a lot of pointers because 6 dimensional projection is probably as far as we could do
+
+                                                                                                                                            #improve the low resolution of the base case, essentially, we'd want to get the shapes right (our coefficient pointer is in a different space that bijectively relates to that of a higher discretization size of Taylor's coefficients, 0.1 bit per coefficient for example) to radix the projections into appropriate buckets, not the numerical values, so the low resolution would be a lossy compressor in the sense
 
                                                                                                                                        #improve suffix array diffraction of not base case
-                                                                                                                                       #
+                                                                                                                                       #we are missing one thing
+                                                                                                                                       #its a radix tree of LogitPack, I was trying to distinct the dimensional differences, what's the difference between 4 dimensional projection vs 2logit + 2logit dimensional projection ?
+                                                                                                                                       
+                                                                                                                                       #remember that we'd want to do projection within the [LogitPack] territory, as for all other operation, it is a calibration operation, logically speaking
+                                                                                                                                       #as if [LogitPack] is a person, carrying information from A -> B, we'd want to talk about duplication of context later, essentially, we'd map a char -> an embedding of [[LogitPack, ...], ...]
+                                                                                                                                       #so those two are two very different techniques of approximation tuning, or offseting the cost of inaccurate projection of the base cases
+
+                                                                                                                                       #its hard, but the music is kind of starting from these lines 
+                                                                                                                                       #I've seen videos about inaccurate movie projection or photo frame projections, essentially, we'd want to project a probably sliding window of what's gonna happen next, rather than an immediate next word, because it'd help with the stability
+
+                                                                                                                                       #so if we are looking at the hierarchy, we are seeing the base of everything is a multidimensional Taylor Series projection (low + high resolution), low resolution to sort, high resolution to move the numerical values
+                                                                                                                                       #because a projection of 16 dimensions is expensive, how about we pack the 16 dimensions into 4 packs of 4, and we'd keep the projection rule, our new rule is built on top of the shake_x logic
+
+                                                                                                                                       #I dont know what the other approaches gonna look like, but the parallel dispatch version that leverages cache line + locality of accesses gonna look like this
 
         delta_pack_1_0: LogitPack   = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz)
         delta_pack_1_1: LogitPack   = lowres_pack_twosum(logit_list[1], logit_list[0], projection_storage_sz, partitioning_resolution)
- 
+
         new_logit_0: LogitPack      = sum_accum(logit_list[0], delta_pack_0_0, delta_pack_0_1)
         new_logit_1: LogitPack      = sum_accum(logit_list[1], delta_pack_1_0, delta_pack_1_1)
         rs: list[LogitPack]         = [new_logit_0, new_logit_1]
