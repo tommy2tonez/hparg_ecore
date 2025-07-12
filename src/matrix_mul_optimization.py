@@ -503,8 +503,6 @@ def shake_x(logit_list: list[LogitPack],
     transformed_logit_list_3        = rotate(transformed_logit_list_3)
     rs_list: list[list[LogitPack]]  = []
 
-    #we are missing a suffix arrays implementation to offload the row-col pressures
-
     for i in range(dim_sz):
         org_list: list[LogitPack]           = two_dimensional_logit_list[i]
         ctx_list: list[LogitPack]           = transformed_logit_list[i]
@@ -540,7 +538,6 @@ def main():
 
     inp: list[LogitPack]    = [LogitPack([get_leaf(1), get_leaf(2), get_leaf(3)]) for _ in range(16)]
     output: list[LogitPack] = shake_x(inp, 8, 1, 1, 1)
-
     print(len(output))
 
 main()
