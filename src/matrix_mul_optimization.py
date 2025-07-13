@@ -485,6 +485,32 @@ def shake_x(logit_list: list[LogitPack],
 
     #it's insanely hard to solve the problem
 
+    #according to the logic, the function is only logically wrong if the base case is wrong, the base case is wrong if the projecting space complexity exceeds the stable guaranteed complexity
+        #so it's important to have iteration_sz to offset the problem of summary of the matrix exceeding the stable numerical stability range
+        #the problem is that the delta iteration must also be within the acceptable numerical stability range (which is guaranteed by the storage_decay_rate)
+        #assume the worst case of rotate one time, we'd essentially be putting the burden of the entire original matrix on the two pairs, so it's not an acceptable solution (we summarize the matrix -> a row -> matrix -> a row -> etc.)
+        #assume the better case of rotate two time, we'd recursively be reducing the burden of the overhead
+        #how about we rotate n times, this is the stable way of doing (we dont have the exact formula to write the equation yet we somewhat know that it correlates to the rotation time and the logit storage of the base)
+
+    #assume that the shake_x() 2 is clear for a projection of 1 unit of complexity
+    #shake_x() 4 is clear for a projection of 2 unit of complexity
+    #the problem is that we'd want to build logit roads that clear the clearance to avoid ambiguity, or ambiguous summaries
+    #if we have the exact mathematical formula for this, we'd be able to tell the required rotations, number of logit roads to clear the clearance 
+    #the problem is right after the first rotation, we'd be forced to summarize the matrix, this is where most joints broke
+
+    #the problem of Machine Learning is this, we dont really precisely know what's going on, yet there are actually numbers
+    #in this specific solution, the number is the clearance, and we'd have to clear that clearance for every recursive layer to make sure that our solution is complete 
+
+    #people asked me why don't we project more, row -> row, col -> col, alright, projection is the only clue to machine learning, projection is also the most dangerous destructive intereference to machine learning
+    #we'd want to increase the number of stable projection dimensions at the base case where we'd actually resolute problems by doing projections
+    #would there exist a better projection scenerio where it is not in the base case? This is where we should question our rotating technique of the upper cases
+
+    #problem is those are probably the implementables thus far in the sense of parallel computing, (1): the virtual matrices that do rotate and do mlp on the original matrix simutanuously (we'd want to keep the cross, because that's the logit flow road, yet we'd want to do multiple crosses, only way to do so is via virtual matrices)
+    #                                                                                              (2): base case optimization of feature size + optimal projection
+    #                                                                                              (3): base case optimization of lossy compression of patterns, the problem of sorting is that we'd only need to extract the projection pattern not numerical value, we'd need to syntheticalize the projecting space of these guys
+    #                                                                                              (4): duplications of input, essentially what we'd do when we have an embedding bag of words, each word is mapped to a 512 dimension vector, etc. This is the way of offseting the base case misprojection 
+    #this sounds like https://leetcode.com/problems/sudoku-solver/description/, we will talk about this
+
     dim_sz: int                                                 = sqrt(list_sz)    
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
 
