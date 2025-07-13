@@ -462,12 +462,29 @@ def shake_x(logit_list: list[LogitPack],
                        iteration_sz - 1,
                        storage_decay_rate,
                        partitioning_resolution)
+
     #assume base case is accurate, assume not base case is not accurate
     #so the base case is not accurate, because we assumed that base case is sufficient to approx everything
     #problem is the base case is accurate if the matrix size is under a certain size
     #this is where we need an arbitrary bijective map, a shadow matrix to rotate and operate on to have two + or more + (two row-column intersection) to offset the logit density of the entire matrix being on the cross
     #so we have 1 real matrix and multiple shadow matrices to build flight paths between the logits
-                
+
+    #we were working on the maxflow + betweenness centrality problem
+    #imagine that for a normal matrix, we do mlp + rotate + mlp, we offload the responsibility of the entire matrix information transferring to the cross, essentially, the data of the entire matrix has to flow to the cross to flow to a random cell, in other words, every cell is linked with | to a cross
+
+    #how about we build a virtual matrix that is bijectively mapped to the original matrix (by using suffix array), and we rinse and repeat the process, so essentially, we do mlp + mlp + rotate + mlp + mlp for the first mlp is on the original matrix and the second mlp is on the virtual matrix 
+
+    #now the random cell has two cross paths, so the burden of bearing the matrix is on the two cross paths not one, we have successfully decrease the "requirement" for accurate base case projection, I dont have the actual number for this
+
+    #I guess the real problem statement is:
+    #if the logit flow is uniformly distributed, we'd just fatten the leaf nodes, because it'd be equivalent to having multiple crosses in the sense of offloading the logit transfer responsibility
+
+    #but the problem we are facing is the skin-tone problem, where a specific node needs more information from a certain set of nodes more than another
+    #our thesis would be if the flow is not uniformly distributed, far from the deviation, it must be the partitioning of the matrix is not accurate at the point (too many important information is at the same location, can't summarize), so a virtual reorder of the matrix would bring that back to uniform distribution where we'd want to fatten the leafs to further solve the problem  
+    #note that this is already the responsibility of the matrix when we do mlp, we just dont know how bad the original matrix really is in the sense of skewness, or what storage it takes for the matrix to do random matrix redistribution, we dont know 
+
+    #it's insanely hard to solve the problem
+
     dim_sz: int                                                 = sqrt(list_sz)    
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
 
