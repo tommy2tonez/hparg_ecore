@@ -462,7 +462,12 @@ def shake_x(logit_list: list[LogitPack],
                        iteration_sz - 1,
                        storage_decay_rate,
                        partitioning_resolution)
-
+    #assume base case is accurate, assume not base case is not accurate
+    #so the base case is not accurate, because we assumed that base case is sufficient to approx everything
+    #problem is the base case is accurate if the matrix size is under a certain size
+    #this is where we need an arbitrary bijective map, a shadow matrix to rotate and operate on to have two + or more + (two row-column intersection) to offset the logit density of the entire matrix being on the cross
+    #so we have 1 real matrix and multiple shadow matrices to build flight paths between the logits
+                
     dim_sz: int                                                 = sqrt(list_sz)    
     two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
 
