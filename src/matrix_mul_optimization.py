@@ -402,7 +402,7 @@ def sum_accum(*args) -> LogitPack:
 
     return functools.reduce(sum_accum_2, args[1:], args[0]) 
 
-def shake_x(logit_list: list[LogitPack],
+def shake_x(logit_list: list[list[LogitPack]],
             projection_storage_sz: int,
             initial_iteration_sz: int,
             iteration_sz: int,
@@ -418,43 +418,29 @@ def shake_x(logit_list: list[LogitPack],
         raise Exception()
 
     if list_sz == 2:
-        delta_pack_0_0: LogitPack   = pack_twosum(logit_list[0], logit_list[1], projection_storage_sz)
-        delta_pack_0_1: LogitPack   = lowres_pack_twosum(logit_list[0], logit_list[1], projection_storage_sz, partitioning_resolution) #low resolution is for repartitioning the projection space because the "patterns" are of lower resolution than the actual number projections (which are taken cared of by the previous operation)
-                                                                                                                                       #https://leetcode.com/problems/word-pattern/description/
-                                                                                                                                       #I have considered very thoroughly about how these could be written, from col row calibration operation to base case projection to etc.
-                                                                                                                                       #it all comes down to the base case projection, if you are more comfortable with 32 dimensional projections, then it should be the base case's problem
-                                                                                                                                       #if we look at the multidimensional projections, we'd see a one -> many kind of projection, for each x[-1], there are derivative order base projections, which would help with the projection diffraction
 
-                                                                                                                                       #that's precisely what we'd want to do in this case, because 3 dimensional + 3 dimensional = 6 dimensional projection is already a lot, we'd want to attempt to solve the problem of diffracting context by 
-                                                                                                                                       #improve base case
-                                                                                                                                            #improve the number of features in the base case, like in how we built the Taylor Projection multidimensional complete radix tree, we'd want to do one -> many, one x[-1] for many x[:-1] projections
-                                                                                                                                            #essentially its a permutation operation, <pack_0_0, pack_0_1, pack_0_2>, <pack_1_0, pack_1_1, pack_1_2> -> <pack_1_0 * pack_0_1 + pack_1_1 * pack_0_1 + pack_1_2 * pack_0_1, etc.>
-                                                                                                                                            #we'd want to do that to offset the diffracting responsibility, we'd want to have a lot of pointers because 6 dimensional projection is probably as far as we could do
+        lhs: list[LogitPack]    = []
+        rhs: list[LogitPack]    = []
 
-                                                                                                                                            #improve the low resolution of the base case, essentially, we'd want to get the shapes right (our coefficient pointer is in a different space that bijectively relates to that of a higher discretization size of Taylor's coefficients, 0.1 bit per coefficient for example) to radix the projections into appropriate buckets, not the numerical values, so the low resolution would be a lossy compressor in the sense
+        for i in range(len(logit_list[0])):
+            new_logit_pack: LogitPack = make_zero_logit_pack() 
 
-                                                                                                                                       #improve suffix array diffraction of not base case
-                                                                                                                                       #we are missing one thing
-                                                                                                                                       #its a radix tree of LogitPack, I was trying to distinct the dimensional differences, what's the difference between 4 dimensional projection vs 2logit + 2logit dimensional projection ?
-                                                                                                                                       
-                                                                                                                                       #remember that we'd want to do projection within the [LogitPack] territory, as for all other operation, it is a calibration operation, logically speaking
-                                                                                                                                       #as if [LogitPack] is a person, carrying information from A -> B, we'd want to talk about duplication of context later, essentially, we'd map a char -> an embedding of [[LogitPack, ...], ...]
-                                                                                                                                       #so those two are two very different techniques of approximation tuning, or offseting the cost of inaccurate projection of the base cases
+            for j in range(len(logit_list[1])):
+                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[0][i], logit_list[1][j], projection_storage_sz))
 
-                                                                                                                                       #its hard, but the music is kind of starting from these lines 
-                                                                                                                                       #I've seen videos about inaccurate movie projection or photo frame projections, essentially, we'd want to project a probably sliding window of what's gonna happen next, rather than an immediate next word, because it'd help with the stability
+            new_logit_pack  = sum_accum(logit_list[0][i], new_logit_pack)
+            lhs             += [new_logit_pack]
 
-                                                                                                                                       #so if we are looking at the hierarchy, we are seeing the base of everything is a multidimensional Taylor Series projection (low + high resolution), low resolution to sort, high resolution to move the numerical values
-                                                                                                                                       #because a projection of 16 dimensions is expensive, how about we pack the 16 dimensions into 4 packs of 4, and we'd keep the projection rule, our new rule is built on top of the shake_x logic
+        for i in range(len(logit_list[1])):
+            new_logit_pack: LogitPack = make_zero_logit_pack()
 
-                                                                                                                                       #I dont know what the other approaches gonna look like, but the parallel dispatch version that leverages cache line + locality of accesses gonna look like this
+            for j in range(len(logit_list[0])):
+                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[1][i], logit_list[0][j], projection_storage_sz))
 
-        delta_pack_1_0: LogitPack   = pack_twosum(logit_list[1], logit_list[0], projection_storage_sz)
-        delta_pack_1_1: LogitPack   = lowres_pack_twosum(logit_list[1], logit_list[0], projection_storage_sz, partitioning_resolution)
+            new_logit_pack  = sum_accum(logit_list[1][i], new_logit_pack)
+            rhs             += [new_logit_pack]
 
-        new_logit_0: LogitPack      = sum_accum(logit_list[0], delta_pack_0_0, delta_pack_0_1)
-        new_logit_1: LogitPack      = sum_accum(logit_list[1], delta_pack_1_0, delta_pack_1_1)
-        rs: list[LogitPack]         = [new_logit_0, new_logit_1]
+        rs: list[LogitPack] = [calibrate_logit_pack_list(lhs), calibrate_logit_pack_list(rhs)]
 
         return shake_x(rs,
                        projection_storage_sz * storage_decay_rate,
@@ -463,115 +449,81 @@ def shake_x(logit_list: list[LogitPack],
                        storage_decay_rate,
                        partitioning_resolution)
 
-    #assume base case is accurate, assume not base case is not accurate
-    #so the base case is not accurate, because we assumed that base case is sufficient to approx everything
-    #problem is the base case is accurate if the matrix size is under a certain size
-    #this is where we need an arbitrary bijective map, a shadow matrix to rotate and operate on to have two + or more + (two row-column intersection) to offset the logit density of the entire matrix being on the cross
-    #so we have 1 real matrix and multiple shadow matrices to build flight paths between the logits
+    #today we'll be focusing on the three main improvements:
+    #one -> many projection, projection permutation and sum_accum for base case
+    #virtual matrix paths, and simutanous sum accumulation, essentially we'd be working on multiple crosses to offload the responsibility of all matrix knowledge being on the cross
+    #f(x) unscaling, essentially f(x) / n is the shape of the projection, if we look closely at the coefficients, their cosine vector is important in the case of shape projection, so that is what we'd do, we would be in the cosine space to map to the taylor projection space of derivative order of 100
+    #alright, so essentially we'd be working on the coefficient vector of unit size of 1 instead of all the unit sizes 
 
-    #we were working on the maxflow + betweenness centrality problem
-    #imagine that for a normal matrix, we do mlp + rotate + mlp, we offload the responsibility of the entire matrix information transferring to the cross, essentially, the data of the entire matrix has to flow to the cross to flow to a random cell, in other words, every cell is linked with | to a cross
+    #assume that we have a pointer of 256 or one char, we'd want to discretize the unit space to 256 cube
+    #assume that we have a pointer of 65536 or two char, we'd want to discretize the unit space to 65536 cube
 
-    #how about we build a virtual matrix that is bijectively mapped to the original matrix (by using suffix array), and we rinse and repeat the process, so essentially, we do mlp + mlp + rotate + mlp + mlp for the first mlp is on the original matrix and the second mlp is on the virtual matrix 
+    #it's insanely complicated how we got to this matrix code
+    #I'm not saying that this is the best code but this is the logically correct code in terms of what we could do to stablize the matrix
 
-    #now the random cell has two cross paths, so the burden of bearing the matrix is on the two cross paths not one, we have successfully decrease the "requirement" for accurate base case projection, I dont have the actual number for this
+    dim_sz: int                                                     = sqrt(list_sz)    
+    two_dimensional_logit_list: list[list[list[LogitPack]]]         = shape_as(logit_list, [dim_sz, dim_sz])
 
-    #I guess the real problem statement is:
-    #if the logit flow is uniformly distributed, we'd just fatten the leaf nodes, because it'd be equivalent to having multiple crosses in the sense of offloading the logit transfer responsibility
+    rotated_two_dimensional_logit_list: list[list[list[LogitPack]]] = rotate(two_dimensional_logit_list)
+    transformed_logit_list: list[list[list[LogitPack]]]             = []
+    transformed_logit_list_2: list[list[list[LogitPack]]]           = []
+    transformed_logit_list_3: list[list[list[LogitPack]]]           = []
 
-    #but the problem we are facing is the skin-tone problem, where a specific node needs more information from a certain set of nodes more than another
-    #our thesis would be if the flow is not uniformly distributed, far from the deviation, it must be the partitioning of the matrix is not accurate at the point (too many important information is at the same location, can't summarize), so a virtual reorder of the matrix would bring that back to uniform distribution where we'd want to fatten the leafs to further solve the problem  
-    #note that this is already the responsibility of the matrix when we do mlp, we just dont know how bad the original matrix really is in the sense of skewness, or what storage it takes for the matrix to do random matrix redistribution, we dont know 
-
-    #it's insanely hard to solve the problem
-
-    #according to the logic, the function is only logically wrong if the base case is wrong, the base case is wrong if the projecting space complexity exceeds the stable guaranteed complexity
-        #so it's important to have iteration_sz to offset the problem of summary of the matrix exceeding the stable numerical stability range
-        #the problem is that the delta iteration must also be within the acceptable numerical stability range (which is guaranteed by the storage_decay_rate)
-        #assume the worst case of rotate one time, we'd essentially be putting the burden of the entire original matrix on the two pairs, so it's not an acceptable solution (we summarize the matrix -> a row -> matrix -> a row -> etc.)
-        #assume the better case of rotate two time, we'd recursively be reducing the burden of the overhead
-        #how about we rotate n times, this is the stable way of doing (we dont have the exact formula to write the equation yet we somewhat know that it correlates to the rotation time and the logit storage of the base)
-
-    #assume that the shake_x() 2 is clear for a projection of 1 unit of complexity
-    #shake_x() 4 is clear for a projection of 2 unit of complexity
-    #the problem is that we'd want to build logit roads that clear the clearance to avoid ambiguity, or ambiguous summaries
-    #if we have the exact mathematical formula for this, we'd be able to tell the required rotations, number of logit roads to clear the clearance 
-    #the problem is right after the first rotation, we'd be forced to summarize the matrix, this is where most joints broke
-
-    #the problem of Machine Learning is this, we dont really precisely know what's going on, yet there are actually numbers
-    #in this specific solution, the number is the clearance, and we'd have to clear that clearance for every recursive layer to make sure that our solution is complete 
-
-    #people asked me why don't we project more, row -> row, col -> col, alright, projection is the only clue to machine learning, projection is also the most dangerous destructive intereference to machine learning
-    #we'd want to increase the number of stable projection dimensions at the base case where we'd actually resolute problems by doing projections
-    #would there exist a better projection scenerio where it is not in the base case? This is where we should question our rotating technique of the upper cases
-
-    #problem is those are probably the implementables thus far in the sense of parallel computing, (1): the virtual matrices that do rotate and do mlp on the original matrix simutanuously (we'd want to keep the cross, because that's the logit flow road, yet we'd want to do multiple crosses, only way to do so is via virtual matrices)
-    #                                                                                              (2): base case optimization of feature size + optimal projection
-    #                                                                                              (3): base case optimization of lossy compression of patterns, the problem of sorting is that we'd only need to extract the projection pattern not numerical value, we'd need to syntheticalize the projecting space of these guys
-    #                                                                                              (4): duplications of input, essentially what we'd do when we have an embedding bag of words, each word is mapped to a 512 dimension vector, etc. This is the way of offseting the base case misprojection 
-    #this sounds like https://leetcode.com/problems/sudoku-solver/description/, we will talk about this
-
-    dim_sz: int                                                 = sqrt(list_sz)    
-    two_dimensional_logit_list: list[list[LogitPack]]           = shape_as(logit_list, [dim_sz, dim_sz])
-
-    rotated_two_dimensional_logit_list: list[list[LogitPack]]   = rotate(two_dimensional_logit_list)
-    transformed_logit_list: list[list[LogitPack]]               = []
-    transformed_logit_list_2: list[list[LogitPack]]             = []
-    transformed_logit_list_3: list[list[LogitPack]]             = []
+    #we'd want to do the virtual paths, later
 
     for i in range(dim_sz):
-        shaked_row: list[LogitPack]     = shake_x(two_dimensional_logit_list[i],
-                                                  projection_storage_sz,
-                                                  initial_iteration_sz,
-                                                  initial_iteration_sz,
-                                                  storage_decay_rate,
-                                                  partitioning_resolution)
-
-        transformed_logit_list          += [shaked_row]
-
-        shaked_row_2: list[LogitPack]   = shake_x(two_dimensional_logit_list[i],
-                                                  projection_storage_sz,
-                                                  initial_iteration_sz,
-                                                  initial_iteration_sz,
-                                                  storage_decay_rate,
-                                                  partitioning_resolution)
-
-        transformed_logit_list_2        += [shaked_row_2]
-
-        shaked_row_3: list[LogitPack]   = shake_x(rotated_two_dimensional_logit_list[i],
-                                                  projection_storage_sz,
-                                                  initial_iteration_sz,
-                                                  initial_iteration_sz,
-                                                  storage_decay_rate,
-                                                  partitioning_resolution)
-
-        transformed_logit_list_3        += [shaked_row_3]
-
-    transformed_logit_list          = rotate(transformed_logit_list)
-    transformed_logit_list_3        = rotate(transformed_logit_list_3)
-    rs_list: list[list[LogitPack]]  = []
-
-    for i in range(dim_sz):
-        org_list: list[LogitPack]           = two_dimensional_logit_list[i]
-        ctx_list: list[LogitPack]           = transformed_logit_list[i]
-        shaked_ctx_list: list[LogitPack]    = shake_x(ctx_list,
+        shaked_row: list[list[LogitPack]]   = shake_x(two_dimensional_logit_list[i],
                                                       projection_storage_sz,
                                                       initial_iteration_sz,
                                                       initial_iteration_sz,
                                                       storage_decay_rate,
                                                       partitioning_resolution)
 
-        other_ctx_list: list[LogitPack]     = transformed_logit_list_2[i]
-        other_ctx_list_2: list[LogitPack]   = transformed_logit_list_3[i] 
-        new_row: list[LogitPack]            = []
+        transformed_logit_list              += [shaked_row]
+
+        shaked_row_2: list[list[LogitPack]] = shake_x(two_dimensional_logit_list[i],
+                                                      projection_storage_sz,
+                                                      initial_iteration_sz,
+                                                      initial_iteration_sz,
+                                                      storage_decay_rate,
+                                                      partitioning_resolution)
+
+        transformed_logit_list_2            += [shaked_row_2]
+
+        shaked_row_3: list[list[LogitPack]] = shake_x(rotated_two_dimensional_logit_list[i],
+                                                      projection_storage_sz,
+                                                      initial_iteration_sz,
+                                                      initial_iteration_sz,
+                                                      storage_decay_rate,
+                                                      partitioning_resolution)
+
+        transformed_logit_list_3            += [shaked_row_3]
+
+    transformed_logit_list                  = rotate(transformed_logit_list)
+    transformed_logit_list_3                = rotate(transformed_logit_list_3)
+    rs_list: list[list[list[LogitPack]]]    = []
+
+    for i in range(dim_sz):
+        org_list: list[list[LogitPack]]         = two_dimensional_logit_list[i]
+        ctx_list: list[list[LogitPack]]         = transformed_logit_list[i]
+        shaked_ctx_list: list[list[LogitPack]]  = shake_x(ctx_list,
+                                                          projection_storage_sz,
+                                                          initial_iteration_sz,
+                                                          initial_iteration_sz,
+                                                          storage_decay_rate,
+                                                          partitioning_resolution)
+
+        other_ctx_list: list[list[LogitPack]]   = transformed_logit_list_2[i]
+        other_ctx_list_2: list[list[LogitPack]] = transformed_logit_list_3[i] 
+        new_row: list[list[LogitPack]]          = []
 
         for j in range(dim_sz):
-            new_logit: LogitPack    = sum_accum(org_list[j],
-                                                other_ctx_list[j],
-                                                shaked_ctx_list[j],
-                                                other_ctx_list_2[j])
+            new_logit: list[LogitPack]  = sum_accum_logit_pack_list(org_list[j],
+                                                                    other_ctx_list[j],
+                                                                    shaked_ctx_list[j],
+                                                                    other_ctx_list_2[j])
 
-            new_row                 += [new_logit]
+            new_row                     += [new_logit]
 
         rs_list += [new_row]
 
