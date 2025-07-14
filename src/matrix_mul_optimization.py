@@ -466,6 +466,11 @@ def shake_x(logit_list: list[Brain],
     #what I know for sure is that a 3 virtual matrices is better than a row + col + row_col transformation
     #so essentially, our original matrix is unchanged, we just rotate the arbitrary matrices that contain the indices of the original matrix, if that makes sense
     #what I also know is that we need 2x information (> 1x information) to transform the matrix (information-technology-wise speaking) in the row-col fashion without being afraid of misprojections, 1 is the original, 1 is the tmp, that's on the brain to carry the responsibility (what's why we have multiple brain cells, which is a set of LogitPacks)
+    #the problem could not be better described https://leetcode.com/problems/game-of-life/description/
+
+    #the only problem we have not been able to solve is the problem of radix sort
+    #as we could see, we are trying to move the semantics into their appropriate buckets to do neuron firings, yet we could not recursively sort them into appropriate buckets but rather a pigeonhole sort of O(n) size, note that we are learning the map, which is not a good approach
+    #if we could somehow learn it, the sorting way (or the sorting algorithm), and move our focal onto the sorted buckets to recursively project, that'd be ideal
 
     #because the flow path of the matrix is better that way
 
