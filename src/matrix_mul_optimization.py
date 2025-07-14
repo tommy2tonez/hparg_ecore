@@ -471,6 +471,22 @@ def shake_x(logit_list: list[Brain],
     #the only problem we have not been able to solve is the problem of radix sort
     #as we could see, we are trying to move the semantics into their appropriate buckets to do neuron firings, yet we could not recursively sort them into appropriate buckets but rather a pigeonhole sort of O(n) size, note that we are learning the map, which is not a good approach
     #if we could somehow learn it, the sorting way (or the sorting algorithm), and move our focal onto the sorted buckets to recursively project, that'd be ideal
+    #believe it or not, we are missing a modulo operation
+
+    #if you look at the radix sort, we are just radixing them into appropriate space, unscale the projection to see what's going on with the other radices
+    #if we are radixing from right to left, we radix it into 256 buckets, then we'd want to unscale the projection, by essentially zooming into the remaining space
+    #essentially a division followed by a multiplication to get the remaining projection, this division is an integer division
+    #this is the sole implementation that is very important, otherwise we are just doing pigeonhole sort ...
+
+    #imagine this sequence of 1|2|3|4
+
+    #those that are in the 4th bucket are radixed into the same bucket of continuity compression
+    #those that are in the 3rd bucket of 1|2|3 are radixed in the same bucket of continuity compression
+
+    #problem is that in the sense of continuity compression, we'd want to do prefix followed by a modulo to get the lower bits, partition + 1|2|3|4 + projection + modulo -> partition + 2|3|4|0 + projection + modulo -> partition + 3|4|0|0 + projection + modulo -> partition 4|0|0|0 + projection
+    #so we'd turn a pigeonhole sort into a radix sort, whose policy is to sort the dimensions in the sense of relevancy and we'd want to do a modulo projection, this is my single biggest regret because I'd not be able to see continuity in my network
+    #the other hard part is to reorder the original projection space based on the relevancy rule, we'll see about the approach
+    #problem is that we'd do partition wrong (in the sense of keeping the trailing semantic) so we'd want to re radix the fellows, this requires padding bits to further continue the radix sort, we'd talk about this later, essentially, we'd want to dup or triple the byte size of the sorting data to further the radix sort 
 
     #because the flow path of the matrix is better that way
 
