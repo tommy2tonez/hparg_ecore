@@ -402,12 +402,12 @@ def sum_accum(*args) -> LogitPack:
 
     return functools.reduce(sum_accum_2, args[1:], args[0]) 
 
-def shake_x(logit_list: list[list[LogitPack]],
+def shake_x(logit_list: list[Brain],
             projection_storage_sz: int,
             initial_iteration_sz: int,
             iteration_sz: int,
             storage_decay_rate: float,
-            partitioning_resolution: float) -> list[LogitPack]:
+            partitioning_resolution: float) -> list[Brain]:
 
     if iteration_sz == 0:
         return logit_list 
@@ -418,29 +418,28 @@ def shake_x(logit_list: list[list[LogitPack]],
         raise Exception()
 
     if list_sz == 2:
-
         lhs: list[LogitPack]    = []
         rhs: list[LogitPack]    = []
 
-        for i in range(len(logit_list[0])):
+        for i in range(logit_list[0].size()):
             new_logit_pack: LogitPack = make_zero_logit_pack() 
 
-            for j in range(len(logit_list[1])):
-                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[0][i], logit_list[1][j], projection_storage_sz))
+            for j in range(logit_list[1].size()):
+                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[0].get(i), logit_list[1].get(j), projection_storage_sz))
 
-            new_logit_pack  = sum_accum(logit_list[0][i], new_logit_pack)
+            new_logit_pack  = sum_accum(logit_list[0].get(i), new_logit_pack)
             lhs             += [new_logit_pack]
 
-        for i in range(len(logit_list[1])):
+        for i in range(logit_list[1].size()):
             new_logit_pack: LogitPack = make_zero_logit_pack()
 
-            for j in range(len(logit_list[0])):
-                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[1][i], logit_list[0][j], projection_storage_sz))
+            for j in range(len(logit_list[0].size())):
+                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[1].get(i), logit_list[0].get(j), projection_storage_sz))
 
-            new_logit_pack  = sum_accum(logit_list[1][i], new_logit_pack)
+            new_logit_pack  = sum_accum(logit_list[1].get(i), new_logit_pack)
             rhs             += [new_logit_pack]
 
-        rs: list[LogitPack] = [calibrate_logit_pack_list(lhs), calibrate_logit_pack_list(rhs)]
+        rs: list[Brain] = [Brain(calibrate_logit_pack_list(lhs)), Brain(calibrate_logit_pack_list(rhs))]
 
         return shake_x(rs,
                        projection_storage_sz * storage_decay_rate,
@@ -455,79 +454,79 @@ def shake_x(logit_list: list[list[LogitPack]],
     #f(x) unscaling, essentially f(x) / n is the shape of the projection, if we look closely at the coefficients, their cosine vector is important in the case of shape projection, so that is what we'd do, we would be in the cosine space to map to the taylor projection space of derivative order of 100
     #alright, so essentially we'd be working on the coefficient vector of unit size of 1 instead of all the unit sizes 
 
-    #assume that we have a pointer of 256 or one char, we'd want to discretize the unit space to 256 cube
-    #assume that we have a pointer of 65536 or two char, we'd want to discretize the unit space to 65536 cube
+    #assume that we have a pointer of 256 or one char, we'd want to discretize the unit space to 256 cubes in a multidimensional sphere
+    #assume that we have a pointer of 65536 or two char, we'd want to discretize the unit space to 65536 cubes in a multidimensional sphere
+    #the resolution of the shape would be propotional to the storage pointer (which is uint8_t, uint16_t, uint32_t etc.)
+    #the only advantage edge we have when projecting shape is the sphere space of 1 around the origin instead of all over the place
 
     #it's insanely complicated how we got to this matrix code
     #I'm not saying that this is the best code but this is the logically correct code in terms of what we could do to stablize the matrix
 
-    dim_sz: int                                                     = sqrt(list_sz)    
-    two_dimensional_logit_list: list[list[list[LogitPack]]]         = shape_as(logit_list, [dim_sz, dim_sz])
+    #despite my 2 days of non-stop thinking, I couldn't formulate an equation for exact # of rotations to keep the matrix from falling apart
+    #what I know for sure is that a 3 virtual matrices is better than a row + col + row_col transformation
+    #so essentially, our original matrix is unchanged, we just rotate the arbitrary matrices that contain the indices of the original matrix, if that makes sense
+    #what I also know is that we need 2x information (> 1x information) to transform the matrix (information-technology-wise speaking) in the row-col fashion without being afraid of misprojections, 1 is the original, 1 is the tmp, that's on the brain to carry the responsibility (what's why we have multiple brain cells, which is a set of LogitPacks)
 
-    rotated_two_dimensional_logit_list: list[list[list[LogitPack]]] = rotate(two_dimensional_logit_list)
-    transformed_logit_list: list[list[list[LogitPack]]]             = []
-    transformed_logit_list_2: list[list[list[LogitPack]]]           = []
-    transformed_logit_list_3: list[list[list[LogitPack]]]           = []
+    #because the flow path of the matrix is better that way
+
+    dim_sz: int                                     = sqrt(list_sz)    
+    space_sz: list[int]                             = [dim_sz, dim_sz]
+    suffix_arr_1: list[int]                         = get_suffix_array(iteration_sz, space_sz, 0)
+    suffix_arr_2: list[int]                         = get_suffix_array(iteration_sz, space_sz, 1)
+    suffix_arr_3: list[int]                         = get_suffix_array(iteration_sz, space_sz, 2)
+
+    virtual_logit_list_1: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_1)
+    virtual_logit_list_2: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_2)
+    virtual_logit_list_3: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_3)
+
+    shaped_virtual_logit_list_1: list[list[Brain]]  = shape_as(virtual_logit_list_1, space_sz)
+    shaped_virtual_logit_list_2: list[list[Brain]]  = shape_as(virtual_logit_list_2, space_sz)
+    shaped_virtual_logit_list_3: list[list[Brain]]  = shape_as(virtual_logit_list_3, space_sz)
+
+    transformed_logit_list_1: list[list[Brain]]     = []
+    transformed_logit_list_2: list[list[Brain]]     = []
+    transformed_logit_list_3: list[list[Brain]]     = []
 
     #we'd want to do the virtual paths, later
 
     for i in range(dim_sz):
-        shaked_row: list[list[LogitPack]]   = shake_x(two_dimensional_logit_list[i],
-                                                      projection_storage_sz,
-                                                      initial_iteration_sz,
-                                                      initial_iteration_sz,
-                                                      storage_decay_rate,
-                                                      partitioning_resolution)
+        shaked_row: list[Brain]     = shake_x(shaped_virtual_logit_list_1[i],
+                                              projection_storage_sz,
+                                              initial_iteration_sz,
+                                              initial_iteration_sz,
+                                              storage_decay_rate,
+                                              partitioning_resolution)
 
-        transformed_logit_list              += [shaked_row]
+        transformed_logit_list_1    += [shaked_row]
 
-        shaked_row_2: list[list[LogitPack]] = shake_x(two_dimensional_logit_list[i],
-                                                      projection_storage_sz,
-                                                      initial_iteration_sz,
-                                                      initial_iteration_sz,
-                                                      storage_decay_rate,
-                                                      partitioning_resolution)
+        shaked_row_2: list[Brain]   = shake_x(shaped_virtual_logit_list_2[i],
+                                              projection_storage_sz,
+                                              initial_iteration_sz,
+                                              initial_iteration_sz,
+                                              storage_decay_rate,
+                                              partitioning_resolution)
 
-        transformed_logit_list_2            += [shaked_row_2]
+        transformed_logit_list_2    += [shaked_row_2]
 
-        shaked_row_3: list[list[LogitPack]] = shake_x(rotated_two_dimensional_logit_list[i],
-                                                      projection_storage_sz,
-                                                      initial_iteration_sz,
-                                                      initial_iteration_sz,
-                                                      storage_decay_rate,
-                                                      partitioning_resolution)
+        shaked_row_3: list[Brain]   = shake_x(shaped_virtual_logit_list_3[i],
+                                              projection_storage_sz,
+                                              initial_iteration_sz,
+                                              initial_iteration_sz,
+                                              storage_decay_rate,
+                                              partitioning_resolution)
 
-        transformed_logit_list_3            += [shaked_row_3]
+        transformed_logit_list_3    += [shaked_row_3]
 
-    transformed_logit_list                  = rotate(transformed_logit_list)
-    transformed_logit_list_3                = rotate(transformed_logit_list_3)
-    rs_list: list[list[list[LogitPack]]]    = []
+    post_shaped_virtual_logit_list_1: list[Brain]   = backward_map_suffix_array(flatten(transformed_logit_list_1), suffix_arr_1)
+    post_shaped_virtual_logit_list_2: list[Brain]   = backward_map_suffix_array(flatten(transformed_logit_list_2), suffix_arr_2)
+    post_shaped_virtual_logit_list_3: list[Brain]   = backward_map_suffix_array(flatten(transformed_logit_list_3), suffix_arr_3)
+    rs_list: list[Brain]                            = []
 
-    for i in range(dim_sz):
-        org_list: list[list[LogitPack]]         = two_dimensional_logit_list[i]
-        ctx_list: list[list[LogitPack]]         = transformed_logit_list[i]
-        shaked_ctx_list: list[list[LogitPack]]  = shake_x(ctx_list,
-                                                          projection_storage_sz,
-                                                          initial_iteration_sz,
-                                                          initial_iteration_sz,
-                                                          storage_decay_rate,
-                                                          partitioning_resolution)
+    for i in range(list_sz):
+        new_brain: Brain    = brain_accum(logit_list[i], post_shaped_virtual_logit_list_1[i], post_shaped_virtual_logit_list_2[i], post_shaped_virtual_logit_list_3[i])
+        rs_list             += [new_brain]
 
-        other_ctx_list: list[list[LogitPack]]   = transformed_logit_list_2[i]
-        other_ctx_list_2: list[list[LogitPack]] = transformed_logit_list_3[i] 
-        new_row: list[list[LogitPack]]          = []
-
-        for j in range(dim_sz):
-            new_logit: list[LogitPack]  = sum_accum_logit_pack_list(org_list[j],
-                                                                    other_ctx_list[j],
-                                                                    shaked_ctx_list[j],
-                                                                    other_ctx_list_2[j])
-
-            new_row                     += [new_logit]
-
-        rs_list += [new_row]
-
-    return shake_x(flatten(rotate(rs_list)),
+    return shake_x(rs_list,
                    projection_storage_sz * storage_decay_rate,
                    initial_iteration_sz,
                    iteration_sz - 1,
@@ -536,8 +535,7 @@ def shake_x(logit_list: list[list[LogitPack]],
 
 def main():
 
-    inp: list[LogitPack]    = [LogitPack([get_leaf(1), get_leaf(2), get_leaf(3)]) for _ in range(16)]
-    output: list[LogitPack] = shake_x(inp, 8, 1, 1, 1)
-    print(len(output))
+    pass
 
 main()
+
