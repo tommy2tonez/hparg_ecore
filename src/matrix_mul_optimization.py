@@ -583,12 +583,65 @@ def shake_x(logit_list: list[Brain],
         new_brain: Brain    = brain_accum(logit_list[i], post_shaped_virtual_logit_list_1[i], post_shaped_virtual_logit_list_2[i], post_shaped_virtual_logit_list_3[i])
         rs_list             += [new_brain]
 
-    return shake_x(rs_list,
-                   projection_storage_sz * storage_decay_rate,
-                   initial_iteration_sz,
-                   iteration_sz - 1,
-                   storage_decay_rate,
-                   partitioning_resolution)
+    _virtual_logit_list_1: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_1)
+    _virtual_logit_list_2: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_2)
+    _virtual_logit_list_3: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_3)
+
+    _shaped_virtual_logit_list_1: list[list[Brain]]  = shape_as(_virtual_logit_list_1, space_sz)
+    _shaped_virtual_logit_list_2: list[list[Brain]]  = shape_as(_virtual_logit_list_2, space_sz)
+    _shaped_virtual_logit_list_3: list[list[Brain]]  = shape_as(_virtual_logit_list_3, space_sz)
+
+    _transformed_logit_list_1: list[list[Brain]]     = []
+    _transformed_logit_list_2: list[list[Brain]]     = []
+    _transformed_logit_list_3: list[list[Brain]]     = []
+
+    #we'd want to do the virtual paths, later
+
+    for i in range(dim_sz):
+        shaked_row: list[Brain]     = shake_x(_shaped_virtual_logit_list_1[i],
+                                              projection_storage_sz,
+                                              initial_iteration_sz,
+                                              initial_iteration_sz,
+                                              storage_decay_rate,
+                                              partitioning_resolution)
+
+        _transformed_logit_list_1   += [shaked_row]
+
+        shaked_row_2: list[Brain]   = shake_x(_shaped_virtual_logit_list_2[i],
+                                              projection_storage_sz,
+                                              initial_iteration_sz,
+                                              initial_iteration_sz,
+                                              storage_decay_rate,
+                                              partitioning_resolution)
+
+        _transformed_logit_list_2   += [shaked_row_2]
+
+        shaked_row_3: list[Brain]   = shake_x(_shaped_virtual_logit_list_3[i],
+                                              projection_storage_sz,
+                                              initial_iteration_sz,
+                                              initial_iteration_sz,
+                                              storage_decay_rate,
+                                              partitioning_resolution)
+
+        _transformed_logit_list_3   += [shaked_row_3]
+
+    _post_shaped_virtual_logit_list_1: list[Brain]   = backward_map_suffix_array(flatten(_transformed_logit_list_1), suffix_arr_1)
+    _post_shaped_virtual_logit_list_2: list[Brain]   = backward_map_suffix_array(flatten(_transformed_logit_list_2), suffix_arr_2)
+    _post_shaped_virtual_logit_list_3: list[Brain]   = backward_map_suffix_array(flatten(_transformed_logit_list_3), suffix_arr_3)
+    _rs_list: list[Brain]                            = []
+
+    for i in range(list_sz):
+        new_brain: Brain    = brain_accum(logit_list[i], _post_shaped_virtual_logit_list_1[i], _post_shaped_virtual_logit_list_2[i], _post_shaped_virtual_logit_list_3[i])
+        _rs_list            += [new_brain]
+
+    nxt_ctx_list: list[Brain] = shake_x(rs_list,
+                                        projection_storage_sz * storage_decay_rate,
+                                        initial_iteration_sz,
+                                        iteration_sz - 1,
+                                        storage_decay_rate,
+                                        partitioning_resolution)
+
+    return list(map(brain_accum, zip(rs_list, nxt_ctx_list)))
 
 def main():
 
