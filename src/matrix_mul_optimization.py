@@ -504,6 +504,12 @@ def shake_x(logit_list: list[Brain],
     #I'm not saying that this is the best code but this is the logically correct code in terms of what we could do to stablize the matrix
 
     #despite my 2 days of non-stop thinking, I couldn't formulate an equation for exact # of rotations to keep the matrix from falling apart
+    #I have used middle theorem to squeeze the possibility, assume this algorithmic approach of transferring all matrix information on the row to project exactly one cell in the matrix
+    #this is precisely the problem (the base has to be as most strong as the matrix to hold the matrix (this is the skyscraper on stilt problem), this equals to the pair having to hold the matrix weight), we can't prove that by using other approaches
+    #we'd allow leeways for the matrix having found a better way to lessen the weights, this is where I can't use middle theorem, what, where precisely is the equation ??? I have no idea
+
+    #we'd want to do 3, 9, 27, 81 as clued by Mom
+
     #what I know for sure is that a 3 virtual matrices is better than a row + col + row_col transformation
     #so essentially, our original matrix is unchanged, we just rotate the arbitrary matrices that contain the indices of the original matrix, if that makes sense
     #what I also know is that we need 2x information (> 1x information) to transform the matrix (information-technology-wise speaking) in the row-col fashion without being afraid of misprojections, 1 is the original, 1 is the tmp, that's on the brain to carry the responsibility (what's why we have multiple brain cells, which is a set of LogitPacks)
