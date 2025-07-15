@@ -410,7 +410,7 @@ def shake_x(logit_list: list[Brain],
             partitioning_resolution: float) -> list[Brain]:
 
     if iteration_sz == 0:
-        return logit_list 
+        return logit_list # 
 
     list_sz: int = len(logit_list)
 
@@ -439,14 +439,41 @@ def shake_x(logit_list: list[Brain],
             new_logit_pack  = sum_accum(logit_list[1].get(i), new_logit_pack)
             rhs             += [new_logit_pack]
 
-        rs: list[Brain] = [Brain(calibrate_logit_pack_list(lhs)), Brain(calibrate_logit_pack_list(rhs))]
+        rs_arg_1: list[Brain]       = [Brain(lhs), Brain(rhs)]
+        arg_lhs: list[LogitPack]    = []
+        arg_rhs: list[LogitPack]    = []
 
-        return shake_x(rs,
-                       projection_storage_sz * storage_decay_rate,
-                       initial_iteration_sz,
-                       iteration_sz - 1,
-                       storage_decay_rate,
-                       partitioning_resolution)
+        for i in range(logit_list[0].size()):
+            new_logit_pack: LogitPack = make_zero_logit_pack() 
+
+            for j in range(logit_list[1].size()):
+                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[0].get(i), logit_list[1].get(j), projection_storage_sz))
+
+            new_logit_pack  = sum_accum(logit_list[0].get(i), new_logit_pack)
+            arg_lhs         += [new_logit_pack]
+
+        for i in range(logit_list[1].size()):
+            new_logit_pack: LogitPack = make_zero_logit_pack()
+
+            for j in range(len(logit_list[0].size())):
+                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[1].get(i), logit_list[0].get(j), projection_storage_sz))
+
+            new_logit_pack  = sum_accum(logit_list[1].get(i), new_logit_pack)
+            arg_rhs         += [new_logit_pack]
+
+        next_arg: list[Brain]   = [calibrate_brain(Brain(lhs), partitioning_resolution), calibrate_brain(Brain(rhs), partitioning_resolution)]
+        #to ease some of the problems, we'd have to assume that lhs rhs is already sorted in the sense of radix | other_semantic_space, we'd have to do another arg = etc.
+
+        rs_arg_2: list[Brain]   = shake_x(next_arg,
+                                          projection_storage_sz * storage_decay_rate,
+                                          initial_iteration_sz,
+                                          iteration_sz - 1,
+                                          storage_decay_rate,
+                                          partitioning_resolution)
+
+        #this is the most important line in the history of projection radix sort, thank you John
+
+        return list(map(brain_accum, zip(rs_arg_1, rs_arg_2)))
 
     #today we'll be focusing on the three main improvements:
     #one -> many projection, projection permutation and sum_accum for base case
@@ -484,6 +511,15 @@ def shake_x(logit_list: list[Brain],
     #those that are in the 3rd bucket of 1|2|3 are radixed in the same bucket of continuity compression
 
     #problem is that in the sense of continuity compression, we'd want to do prefix followed by a modulo to get the lower bits, partition + 1|2|3|4 + projection + modulo -> partition + 2|3|4|0 + projection + modulo -> partition + 3|4|0|0 + projection + modulo -> partition 4|0|0|0 + projection
+    #what I haven't been able to prove is this hasn't already done that, I guess my doubt really is the ability of the network to do bitshift and reprojection
+    #until we have found a differential way to do this, I dont think modulo and bitshift is the way to do
+
+    #the sorting mechanism of the network is very vague and hard to actually grasp, but keep the definition of this
+    #essentially we have a semantic value, we would want to do: radix| other_semantic_value -> linear projection -> erase radix -> other_semantic_value (this is where we call recursion) -> ... -> rinse and repeat
+    #we'd have to do the exact steps to get the engine to roll
+    #what we are missing is the distinction of x = x + f(x) and the arg = x + f(x) or the recursive argument if that makes sense
+    #because one is to do context projection (based on the radix), the other is to erase the radix into another semantic value, to continue the projection
+
     #so we'd turn a pigeonhole sort into a radix sort, whose policy is to sort the dimensions in the sense of relevancy and we'd want to do a modulo projection, this is my single biggest regret because I'd not be able to see continuity in my network
     #the other hard part is to reorder the original projection space based on the relevancy rule, we'll see about the approach
     #problem is that we'd do partition wrong (in the sense of keeping the trailing semantic) so we'd want to re radix the fellows, this requires padding bits to further continue the radix sort, we'd talk about this later, essentially, we'd want to dup or triple the byte size of the sorting data to further the radix sort 
