@@ -634,7 +634,7 @@ def shake_x(logit_list: list[Brain],
         new_brain: Brain    = brain_accum(logit_list[i], _post_shaped_virtual_logit_list_1[i], _post_shaped_virtual_logit_list_2[i], _post_shaped_virtual_logit_list_3[i])
         _rs_list            += [new_brain]
 
-    nxt_ctx_list: list[Brain] = shake_x(rs_list,
+    nxt_ctx_list: list[Brain] = shake_x(_rs_list,
                                         projection_storage_sz * storage_decay_rate,
                                         initial_iteration_sz,
                                         iteration_sz - 1,
