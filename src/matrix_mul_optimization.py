@@ -417,6 +417,20 @@ def shake_x(logit_list: list[Brain],
     if list_sz not in [2, 4, 16, 256, 65536]:
         raise Exception()
 
+    #we are still having the Brain + Brain -> another Brain problem, we'll solve this by adding more feature, see that we are doing matrix multiplication on a 3 dimensional input x 3 dimensional input, this is very important
+    #yet we have all of the problems solved: 
+
+    #(1) the problem of reprojection x = x + f(x), arg = x + f(x), these are two different values
+    #(2) the problem of virtual matrix
+    #(3) the problem of 3 dimensional matrix multiplication
+    #(4) the problem of calibration (cosine unit vector in the Taylor Projection space that focuses more on the sin cos projection space, kind of curvy instead of uniform distribution of Taylor's coefficients)
+    #(5) the problem of storage_sz + partition resolution
+
+    #we still can have 2D matrix of brain as base cases, we'd proceed to do normal matrix multiplication, this is getting very super confusing, essentially a Brain is a 2d array of LogitPack, we'd do row x col normal matrix multiplication, except for we are doing a Taylor Series projection, rotate rinse and repeat
+    #I guess the question is how to make this runs as fast as possible, because we are getting very deep inside the logic and actually spins too many times
+
+    #I've run the numbers, the problem is still at the base case, because there is literally nothing we could do for the other cases
+
     if list_sz == 2:
         lhs: list[LogitPack]    = []
         rhs: list[LogitPack]    = []
