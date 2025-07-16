@@ -490,6 +490,21 @@ def shake_x(logit_list: list[Brain],
     #alright, what's the problem?
     #the problem is that this probably only works for uniform distribution of rules, as we could tell, the sorting space for 2 is different than that of 1, how about we alter the semantic beforehand to denote that right at the previous layer? this is where our transformation kicks in
 
+    #as I become increasingly paranoid about what I could do for projection, I have come to a conclusion that a matrix multiplication for base case is the general idea (essentially we are doing dot products for row x column pair, except we are doing advanced dot product by using new operation of 6 dimensional projection -> 3 dimensional projection)
+    #let's think of the matrix this way
+
+    #our only clue to machine learning is projection
+
+    #too much projection like 1024 dimensions -> 1 dimension or 3 dimensions would be bad, because it would break the projection space (in the sense of semantic), plus, the projecting context does not require that knowledge of being in the 1024th dimensions
+    #patch: we are doing gossip + brain architect to do knowledge transfer to the brains and let the brains talk to each other, so we could improve the numerical + semantic stability of projection
+    #immediate patch to naive projection: 6 dimensional projections -> 3 dimensional vector. Problem: how many accumulating features, essentially a multidimensional projection does not prevent us from doing sum accumulation (this is still counting as projection, yet this is still in the matrix multiplication territory)
+    #problem, the matrix is only stable (good to do advanced matrix multiplication) if it is under a certain size, says 3x3 or 9x9
+    #patch: we only do matrix multiplication for the base case
+    #so the immediate doable for our current solution would be transforming a simple combinatorial approach to a 2d matrix multiplication row x col approach (all rows combines all cols dot product for dot product being the pack_twosum + sum_accum)
+
+    #tomorrow we'd be talking about the radian Taylor Coefficents' coordinate to do shape projections, we'd want to be in radian coordinate because, our unit vector is of size 1, so essentially we'd kind of iterating the surface of the sphere to clue our shapes 
+    #we can't skew the shape in the cos-sin projection space because it's not differentiable, whereas it is still differentiable in the space (even though it is kind of "spherely twisted," we dont really care, we just want to project the shape and the shape is differentiable, period) 
+
     if iteration_sz == 0:
         return logit_list
 
@@ -555,8 +570,8 @@ def shake_x(logit_list: list[Brain],
             transformed_logit_list      += [shaked_row]
             transformed_logit_list_2    += [shaked_row_2]
 
-        virtual_transformed_logit_list      += [backward_map_suffix_array(shape_as(transformed_logit_list, list_sz), suffix_array)]
-        virtual_transformed_logit_list_2    += [backward_map_suffix_array(shape_as(transformed_logit_list_2, list_sz), suffix_array)]
+        virtual_transformed_logit_list      += [backward_map_suffix_array(shape_as(transformed_logit_list, [list_sz]), suffix_array)]
+        virtual_transformed_logit_list_2    += [backward_map_suffix_array(shape_as(transformed_logit_list_2, [list_sz]), suffix_array)]
 
     virtual_transformed_logit_list      += [logit_list]
     rs_1: list[Brain]                   = pairwise_brain_accum(*virtual_transformed_logit_list)
