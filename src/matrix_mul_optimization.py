@@ -400,7 +400,7 @@ def sum_accum_2(lhs: LogitPack, rhs: LogitPack) -> LogitPack:
 
 def sum_accum(*args) -> LogitPack:
 
-    return functools.reduce(sum_accum_2, args[1:], args[0]) 
+    return functools.reduce(sum_accum_2, args[1:], args[0])  
 
 def forward_map_suffix_array(arr: list, suffix_arr: list[int]) -> list:
     
@@ -418,6 +418,45 @@ def backward_map_suffix_array(arr: list, suffix_arr: list[int]) -> list:
 
     return rs
 
+def brain_twosum(lhs: Brain, rhs: Brain) -> Brain:
+
+    lhs_base: list[LogitPack]   = lhs.as_list()
+    rhs_base: list[LogitPack]   = rhs.as_list()
+    rs_base:  list[LogitPack]   = []
+
+    for i in range(len(lhs_base)):
+        brain_cell: LogitPack = make_empty_logit_pack()
+
+        for j in range(len(rhs_base)):
+            brain_cell = sum_accum(brain_cell, pack_twosum(lhs_base[i], rhs_base[j]))
+
+        rs_base += [brain_cell]
+
+    return Brain(rs_base)
+
+def brain_accum_2(lhs: Brain, rhs: Brain) -> Brain:
+
+    if lhs.size() != rhs.size():
+        raise Exception()
+
+    return Brain(list(map(sum_accum, zip(lhs.as_list(), rhs.as_list())))) 
+
+def brain_accum(*args) -> Brain:
+
+    return functools.reduce(brain_accum_2, args[1:], args[0]) 
+
+def calibrate_brain(arg: Brain) -> Brain:
+
+    return arg 
+
+def pairwise_brain_accum_2(lhs: list[Brain], rhs: list[Brain]) -> list[Brain]:
+
+    return list(map(brain_accum, zip(lhs, rhs))) 
+
+def pairwise_brain_accum(*args) -> list[Brain]:
+
+    return functools.reduce(pairwise_brain_accum_2, args[1:], args[0])
+
 def shake_x(logit_list: list[Brain],
             virtual_suffix_array: list[list[int]],
             projection_storage_sz: int,
@@ -434,12 +473,29 @@ def shake_x(logit_list: list[Brain],
     #most importantly, we used 6 dimensional projection + Brain to increase numerical stability of semantics
     #last but not least, this is hard to implement, the calibration of the brain by using unit vector (cosine similarity of shapes) in an arbitrary Taylor Projection space that skews in the direction of trig (cos-sin waves) projection
 
+    #I've spent a lot | too many hours to think about the equation to the point that I dont think that this could be further improved!
+    #there are still the problems at the base case, but as for the general picture, we have done it correctly, this is sufficient to approx a really wide range of semantic, we'd have to implement a very efficient search + mining operation for that
+
+    #the only major improvement we've made to the transformer is to not carry the output semantic around, essentially that's what happen in the transformer case when you want to do pigeonhole sort
+    #we have to push the bars into their appropriate levels in order to do concurrent firing, from x -> y, this is the reason we need softmax, sometimes the y semantic is just not right enough to continue the firing + sort
+
+    #we just changed the idea slightly from transforming from x -> y to radix accumulation from x -> y, for every layer of transformation, we are at the next radix sort to do linear projection
+    #says that we have 1|2|3|4, 2|1|3|4
+
+    #1 goes to the offset 10
+    #2 goes to the offset 20
+
+    #so we'd take care of that, continue to the 2|3|4 and the 1|3|4
+    #2 goes to the offset 2, 1 goes to the offset 1
+    #alright, what's the problem?
+    #the problem is that this probably only works for uniform distribution of rules, as we could tell, the sorting space for 2 is different than that of 1, how about we alter the semantic beforehand to denote that right at the previous layer? this is where our transformation kicks in
+
     if iteration_sz == 0:
         return logit_list
 
     list_sz: int = len(logit_list)
 
-    if list_sz not in [3, 9, 27, 81]:
+    if list_sz not in [3, 9, 81]:
         raise Exception()
 
     if list_sz == 3:
@@ -466,7 +522,7 @@ def shake_x(logit_list: list[Brain],
 
         #this is the most important line in the history of projection radix sort, thank you John
 
-        return list(map(brain_accum, zip(rs_arg_1, rs_arg_2)))
+        return pairwise_brain_accum(rs_arg_1, rs_arg_2)
 
     dim_sz: int                                             = cube_root(list_sz)    
     space_sz: list[int]                                     = [dim_sz, dim_sz]
@@ -480,7 +536,7 @@ def shake_x(logit_list: list[Brain],
         transformed_logit_list_2: list[list[Brain]]     = []
 
         for i in range(dim_sz):
-            shaked_row: list[Brain]     = shake_x(shaped_virtual_logit_list_1[i],
+            shaked_row: list[Brain]     = shake_x(shaped_virtual_logit_list[i],
                                                   get_initial_virtual_suffix_array(len(virtual_suffix_array), [cube_root(dim_sz), cube_root(dim_sz)])
                                                   projection_storage_sz,
                                                   initial_iteration_sz,
@@ -488,7 +544,7 @@ def shake_x(logit_list: list[Brain],
                                                   storage_decay_rate,
                                                   partitioning_resolution)
 
-            shaked_row_2: list[Brain]   = shake_x(shaped_virtual_logit_list_1[i],
+            shaked_row_2: list[Brain]   = shake_x(shaped_virtual_logit_list[i],
                                                   get_initial_virtual_suffix_array(len(virtual_suffix_array), [cube_root(dim_sz), cube_root(dim_sz)]),
                                                   projection_storage_sz,
                                                   initial_iteration_sz,
@@ -503,9 +559,9 @@ def shake_x(logit_list: list[Brain],
         virtual_transformed_logit_list_2    += [backward_map_suffix_array(shape_as(transformed_logit_list_2, list_sz), suffix_array)]
 
     virtual_transformed_logit_list      += [logit_list]
-    rs_1: list[Brain]                   = pairwise_sum_accum(virtual_transformed_logit_list)
+    rs_1: list[Brain]                   = pairwise_brain_accum(*virtual_transformed_logit_list)
     virtual_transformed_logit_list_2    += [logit_list]
-    rs_2: list[Brain]                   = list(map(calibrate_brain, pairwise_sum_accum(virtual_transformed_logit_list_2)))
+    rs_2: list[Brain]                   = list(map(calibrate_brain, pairwise_brain_accum(*virtual_transformed_logit_list_2)))
 
     nxt_ctx_list: list[Brain]           = shake_x(rs_2,
                                                   list(map(flatten, map(rotate, map(shape_as_func(space_sz), virtual_suffix_array)))),
@@ -515,7 +571,7 @@ def shake_x(logit_list: list[Brain],
                                                   storage_decay_rate,
                                                   partitioning_resolution)
 
-    return list(map(brain_accum, zip(rs_1, nxt_ctx_list)))
+    return pairwise_brain_accum(rs_1, nxt_ctx_list)
 
 def main():
 
