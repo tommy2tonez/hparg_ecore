@@ -402,83 +402,62 @@ def sum_accum(*args) -> LogitPack:
 
     return functools.reduce(sum_accum_2, args[1:], args[0]) 
 
+def forward_map_suffix_array(arr: list, suffix_arr: list[int]) -> list:
+    
+    for suffix in suffix_arr:
+        rs_arr += [arr[suffix]]
+    
+    return rs_arr
+
+def backward_map_suffix_array(arr: list, suffix_arr: list[int]) -> list:
+
+    rs: list = [object() for _ in range(arr)]
+
+    for i in range(len(suffix_arr)):
+        rs[suffix_arr[i]] = arr[i] 
+
+    return rs
+
 def shake_x(logit_list: list[Brain],
+            virtual_suffix_array: list[list[int]],
             projection_storage_sz: int,
             initial_iteration_sz: int,
             iteration_sz: int,
             storage_decay_rate: float,
             partitioning_resolution: float) -> list[Brain]:
 
+    #alright, so what are we doing? why is this better?
+    #we replaced normal matrix multiplication with 3 dimensional multiplication, every cell is a 3 dimensional feature vector x another 3 dimensional feature vector (this is the important clue)
+    #we turned pigeonhole sort -> radixsort (x = x + f(x) -> x = x + f(x) and arg = x + f(x))
+    #we used virtual matrix to add more crosses, normally we only do one cross, row+col
+    #we recursively call the function to add projection accuration  
+    #most importantly, we used 6 dimensional projection + Brain to increase numerical stability of semantics
+    #last but not least, this is hard to implement, the calibration of the brain by using unit vector (cosine similarity of shapes) in an arbitrary Taylor Projection space that skews in the direction of trig (cos-sin waves) projection
+
     if iteration_sz == 0:
-        return logit_list # 
+        return logit_list
 
     list_sz: int = len(logit_list)
 
-    if list_sz not in [2, 4, 16, 256, 65536]:
+    if list_sz not in [3, 9, 27, 81]:
         raise Exception()
 
-    #we are still having the Brain + Brain -> another Brain problem, we'll solve this by adding more feature, see that we are doing matrix multiplication on a 3 dimensional input x 3 dimensional input, this is very important
-    #yet we have all of the problems solved: 
+    if list_sz == 3:
+        first: Brain            = brain_accum(brain_twosum(logit_list[0], logit_list[1]), brain_twosum(logit_list[0], logit_list[2]), logit_list[0]) 
+        second: Brain           = brain_accum(brain_twosum(logit_list[1], logit_list[0]), brain_twosum(logit_list[1], logit_list[2]), logit_list[1])
+        third: Brain            = brain_accum(brain_twosum(logit_list[2], logit_list[0]), brain_twosum(logit_list[2], logit_list[1]), logit_list[2]) 
 
-    #(1) the problem of reprojection x = x + f(x), arg = x + f(x), these are two different values
-    #(2) the problem of virtual matrix
-    #(3) the problem of 3 dimensional matrix multiplication
-    #(4) the problem of calibration (cosine unit vector in the Taylor Projection space that focuses more on the sin cos projection space, kind of curvy instead of uniform distribution of Taylor's coefficients)
-    #(5) the problem of storage_sz + partition resolution
+        _first: Brain           = brain_accum(brain_twosum(logit_list[0], logit_list[1]), brain_twosum(logit_list[0], logit_list[2]), logit_list[0]) 
+        _second: Brain          = brain_accum(brain_twosum(logit_list[1], logit_list[0]), brain_twosum(logit_list[1], logit_list[2]), logit_list[1])
+        _third: Brain           = brain_accum(brain_twosum(logit_list[2], logit_list[0]), brain_twosum(logit_list[2], logit_list[1]), logit_list[2]) 
 
-    #we still can have 2D matrix of brain as base cases, we'd proceed to do normal matrix multiplication, this is getting very super confusing, essentially a Brain is a 2d array of LogitPack, we'd do row x col normal matrix multiplication, except for we are doing a Taylor Series projection, rotate rinse and repeat
-    #I guess the question is how to make this runs as fast as possible, because we are getting very deep inside the logic and actually spins too many times
+        next_arg: list[Brain]   = [calibrate_brain(_first, projection_storage_sz, partitioning_resolution),
+                                   calibrate_brain(_second, projection_storage_sz, partitioning_resolution),
+                                   calibrate_brain(_third, projection_storage_sz, partitioning_resolution)]
 
-    #I've run the numbers, the problem is still at the base case, because there is literally nothing we could do for the other cases
-
-    if list_sz == 2:
-        lhs: list[LogitPack]    = []
-        rhs: list[LogitPack]    = []
-
-        for i in range(logit_list[0].size()):
-            new_logit_pack: LogitPack = make_zero_logit_pack() 
-
-            for j in range(logit_list[1].size()):
-                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[0].get(i), logit_list[1].get(j), projection_storage_sz))
-
-            new_logit_pack  = sum_accum(logit_list[0].get(i), new_logit_pack)
-            lhs             += [new_logit_pack]
-
-        for i in range(logit_list[1].size()):
-            new_logit_pack: LogitPack = make_zero_logit_pack()
-
-            for j in range(len(logit_list[0].size())):
-                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[1].get(i), logit_list[0].get(j), projection_storage_sz))
-
-            new_logit_pack  = sum_accum(logit_list[1].get(i), new_logit_pack)
-            rhs             += [new_logit_pack]
-
-        rs_arg_1: list[Brain]       = [Brain(lhs), Brain(rhs)]
-        arg_lhs: list[LogitPack]    = []
-        arg_rhs: list[LogitPack]    = []
-
-        for i in range(logit_list[0].size()):
-            new_logit_pack: LogitPack = make_zero_logit_pack() 
-
-            for j in range(logit_list[1].size()):
-                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[0].get(i), logit_list[1].get(j), projection_storage_sz))
-
-            new_logit_pack  = sum_accum(logit_list[0].get(i), new_logit_pack)
-            arg_lhs         += [new_logit_pack]
-
-        for i in range(logit_list[1].size()):
-            new_logit_pack: LogitPack = make_zero_logit_pack()
-
-            for j in range(len(logit_list[0].size())):
-                new_logit_pack  = sum_accum(new_logit_pack, pack_twosum(logit_list[1].get(i), logit_list[0].get(j), projection_storage_sz))
-
-            new_logit_pack  = sum_accum(logit_list[1].get(i), new_logit_pack)
-            arg_rhs         += [new_logit_pack]
-
-        next_arg: list[Brain]   = [calibrate_brain(Brain(lhs), partitioning_resolution), calibrate_brain(Brain(rhs), partitioning_resolution)]
-        #to ease some of the problems, we'd have to assume that lhs rhs is already sorted in the sense of radix | other_semantic_space, we'd have to do another arg = etc.
-
+        rs_arg_1: list[Brain]   = [first, second, third]
         rs_arg_2: list[Brain]   = shake_x(next_arg,
+                                          virtual_suffix_array
                                           projection_storage_sz * storage_decay_rate,
                                           initial_iteration_sz,
                                           iteration_sz - 1,
@@ -489,179 +468,54 @@ def shake_x(logit_list: list[Brain],
 
         return list(map(brain_accum, zip(rs_arg_1, rs_arg_2)))
 
-    #today we'll be focusing on the three main improvements:
-    #one -> many projection, projection permutation and sum_accum for base case
-    #virtual matrix paths, and simutanous sum accumulation, essentially we'd be working on multiple crosses to offload the responsibility of all matrix knowledge being on the cross
-    #f(x) unscaling, essentially f(x) / n is the shape of the projection, if we look closely at the coefficients, their cosine vector is important in the case of shape projection, so that is what we'd do, we would be in the cosine space to map to the taylor projection space of derivative order of 100
-    #alright, so essentially we'd be working on the coefficient vector of unit size of 1 instead of all the unit sizes 
+    dim_sz: int                                             = cube_root(list_sz)    
+    space_sz: list[int]                                     = [dim_sz, dim_sz]
+    virtual_transformed_logit_list: list[list[Brain]]       = []
+    virtual_transformed_logit_list_2: list[list[Brain]]     = []
 
-    #assume that we have a pointer of 256 or one char, we'd want to discretize the unit space to 256 cubes in a multidimensional sphere
-    #assume that we have a pointer of 65536 or two char, we'd want to discretize the unit space to 65536 cubes in a multidimensional sphere
-    #the resolution of the shape would be propotional to the storage pointer (which is uint8_t, uint16_t, uint32_t etc.)
-    #the only advantage edge we have when projecting shape is the sphere space of 1 around the origin instead of all over the place
+    for suffix_array in virtual_suffix_array:
+        virtual_logit_list: list[Brain]                 = forward_map_suffix_array(logit_list, suffix_array)
+        shaped_virtual_logit_list: list[list[Brain]]    = shape_as(virtual_logit_list, space_sz)
+        transformed_logit_list: list[list[Brain]]       = []
+        transformed_logit_list_2: list[list[Brain]]     = []
 
-    #it's insanely complicated how we got to this matrix code
-    #I'm not saying that this is the best code but this is the logically correct code in terms of what we could do to stablize the matrix
+        for i in range(dim_sz):
+            shaked_row: list[Brain]     = shake_x(shaped_virtual_logit_list_1[i],
+                                                  get_initial_virtual_suffix_array(len(virtual_suffix_array), [cube_root(dim_sz), cube_root(dim_sz)])
+                                                  projection_storage_sz,
+                                                  initial_iteration_sz,
+                                                  initial_iteration_sz,
+                                                  storage_decay_rate,
+                                                  partitioning_resolution)
 
-    #despite my 2 days of non-stop thinking, I couldn't formulate an equation for exact # of rotations to keep the matrix from falling apart
-    #I have used middle theorem to squeeze the possibility, assume this algorithmic approach of transferring all matrix information on the row to project exactly one cell in the matrix
-    #this is precisely the problem (the base has to be as most strong as the matrix to hold the matrix (this is the skyscraper on stilt problem), this equals to the pair having to hold the matrix weight), we can't prove that by using other approaches
-    #we'd allow leeways for the matrix having found a better way to lessen the weights, this is where I can't use middle theorem, what, where precisely is the equation ??? I have no idea
+            shaked_row_2: list[Brain]   = shake_x(shaped_virtual_logit_list_1[i],
+                                                  get_initial_virtual_suffix_array(len(virtual_suffix_array), [cube_root(dim_sz), cube_root(dim_sz)]),
+                                                  projection_storage_sz,
+                                                  initial_iteration_sz,
+                                                  initial_iteration_sz,
+                                                  storage_decay_rate,
+                                                  partitioning_resolution)
 
-    #we'd want to do 3, 9, 27, 81 as clued by Mom
+            transformed_logit_list      += [shaked_row]
+            transformed_logit_list_2    += [shaked_row_2]
 
-    #what I know for sure is that a 3 virtual matrices is better than a row + col + row_col transformation
-    #so essentially, our original matrix is unchanged, we just rotate the arbitrary matrices that contain the indices of the original matrix, if that makes sense
-    #what I also know is that we need 2x information (> 1x information) to transform the matrix (information-technology-wise speaking) in the row-col fashion without being afraid of misprojections, 1 is the original, 1 is the tmp, that's on the brain to carry the responsibility (what's why we have multiple brain cells, which is a set of LogitPacks)
-    #the problem could not be better described https://leetcode.com/problems/game-of-life/description/
+        virtual_transformed_logit_list      += [backward_map_suffix_array(shape_as(transformed_logit_list, list_sz), suffix_array)]
+        virtual_transformed_logit_list_2    += [backward_map_suffix_array(shape_as(transformed_logit_list_2, list_sz), suffix_array)]
 
-    #the only problem we have not been able to solve is the problem of radix sort
-    #as we could see, we are trying to move the semantics into their appropriate buckets to do neuron firings, yet we could not recursively sort them into appropriate buckets but rather a pigeonhole sort of O(n) size, note that we are learning the map, which is not a good approach
-    #if we could somehow learn it, the sorting way (or the sorting algorithm), and move our focal onto the sorted buckets to recursively project, that'd be ideal
-    #believe it or not, we are missing a modulo operation
+    virtual_transformed_logit_list      += [logit_list]
+    rs_1: list[Brain]                   = pairwise_sum_accum(virtual_transformed_logit_list)
+    virtual_transformed_logit_list_2    += [logit_list]
+    rs_2: list[Brain]                   = list(map(calibrate_brain, pairwise_sum_accum(virtual_transformed_logit_list_2)))
 
-    #if you look at the radix sort, we are just radixing them into appropriate space, unscale the projection to see what's going on with the other radices
-    #if we are radixing from right to left, we radix it into 256 buckets, then we'd want to unscale the projection, by essentially zooming into the remaining space
-    #essentially a division followed by a multiplication to get the remaining projection, this division is an integer division
-    #this is the sole implementation that is very important, otherwise we are just doing pigeonhole sort ...
+    nxt_ctx_list: list[Brain]           = shake_x(rs_2,
+                                                  list(map(flatten, map(rotate, map(shape_as_func(space_sz), virtual_suffix_array)))),
+                                                  projection_storage_sz * storage_decay_rate,
+                                                  initial_iteration_sz,
+                                                  iteration_sz - 1,
+                                                  storage_decay_rate,
+                                                  partitioning_resolution)
 
-    #imagine this sequence of 1|2|3|4
-
-    #those that are in the 4th bucket are radixed into the same bucket of continuity compression
-    #those that are in the 3rd bucket of 1|2|3 are radixed in the same bucket of continuity compression
-
-    #problem is that in the sense of continuity compression, we'd want to do prefix followed by a modulo to get the lower bits, partition + 1|2|3|4 + projection + modulo -> partition + 2|3|4|0 + projection + modulo -> partition + 3|4|0|0 + projection + modulo -> partition 4|0|0|0 + projection
-    #what I haven't been able to prove is this hasn't already done that, I guess my doubt really is the ability of the network to do bitshift and reprojection
-    #until we have found a differential way to do this, I dont think modulo and bitshift is the way to do
-
-    #the sorting mechanism of the network is very vague and hard to actually grasp, but keep the definition of this
-    #essentially we have a semantic value, we would want to do: radix| other_semantic_value -> linear projection -> erase radix -> other_semantic_value (this is where we call recursion) -> ... -> rinse and repeat
-    #we'd have to do the exact steps to get the engine to roll
-    #what we are missing is the distinction of x = x + f(x) and the arg = x + f(x) or the recursive argument if that makes sense
-    #because one is to do context projection (based on the radix), the other is to erase the radix into another semantic value, to continue the projection
-
-    #so we'd turn a pigeonhole sort into a radix sort, whose policy is to sort the dimensions in the sense of relevancy and we'd want to do a modulo projection, this is my single biggest regret because I'd not be able to see continuity in my network
-    #the other hard part is to reorder the original projection space based on the relevancy rule, we'll see about the approach
-    #problem is that we'd do partition wrong (in the sense of keeping the trailing semantic) so we'd want to re radix the fellows, this requires padding bits to further continue the radix sort, we'd talk about this later, essentially, we'd want to dup or triple the byte size of the sorting data to further the radix sort 
-
-    #because the flow path of the matrix is better that way
-
-    dim_sz: int                                     = sqrt(list_sz)    
-    space_sz: list[int]                             = [dim_sz, dim_sz]
-    suffix_arr_1: list[int]                         = get_suffix_array(iteration_sz, space_sz, 0)
-    suffix_arr_2: list[int]                         = get_suffix_array(iteration_sz, space_sz, 1)
-    suffix_arr_3: list[int]                         = get_suffix_array(iteration_sz, space_sz, 2)
-
-    virtual_logit_list_1: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_1)
-    virtual_logit_list_2: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_2)
-    virtual_logit_list_3: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_3)
-
-    shaped_virtual_logit_list_1: list[list[Brain]]  = shape_as(virtual_logit_list_1, space_sz)
-    shaped_virtual_logit_list_2: list[list[Brain]]  = shape_as(virtual_logit_list_2, space_sz)
-    shaped_virtual_logit_list_3: list[list[Brain]]  = shape_as(virtual_logit_list_3, space_sz)
-
-    transformed_logit_list_1: list[list[Brain]]     = []
-    transformed_logit_list_2: list[list[Brain]]     = []
-    transformed_logit_list_3: list[list[Brain]]     = []
-
-    #we'd want to do the virtual paths, later
-
-    for i in range(dim_sz):
-        shaked_row: list[Brain]     = shake_x(shaped_virtual_logit_list_1[i],
-                                              projection_storage_sz,
-                                              initial_iteration_sz,
-                                              initial_iteration_sz,
-                                              storage_decay_rate,
-                                              partitioning_resolution)
-
-        transformed_logit_list_1    += [shaked_row]
-
-        shaked_row_2: list[Brain]   = shake_x(shaped_virtual_logit_list_2[i],
-                                              projection_storage_sz,
-                                              initial_iteration_sz,
-                                              initial_iteration_sz,
-                                              storage_decay_rate,
-                                              partitioning_resolution)
-
-        transformed_logit_list_2    += [shaked_row_2]
-
-        shaked_row_3: list[Brain]   = shake_x(shaped_virtual_logit_list_3[i],
-                                              projection_storage_sz,
-                                              initial_iteration_sz,
-                                              initial_iteration_sz,
-                                              storage_decay_rate,
-                                              partitioning_resolution)
-
-        transformed_logit_list_3    += [shaked_row_3]
-
-    post_shaped_virtual_logit_list_1: list[Brain]   = backward_map_suffix_array(flatten(transformed_logit_list_1), suffix_arr_1)
-    post_shaped_virtual_logit_list_2: list[Brain]   = backward_map_suffix_array(flatten(transformed_logit_list_2), suffix_arr_2)
-    post_shaped_virtual_logit_list_3: list[Brain]   = backward_map_suffix_array(flatten(transformed_logit_list_3), suffix_arr_3)
-    rs_list: list[Brain]                            = []
-
-    for i in range(list_sz):
-        new_brain: Brain    = brain_accum(logit_list[i], post_shaped_virtual_logit_list_1[i], post_shaped_virtual_logit_list_2[i], post_shaped_virtual_logit_list_3[i])
-        rs_list             += [new_brain]
-
-    _virtual_logit_list_1: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_1)
-    _virtual_logit_list_2: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_2)
-    _virtual_logit_list_3: list[Brain]               = forward_map_suffix_array(logit_list, suffix_arr_3)
-
-    _shaped_virtual_logit_list_1: list[list[Brain]]  = shape_as(_virtual_logit_list_1, space_sz)
-    _shaped_virtual_logit_list_2: list[list[Brain]]  = shape_as(_virtual_logit_list_2, space_sz)
-    _shaped_virtual_logit_list_3: list[list[Brain]]  = shape_as(_virtual_logit_list_3, space_sz)
-
-    _transformed_logit_list_1: list[list[Brain]]     = []
-    _transformed_logit_list_2: list[list[Brain]]     = []
-    _transformed_logit_list_3: list[list[Brain]]     = []
-
-    #we'd want to do the virtual paths, later
-
-    for i in range(dim_sz):
-        shaked_row: list[Brain]     = shake_x(_shaped_virtual_logit_list_1[i],
-                                              projection_storage_sz,
-                                              initial_iteration_sz,
-                                              initial_iteration_sz,
-                                              storage_decay_rate,
-                                              partitioning_resolution)
-
-        _transformed_logit_list_1   += [shaked_row]
-
-        shaked_row_2: list[Brain]   = shake_x(_shaped_virtual_logit_list_2[i],
-                                              projection_storage_sz,
-                                              initial_iteration_sz,
-                                              initial_iteration_sz,
-                                              storage_decay_rate,
-                                              partitioning_resolution)
-
-        _transformed_logit_list_2   += [shaked_row_2]
-
-        shaked_row_3: list[Brain]   = shake_x(_shaped_virtual_logit_list_3[i],
-                                              projection_storage_sz,
-                                              initial_iteration_sz,
-                                              initial_iteration_sz,
-                                              storage_decay_rate,
-                                              partitioning_resolution)
-
-        _transformed_logit_list_3   += [shaked_row_3]
-
-    _post_shaped_virtual_logit_list_1: list[Brain]   = backward_map_suffix_array(flatten(_transformed_logit_list_1), suffix_arr_1)
-    _post_shaped_virtual_logit_list_2: list[Brain]   = backward_map_suffix_array(flatten(_transformed_logit_list_2), suffix_arr_2)
-    _post_shaped_virtual_logit_list_3: list[Brain]   = backward_map_suffix_array(flatten(_transformed_logit_list_3), suffix_arr_3)
-    _rs_list: list[Brain]                            = []
-
-    for i in range(list_sz):
-        new_brain: Brain    = brain_accum(logit_list[i], _post_shaped_virtual_logit_list_1[i], _post_shaped_virtual_logit_list_2[i], _post_shaped_virtual_logit_list_3[i])
-        _rs_list            += [new_brain]
-
-    nxt_ctx_list: list[Brain] = shake_x(_rs_list,
-                                        projection_storage_sz * storage_decay_rate,
-                                        initial_iteration_sz,
-                                        iteration_sz - 1,
-                                        storage_decay_rate,
-                                        partitioning_resolution)
-
-    return list(map(brain_accum, zip(rs_list, nxt_ctx_list)))
+    return list(map(brain_accum, zip(rs_1, nxt_ctx_list)))
 
 def main():
 
