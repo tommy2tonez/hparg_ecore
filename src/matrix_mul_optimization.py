@@ -445,9 +445,88 @@ def brain_accum(*args) -> Brain:
 
     return functools.reduce(brain_accum_2, args[1:], args[0]) 
 
-def calibrate_brain(arg: Brain) -> Brain:
+def radian_to_euclidean_coordinate(feature_vec: list[float], r: float) -> list[float]:
 
-    return arg 
+    if len(feature_vec) == 0:
+        raise Exception()
+
+    if len(feature_vec) == 1:
+        return [r * math.cos(feature_vec[0]), r * math.sin(feature_vec[1])] 
+
+    x_projection_value: float   = math.cos(feature_vec[0]) * r 
+    y_projection_value: float   = math.sin(feature_vec[0]) * r
+
+    return [x_projection_value] + radian_to_euclidean_coordinate(feature_vec[1:], y_projection_value)
+
+class CalibrationLogit:
+
+    def __init__(self,
+                 logit_list: list[Logit],
+                 projection_storage_sz: int,
+                 calibration_radius: float):
+
+        if projection_storage_sz < 2:
+            raise Exception() 
+
+        self.logit_list             = list(logit_list)
+        self.calibration_logit_list = [float(0) for i in range(projection_storage_sz - 1)]
+        self.projection_storage_sz  = projection_storage_sz
+        self.calibration_radius     = calibration_radius
+
+    def get_value(self) -> float:
+
+        projection_storage: list[float] = radian_to_euclidean_coordinate(self.calibration_logit_list, self.calibration_radius)
+        projection_value: float         = multidimensional_projection(self.logit_list, projection_storage)
+
+        return projection_value
+
+    def get_projection_storage_vec(self) -> list[float]:
+
+        return copy.deepcopy(self.calibration_logit_list)
+    
+    def set_projection_storage_vec(self, calibration_logit_list: list[float]):
+
+        if (calibration_logit_list != None and len(calibration_logit_list) != len(self.calibration_logit_list)):
+            raise Exception()
+
+        self.calibration_logit_list = copy.deepcopy(calibration_logit_list)
+
+def calibrate_brain_cell(brain_cell: LogitPack,
+                         calibration_projection_storage_per_logit_sz: int,
+                         calibration_radius: float) -> LogitPack:
+
+    logit_list: list[Logit]     = brain_cell.as_list() 
+
+    if len(logit_list) == 0:
+        raise Exception()
+
+    rs_logit_list: list[Logit]  = []
+
+    for i in range(logit_list):
+        calibration_logit: Logit    = CalibrationLogit(logit_list, calibration_projection_storage_per_logit_sz, calibration_radius)
+        new_logit: Logit            = sum_logit(logit_list[i], calibration_logit)
+        rs_logit_list               += [new_logit]
+
+    new_brain_cell: LogitPack   = LogitPack(rs_logit_list)
+
+    return new_brain_cell
+
+def calibrate_brain(arg: Brain,
+                    projection_storage_sz: int,
+                    calibration_radius: float) -> Brain:
+
+    #even though the storage pointer for the sphere is large, essentially taking as much space as the other projections
+    #yet the differential space is small, so we'd want to store the euclidean semantic on the logit, and convert them into euclidean and then Taylor Coefficients and we'd roll
+    # return arg 
+    #the problem is that we couple the radian responsibility into the projection, so each Logit cannot carry their responsibility ...
+
+    brain_cell_list: list[LogitPack]        = arg.as_list()
+    new_brain_cell_list: list[LogitPack]    = []
+
+    for brain_cell in brain_cell_list:
+        new_brain_cell_list += [calibrate_brain_cell(brain_cell, projection_storage_sz, calibration_radius)]
+
+    return Brain(new_brain_cell_list) 
 
 def pairwise_brain_accum_2(lhs: list[Brain], rhs: list[Brain]) -> list[Brain]:
 
