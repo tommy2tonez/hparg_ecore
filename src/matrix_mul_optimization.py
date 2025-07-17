@@ -584,6 +584,23 @@ def shake_x(logit_list: list[Brain],
     #tomorrow we'd be talking about the radian Taylor Coefficents' coordinate to do shape projections, we'd want to be in radian coordinate because, our unit vector is of size 1, so essentially we'd kind of iterating the surface of the sphere to clue our shapes 
     #we can't skew the shape in the cos-sin projection space because it's not differentiable, whereas it is still differentiable in the space (even though it is kind of "spherely twisted," we dont really care, we just want to project the shape and the shape is differentiable, period) 
 
+    #today we are going to cover the topic of calibration
+    #what is calibration?
+    #calibration is a reprojection of a context unit
+    #whether that is 1 Logit, 1 LogitPack, 1 Brain, or 1 Matrix
+
+    #point is calibration only works as an absolute unit of context, whose to be "intact" and to be "transferred"
+    #I think about how calibration could work for a brain calibration, not a brain cell calibration
+
+    #essentially it is a matrix "multiplication" operation for self x self, where the rule of the "multiplication" is now on the twisted sphere Taylor Projection space
+    #note that the calibration process also needs to be shaked, in the sense of x = x + f(x) and arg = x + f(x), continue ...
+
+    #recall that we are trying to do stable projection, stable projection only happens for 6 dimensional projection or 4 dimensional projection or (3 + 3 dimension space or 2 + 2 dimension space), with appropriate number of elements in the left matrix and the right matrix, I dont exactly know the number of brain cells
+    #as long as we are hitting the number, we'll be fine
+
+    #calibration is very very important, because it would move the domain space into appropriate buckets to do concurrent firing via multidimensional Taylor Projection
+    #without calibration, we are probably clueless, we are too straight in a twisted space
+
     if iteration_sz == 0:
         return logit_list
 
