@@ -601,6 +601,30 @@ def shake_x(logit_list: list[Brain],
     #calibration is very very important, because it would move the domain space into appropriate buckets to do concurrent firing via multidimensional Taylor Projection
     #without calibration, we are probably clueless, we are too straight in a twisted space
 
+    #as told by our friends, we are missing a coefficient before doing rotation or shake, essentially that would de-stabilize the matrix as we are doing search, we are doing search on Taylor Projection space fine because the coefficients offset the exponent numerical range
+    #                                    or a range calibration operation (in adjunction to the shape projections, or semantic calibration), essentially a normalization layer to increase numerical stability + semantic stability, we dont want our search space to be skewed
+
+    #this differential equation is not a coincidence, as I have previously mentioned, the projection is only stable with a certain number of projecting dimensions (we could duplicate the context, do 1024 x 1024 projection, we are only solving the symptoms of misprojections, not the actual semantic projection issues)
+    #in a normal matrix multiplication, we'd expect the dimension of dot product (we think of matrix multiplication as all pair row x all pair col dot product) to be under a certain size
+
+    #the dot product is not wrong, because it is essentially a naive projection, we improved it by using a complete tree of projection instead of a multiplication operation (of 2 + 2 == 4, 3 + 3 == 6 is better yet it is very expensive ...)
+    #note how we changed the fundamental of matrix multiplication from a static_storage_vec x dynamic_storage_vec -> dynamic_storage_vec x dynamic_storage_vec, with every cell having 2 or 3 dimensions 
+    #I would say getting the base case correctly and efficiently is a hard task but we'd try to see what we could do
+
+    #this code is very hard to write, but I want yall to think of the calibration as a shake operation, where we literally substitute all the high resolution "multiplication" -> low resolution "multiplication"
+    #we'd talk about calibration as two: (1): semantic calibration, (2) range calibration
+
+    #so when we do the semantic calibration, we'd want to call shake_x with ... different base multiplication
+    #this is important because we are very deep inside the recursion
+
+    #let's see where we do the calibration wrong, first, the calibrate_brain for base case, second, the calibrate_brain for the matrix case
+    #the calibrate_brain for base case is not wrong in the sense of calibrating brain, because brain is an absolute unit of context in the case
+        #or you could argue that we should do the same to calibrate (as in calibrate_shake) as we are doing for projection (context_shake), we are getting very deep inside the recursion at this point  
+
+    #but the calibrate brain for the matrix case is wrong, because the absolute unit of context in this case is the matrix, so'd want to call shake_x on the matrix with the base "multiplication" being the low resolution multiplication, this is getting complicated
+
+    #I could not think of a better scenerio about how this could be written 
+
     if iteration_sz == 0:
         return logit_list
 
