@@ -620,10 +620,22 @@ def shake_x(logit_list: list[Brain],
     #let's see where we do the calibration wrong, first, the calibrate_brain for base case, second, the calibrate_brain for the matrix case
     #the calibrate_brain for base case is not wrong in the sense of calibrating brain, because brain is an absolute unit of context in the case
         #or you could argue that we should do the same to calibrate (as in calibrate_shake) as we are doing for projection (context_shake), we are getting very deep inside the recursion at this point  
-
     #but the calibrate brain for the matrix case is wrong, because the absolute unit of context in this case is the matrix, so'd want to call shake_x on the matrix with the base "multiplication" being the low resolution multiplication, this is getting complicated
 
-    #I could not think of a better scenerio about how this could be written 
+    #alright, I have spent the majority of my time today to think about the calibration, or shape projection
+    #it's somewhat complicated to implement
+
+    #I wanted to answer the question of whether a shape projection alone (as base multiplication operation) is sufficient for the calibration operation
+    #the answer is not always clear, I think there are rooms for optimization, yet we want a lightweight implementation
+
+    #if we are to look at the projection space of the calibration operation, it's usually 1 unit ^ (dimension_size - 1) as opposed to domain_range ^ dimension_size * unit ^ dimension_size
+    #what's the scale, precisely, if we are operating on float32_t, it'd be a lot of times smaller map to be iterated through (domain_range ^ dimension_size usually)
+    #it speeds up the search operation significantly, as well as setting up for the next actual Taylor Series multidimensional projection
+
+    #we'd be iterating a much less map than we'd usually do in a normal multidimensional projection space
+    #what's the catch, why do we want this? because we are operating on a 6 dimensional projection, without the aid of the semantic calibration operation, we are very clueless
+    #we essentially just want to write the exact same function of shake_x with the base multiplication being the shape projection and call the function alongside with the range calibration function every time we want to pass that to the next recursive function
+    #or we just change the calibrate brain into a 6 low resolution dimensional projection (I think this is the way) like how we did for the brain_accum + brain_twosum, except for we are doing brain_lowresolution_twosum
 
     if iteration_sz == 0:
         return logit_list
