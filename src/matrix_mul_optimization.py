@@ -673,6 +673,11 @@ def shake_x(logit_list: list[Brain],
     #alright, this is not hard, yet this needs a lot of accuracy in the sense of numerical implementation (decimal points + engineered storage_projection_sz + projection space)
     #                           + a lot of clean code to get this through
 
+    #sorry, I could not think of a better implementation at the moment except for doing (1) a matrix multiplication for the base case
+    #                                                                                   (2) fatten the messengers (Tweener is a messenger in a cell with bigger guys)
+    #                                                                                   (3) four dimensional projection
+    #we'd need to implement this in a month (from all map_reduce, fission -> numerical stability (multiprecision on cuda + host) -> web -> etc.), our company is the jeopardy of going bankrupted
+
     if iteration_sz == 0:
         return logit_list
 
