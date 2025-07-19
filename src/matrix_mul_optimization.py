@@ -637,6 +637,15 @@ def shake_x(logit_list: list[Brain],
     #we essentially just want to write the exact same function of shake_x with the base multiplication being the shape projection and call the function alongside with the range calibration function every time we want to pass that to the next recursive function
     #or we just change the calibrate brain into a 6 low resolution dimensional projection (I think this is the way) like how we did for the brain_accum + brain_twosum, except for we are doing brain_lowresolution_twosum
 
+    #the problem of Haywire is that he needs to be on blocker pill during differential search (otherwise, the projection space is going to be haywired)
+    #yet Mike needs Haywire because his semantic has been altered, and he is not able to semanticalize (the projection_storage_sz) the carrying semantic (the tattoos)
+
+    #this is the problem of differential that John mentioned earlier
+    #what's the problem with 6 dimensional projection that I have not been able to solve?
+    #I think there is definitely a clever maneuver that I have not been able to see through for the base case just yet
+
+    #we'd demote that to 4 dimensional projection just for the sake of projectability
+
     if iteration_sz == 0:
         return logit_list
 
@@ -650,15 +659,27 @@ def shake_x(logit_list: list[Brain],
         second: Brain           = brain_accum(brain_twosum(logit_list[1], logit_list[0]), brain_twosum(logit_list[1], logit_list[2]), logit_list[1])
         third: Brain            = brain_accum(brain_twosum(logit_list[2], logit_list[0]), brain_twosum(logit_list[2], logit_list[1]), logit_list[2]) 
 
-        _first: Brain           = brain_accum(brain_twosum(logit_list[0], logit_list[1]), brain_twosum(logit_list[0], logit_list[2]), logit_list[0]) 
-        _second: Brain          = brain_accum(brain_twosum(logit_list[1], logit_list[0]), brain_twosum(logit_list[1], logit_list[2]), logit_list[1])
-        _third: Brain           = brain_accum(brain_twosum(logit_list[2], logit_list[0]), brain_twosum(logit_list[2], logit_list[1]), logit_list[2]) 
+        _first: Brain           = brain_accum(brain_lowres_twosum(logit_list[0], logit_list[1]),
+                                              brain_twosum(logit_list[0], logit_list[1]),
+                                              brain_lowres_twosum(logit_list[0], logit_list[2]),
+                                              brain_twosum(logit_list[0], logit_list[2]),
+                                              logit_list[0])
+ 
+        _second: Brain          = brain_accum(brain_lowres_twosum(logit_list[1], logit_list[0]),
+                                              brain_twosum(logit_list[1], logit_list[0]),
+                                              brain_lowres_twosum(logit_list[1], logit_list[2]),
+                                              brain_twosum(logit_list[1], logit_list[2]),
+                                              logit_list[1])
 
-        next_arg: list[Brain]   = [calibrate_brain(_first, projection_storage_sz, partitioning_resolution),
-                                   calibrate_brain(_second, projection_storage_sz, partitioning_resolution),
-                                   calibrate_brain(_third, projection_storage_sz, partitioning_resolution)]
+        _third: Brain           = brain_accum(brain_lowres_twosum(logit_list[2], logit_list[0]),
+                                              brain_twosum(logit_list[2], logit_list[0]),
+                                              brain_lowres_twosum(logit_list[2], logit_list[1]),
+                                              brain_twosum(logit_list[2], logit_list[1]),
+                                              logit_list[2]) 
 
         rs_arg_1: list[Brain]   = [first, second, third]
+        next_arg: list[Brain]   = [_first, _second, _third]
+
         rs_arg_2: list[Brain]   = shake_x(next_arg,
                                           virtual_suffix_array
                                           projection_storage_sz * storage_decay_rate,
@@ -708,7 +729,7 @@ def shake_x(logit_list: list[Brain],
     virtual_transformed_logit_list      += [logit_list]
     rs_1: list[Brain]                   = pairwise_brain_accum(*virtual_transformed_logit_list)
     virtual_transformed_logit_list_2    += [logit_list]
-    rs_2: list[Brain]                   = list(map(calibrate_brain, pairwise_brain_accum(*virtual_transformed_logit_list_2)))
+    rs_2: list[Brain]                   = pairwise_brain_accum(*virtual_transformed_logit_list_2)
 
     nxt_ctx_list: list[Brain]           = shake_x(rs_2,
                                                   list(map(flatten, map(rotate, map(shape_as_func(space_sz), virtual_suffix_array)))),
