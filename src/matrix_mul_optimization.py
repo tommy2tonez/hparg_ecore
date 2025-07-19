@@ -646,6 +646,33 @@ def shake_x(logit_list: list[Brain],
 
     #we'd demote that to 4 dimensional projection just for the sake of projectability
 
+    #I'm not telling that this is easy
+    #but lets look at the optimizables, datatypes (to avoid the cell diffraction information reduction problem, I dont know if data duplication is more important or it is just another radix of optimization)
+    #Tweener didnt spit, got locked up with bigger guys (this hints that we got a maxflow problem, where Tweener didn't get the context from the group)
+    #Michael got regarded if not locked up with Haywire, he's too straight even though he was through
+    #alright Fernando didn't drill holes on the Satan's projection, I guess that we are better than Fernando in the sense of doing
+
+    #the base case could buff the datatype of shake, transfer that to another row, where we'd want to do knowledge transfer, rinse and repeat
+
+    #we are to worry only about the neural network implementation (we are going to talk about finite buffer + sliding window implementation to condense the ongoing information instead of doing a one time projection, we'll definitely want to do this later)
+    #the search implementation is going to be another entire different thing to talk about
+
+    #think of:
+        #anchored points based of certain features (what are the certain features? is this another quantifiable or another machine learning to get what the certain features are?)
+        #randomization hint machine:
+            #randomization based on haywire or differential normal randomization or both
+            #pure randomization based on uniform or exponential space
+
+        #map_reduce differential search
+            #decimal point of the search?
+            #asynchronous or multithreading (asynchronous means we are to differentiate all possible neighbors, accum and choose the best route, 
+            #                                or fission (we are to take immediate actions, and fissionize the search, and choose the minimum deviation, think of minimum accum on the working nodes, this is a centrality + fission implementation))
+
+        #how do we pay our miners? in what currency? how are we to set up the auction of search, or search methodology (we are going to need a lot of manpower to think this base case through with proven statistical efficiency)?
+
+    #alright, this is not hard, yet this needs a lot of accuracy in the sense of numerical implementation (decimal points + engineered storage_projection_sz + projection space)
+    #                           + a lot of clean code to get this through
+
     if iteration_sz == 0:
         return logit_list
 
@@ -664,7 +691,7 @@ def shake_x(logit_list: list[Brain],
                                               brain_lowres_twosum(logit_list[0], logit_list[2]),
                                               brain_twosum(logit_list[0], logit_list[2]),
                                               logit_list[0])
- 
+
         _second: Brain          = brain_accum(brain_lowres_twosum(logit_list[1], logit_list[0]),
                                               brain_twosum(logit_list[1], logit_list[0]),
                                               brain_lowres_twosum(logit_list[1], logit_list[2]),
