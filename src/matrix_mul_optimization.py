@@ -384,10 +384,26 @@ def threepack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int)
 
     return LogitPack([rs_0, rs_1, rs_2]) 
 
+def twopack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
+
+    if lhs.size() != 2:
+        raise Exception()
+
+    if rhs.size() != 2:
+        raise Exception()
+
+    rs_0: Logit     = four_sum(lhs.get(0), lhs.get(1), rhs.get(0), rhs.get(1), projection_storage_sz)
+    rs_1: Logit     = four_sum(lhs.get(0), lhs.get(1), rhs.get(0), rhs.get(1), projection_storage_sz)
+
+    return LogitPack([rs_0, rs_1])
+
 def pack_twosum(lhs: LogitPack, rhs: LogitPack, projection_storage_sz: int) -> LogitPack:
 
     if lhs.size() == 3 and rhs.size() == 3:
         return threepack_twosum(lhs, rhs, projection_storage_sz)
+
+    if lhs.size() == 2 and rhs.size() == 2:
+        return twopack_twosum(lhs, rhs, projection_storage_sz)
 
     raise Exception()
 
@@ -483,7 +499,7 @@ class CalibrationLogit:
     def get_projection_storage_vec(self) -> list[float]:
 
         return copy.deepcopy(self.calibration_logit_list)
-    
+
     def set_projection_storage_vec(self, calibration_logit_list: list[float]):
 
         if (calibration_logit_list != None and len(calibration_logit_list) != len(self.calibration_logit_list)):
@@ -677,6 +693,37 @@ def shake_x(logit_list: list[Brain],
     #                                                                                   (2) fatten the messengers (Tweener is a messenger in a cell with bigger guys)
     #                                                                                   (3) four dimensional projection
     #we'd need to implement this in a month (from all map_reduce, fission -> numerical stability (multiprecision on cuda + host) -> web -> etc.), our company is the jeopardy of going bankrupted
+
+    #what stucks me these days is a continuous equation for range calibration, it'd definitely involve a softmax followed by a normalization layer, which is bad because ... it is not continuous
+    #our friends clued me that the Taylor Projection space is fine, yet our recursive projection is not in the sense of dy/dx is out of quack
+
+    #I have worked on the attention box for most of this week (the attention box is the base case box where we'd solve most of logics there)
+    #note that there is a trade off, if there is only 1 brain cell 3 x 3, the attention projection space will be very nice, yet the upper guys will take a hit from the attention being not good enough to diffract the context
+
+    #let's see what we could do for the base case:
+
+    #4 dimensional projection or 6 dimensional projection
+    #plus operation
+    #reasonable number of plus operations
+
+    #=> matrix multiplication
+
+    #why dont we do all feature projection again?
+    #because it is not the best way to approx, the context is not that complicated that it needs an entire matrix projection
+    #so we can either do 1 -> 6 dimensional projection because it's lightweight, and it's sufficient
+    #so we have narrowed to the case of either 4 or 6 dimensional projections (the cell can either be 2 dimensional or 3 dimensional)
+    #we'd have to offset the upper cases of not holding the context by using plus operation
+    #and we have to limit the plus operation for context stability 
+
+    #so matrix multiplication is the right way, I have yet to tell what is in the matrix, all we know is that the matrix can be virtual matrix or real matrix, preferably a 3 dimensional matrix to do correct context projection (or virtual multiplication)
+    #either way, it is still a matrix multiplication
+
+    #this matrix multiplicaction like I said, is different than a normal matrix multiplication in the sense of dynamic_feature x dynamic_feature, the only different is the multiplication being a pack_twosum operation
+    #this matrix has to be of reasonable sizes, because the projection space, like I said, is very fragile
+
+    #so we just do [a + a x b + a x c,
+    #               b + b x a + b x c,
+    #               c + c x a + c x b] 
 
     if iteration_sz == 0:
         return logit_list
