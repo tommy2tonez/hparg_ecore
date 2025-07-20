@@ -725,6 +725,18 @@ def shake_x(logit_list: list[Brain],
     #               b + b x a + b x c,
     #               c + c x a + c x b] 
 
+    #I was trying to think of the other way, essentially the exponential fold way, 4x2x2z2x2x2x2x2 etc.
+
+    #I was trying to differentiate the recursion resolution of bigger or smaller matrix rotation
+    #assume that the operation summarizes perfectly, I guess the problem is the knowledge transfer weight, if we are on a 2x2 matrix, the joint of the knowledge transfer is too stressed, essentially we are hinging all the weight on the joints (1/4) to diffract context
+    #I guess I dont know (yet I still opt for the exponential focus, 3 9 81 instead of 4 8 16 32 etc. for the reason being the latter would be doing too much unnecessary summary before joining with the other guys, the exponential would kind of ease the problem) 
+    #we'd have to write a concrete proof for that
+
+    #the attention box is more than just the base case, it's an optimality between the benefits from attention projection and the friction of the base case imposed on the upper cases
+    #the attention box has to be of reasonable size, the only solution to the attention box problem is a matrix multiplication (as explained), with each cell being a 2 or 3 dimensional feature vector
+    #what? clients? billions eqn? gucci soon?
+    #I have a lot of questions but with the right implementation, we'd be very rich, much fun, very language  
+
     if iteration_sz == 0:
         return logit_list
 
