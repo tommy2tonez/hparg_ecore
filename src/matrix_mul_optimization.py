@@ -737,6 +737,23 @@ def shake_x(logit_list: list[Brain],
     #what? clients? billions eqn? gucci soon?
     #I have a lot of questions but with the right implementation, we'd be very rich, much fun, very language  
 
+    #what's the problem with this Fibonacci dude?
+    #we have matrix multiplication, rotate rinse and repeat, then we'd have Fibonacci, Fibonacci address could not be found by John because ... Fibonacci's out of range, alright, we can't expect to have a number to the power of 64 after 6 rotations and expect that number to be in range
+    #what we'd want to do is to find the final equation for every cell, in raw x^2*y^4*z^3, then we'd want to do a sweet coefficient offset, ^2 -> 1/2 ^4 -> 1/16, ^3 -> 1/8, we'd want to multiply them together
+    #note that we'd only do so for the next_arg (the altered context), we'd keep everything the same for the first, second, third projection and summation, arguably, the summation needs to have a divisor coefficient also, it must correlate with the number of rotations 
+
+    #we'd expect to see a variable to the power of 1024 2048 4096 8192 16384, and a crazy 1/10000!, alright, this is where our multiprecision kicks in, remember
+    #all our rotate + everything is just for the final equation, we must be able to express the final equation intact, in x1,x2,x3,x4,etc., in factorials and exponents (arguably that it's impossible to compute that because the equation is of 1 billion factors, we'd want to increase the numerical stability of the computation)
+    #if we get the multi-precision right and the projection right, we'd be able to do so
+    #this is still not the right answer, for the reason being that we are still exploding the range if the projection space > a certain size, this is where the actual variable kicks in and do a 2^n
+    #how about we add another coefficient on top of the Taylor Series's coefficient? this coefficient is actually depending on the number of variables in the equation, if we are transforming a 100 feature vectors, we'd expect to have somewhat a 1/2^100 coefficient to offset the cost of whatever goes sideway, or total_sz!, arguably, what we'd call a global multiplication offset, where x=y=z
+    #this differential equation is too difficult
+
+    #the problem is that we'd have to compress the range to be within a reasonable size so we could do differential search, our randomization is not awared of the x is half of x1 or x1 is twice x2, it'd point in a random direction and expect a nice, round projection space, this is our punchline
+
+    #yet we'd want to have an overview of the network before we dive into the inplementation, we dont really know what we need
+    #our framework is for a network of brains, essentially they talk to each other to solve a set of problems, I dont know how
+
     if iteration_sz == 0:
         return logit_list
 
