@@ -715,6 +715,11 @@ def shake_x(logit_list: list[Brain],
     #we'd have to offset the upper cases of not holding the context by using plus operation
     #and we have to limit the plus operation for context stability 
 
+    #I have also thought about what if the cell is a sigma of the projections that are not of the current cells (but a set of transformed cells)
+    #that's precisely the reason for the succeeding operation, where we'd want to transform the current cells to succeeding representables
+    #we are still missing a lot of scenerios for the base case
+    #this is actually a padding problem where we'd want to buff the base case storage to be able to store the previous prints via Taylor's projections and do virtual matrix multiplication solely on the current matrix
+
     #so matrix multiplication is the right way, I have yet to tell what is in the matrix, all we know is that the matrix can be virtual matrix or real matrix, preferably a 3 dimensional matrix to do correct context projection (or virtual multiplication)
     #either way, it is still a matrix multiplication
 
@@ -753,6 +758,31 @@ def shake_x(logit_list: list[Brain],
 
     #yet we'd want to have an overview of the network before we dive into the inplementation, we dont really know what we need
     #our framework is for a network of brains, essentially they talk to each other to solve a set of problems, I dont know how
+
+    #I was working on this financial service, PandaKoin
+    #we are keeping our own transactions, and sum our transactions as balance, and share transactions to peers as proof of balance to do transfer
+
+    #The problem could be seen as:
+    #there is a good group (a good group is a group of well-behaved people, adhere to the system, never break the system laws)
+    #there is a bad group (these people would invent transactions signed by another criminals, delete transactions, try to trick other people, including themselves)
+
+    #at any given time, the good group (our users) is expecting the criminal group (as a unit) cannot spend more than what they have
+
+    #polices come and collect all the transaction history from both the groups
+
+    #if criminal group spends more than what they have, this internal system energy != 0 => contradiction
+
+    #note that the criminal group can be flexible, and can invent the transactions that are agreed by a group of criminal people or delete transactions that are agreed by a group of criminal people
+    #the criminal group local money (individuals) is undefined yet their global money is defined by the good group
+    #so the criminal group cannot spend more than what they have
+
+    #what we want to prove is that by doing a simple transaction comparision (A says this + B says this == OK), we could weed out the case where the criminal spends more than what they have
+
+    #let's get back to our arbitrary groups of users (mathematically assume that we are iterating every possibility of two distinct sets of users)
+    #good groups says this => bad group money (assume that global money is a fixed number)
+    #bad group money sum != good group money says => bad (weeded out)
+
+    #so we could say that simple transaction comparision could weed out the case where criminal spends more than what they have
 
     if iteration_sz == 0:
         return logit_list
