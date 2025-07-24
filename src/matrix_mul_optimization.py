@@ -784,6 +784,18 @@ def shake_x(logit_list: list[Brain],
 
     #so we could say that simple transaction comparision could weed out the case where criminal spends more than what they have
 
+    #I keep thinking about the base case, because I think that I might be wrong, in the sense of implementing the base case not efficiently
+    #assume there exists the best transforming scenerio that involves some coefficients, all variables (permutation to the power of 10 without loss of generality, x^(1..10)*x1^(1..10)*x2**(1..10)), products of those variables and addition operations
+    #I guess the "most efficient" in this case must be the engineer of the coincidences of multiplication operation, in the sense of the coefficients somehow span a really large range of projections for each of the final cells
+    #this is what we'd want to do research on, the multiplication, the convolution and the numerical stability of those operations
+    #recall that we are still doing projections (all cells -> 1 cell), yet we are "engineering" the arbitrary coefficients (simply because we dont have enough storage, and we don't want to have bad logit density) by engineering our logit values and our operations   
+
+    #assume that we express those as c*x*x1*x2 + ..., we can actually prove that if our temporary buffer (or slacking buffer) is large enough, a sufficient number of rotation would eventually be optimality-convertible
+    #as if we are computing those expressions (multiplications alone) separately and keeping the original data (via Taylor Projection coincidence) 
+    #proving that this could be optimality-convertible does not necessarily mean that this is the most efficient way of doing things 
+
+    #as we could see, the problem is that the rotation would be putting the exponent into some really bad numerical range, we are seeing at least x to the power 1024 after 10 rotations, or 1.000.000 after 20 rotations for that matter 
+
     if iteration_sz == 0:
         return logit_list
 
