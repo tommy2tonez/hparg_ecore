@@ -794,6 +794,24 @@ def shake_x(logit_list: list[Brain],
     #as if we are computing those expressions (multiplications alone) separately and keeping the original data (via Taylor Projection coincidence) 
     #proving that this could be optimality-convertible does not necessarily mean that this is the most efficient way of doing things 
 
+    #as of now, I really dont have a way of doing this just yet, I believe this is a topic to be researched, which I would circle back in a month or two to further improve the base case
+    #for now, we could prove that this is optimality-convertible (if there is an optimal projection involes add, mul, not div yet) after a sufficient number of rotations (for base case) and a sufficient storage for padding logits or slacking buffer
+
+    #as I was working on the proof of convolution, it's essentially a pairwise add in an arbitrary space
+    #as if we are doing f(g(x) + g1(x))
+    #so we could tell that we are basically adding things (or add is the sole operation), the only thing hindering us is the operating space or operating semantic, in the multiplication case, it's FFT semantic (or frequency)  
+    #so we'd want to steer our research in the Fourier or Laplace transform space, we are definitely missing some g(f(x)), I dont know how we could extract the general logics for g(f(x))
+    #we are definitely regard, so we'd want to train our function g(f(x)) so that an add operation is sufficient instead of finding the functions, the logic of the f(g(x)) for the base case has to be engineered to perfection, which we'd want to spend millions on the compute of sole multiplications and additions eqn (we'd leverage our engine to push 10 ** 27 bytes/s literally and find the deviation space) 
+
+    #this matrix is probably the most time-consuming part of our research, I would stick with a virtual multidimensional matrix multiplication (3d rules + 2d cells) with padding storage as of now
+    #we'd do real simple, we'd clone + project roughly 10 ** 27 bytes/ second, we'd want to find the deviation space and do fission (I have yet to talk about the search strategy, searching strategy is actually also very important)
+    #we have set up our network infrastructure + maxflow + betweenness centrality + etc.
+    #internet archive already gives us 1 petabyte of projection space (which is 10**15), we'd want to project 10**12 internet archive at a time to do search  
+    #we'd want to persuade our clients to see the problems this way (we dont have the compute) 
+
+    #AI's not gonna steal your girlfriends or your jobs fellas so there's no need for jealousy
+    #you'd just have to have faith in the training data, as if we are spawning something that's already here
+
     #as we could see, the problem is that the rotation would be putting the exponent into some really bad numerical range, we are seeing at least x to the power 1024 after 10 rotations, or 1.000.000 after 20 rotations for that matter 
 
     if iteration_sz == 0:
