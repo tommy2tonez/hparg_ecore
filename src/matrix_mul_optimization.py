@@ -814,6 +814,16 @@ def shake_x(logit_list: list[Brain],
 
     #as we could see, the problem is that the rotation would be putting the exponent into some really bad numerical range, we are seeing at least x to the power 1024 after 10 rotations, or 1.000.000 after 20 rotations for that matter 
 
+    #alright, what happened to Tweener, he got a plan of escape after desemanticalizing the other dude
+    #this reminds me of the video where the lady does not remember what the original question is on TikTok
+    #we'd attempt to solve this problem by using an asynchronous flow of logic, essentially, we'd branch to 10 flows, each flow has exponential decay rotation count (because we know for sure that the more we decay, the harder it is to search for the deviation space)
+    #we'd converge the flows by using an addition operation
+    #we'd want to perform individual search, search on the 1st flow, search on the 2nd flow, search on the 3rd flow, each succeeding flow has more rotation to be able to approx a more complex semantic
+
+    #our thesis is if the current flow could not approx the projection space (semantic), the next flow must be able to cancel the current flow waves in order to proceed
+    #we kind of starting off on the right foot, by setting standards of the next flow having to be better than the current flow
+    #it's hard, its super very complicated, we dont really know because we've tried this, global search is the stable way, and engineered anchoring points is the right approach, we just dont have the tech and patching holes that we don't know yet
+
     if iteration_sz == 0:
         return logit_list
 
