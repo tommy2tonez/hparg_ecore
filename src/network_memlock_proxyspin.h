@@ -198,7 +198,7 @@ namespace dg::network_memlock_proxyspin{
                     return true;
                 };
 
-                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, FOREHEAD_SPIN_SIZE, FOREHEAD_SPIN_PERIOD);
+                bool was_thru = stdx::eventloop_expbackoff_spin(lambda, FOREHEAD_SPIN_SZ, FOREHEAD_SPIN_PERIOD);
 
                 if (was_thru){
                     return;

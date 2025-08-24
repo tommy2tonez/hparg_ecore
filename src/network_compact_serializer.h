@@ -1,4 +1,4 @@
-#ifndef __DG_NETWORK_COMPACT_SERIALIZER_H__
+ #ifndef __DG_NETWORK_COMPACT_SERIALIZER_H__
 #define __DG_NETWORK_COMPACT_SERIALIZER_H__
 
 //define HEADER_CONTROL 0
@@ -17,6 +17,8 @@
 #include <numeric>
 #include <type_traits>
 #include <array>
+#include <variant>
+#include <chrono>
 
 //I was thinking of making the trivial serializer an internal dependency to solve the VERSION_CONTROL problems
 // 
@@ -37,7 +39,7 @@ namespace dg::network_compact_serializer::network_trivial_serializer::types_spac
 
     template <class T, class = void>
     struct is_tuple: std::false_type{};
-    
+
     template <class T>
     struct is_tuple<T, std::void_t<decltype(std::tuple_size<T>::value)>>: std::true_type{};
 
@@ -244,7 +246,7 @@ namespace dg::network_compact_serializer::network_trivial_serializer::archive{
 
             using value_type = typename types_space::base_type_t<T>::value_type;
             char * tmp = buf;
-            put(tmp, static_cast<bool>(data));
+            put(tmp, static_cast<bool>(data.has_value()));
 
             if (data){
                 put(tmp, data.value());
@@ -365,20 +367,27 @@ namespace dg::network_compact_serializer::network_trivial_serializer{
     }
 }
 
-namespace dg::network_compact_serializer::constants{
-
-    static constexpr auto endianness                                = std::endian::little;
-    static constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED        = true;
-    static constexpr bool DESERIALIZATION_HAS_CLEAR_CONTAINER_RIGHT = true;
-    static constexpr uint8_t SERIALIZATION_VERSION_CONTROL          = 1;
-}
-
 namespace dg::network_compact_serializer::types{
 
     using hash_type                             = std::pair<uint64_t, uint64_t>;
     using size_type                             = uint64_t;
     using dgstd_unsigned_serialization_header_t = uint8_t;
     using version_control_t                     = uint8_t;
+    using variant_index_type                    = uint8_t;
+    using serializable_duration_t               = std::chrono::duration<int64_t, std::ratio<1L, 1000000000L>>;
+
+    /*
+        Casting from a floating-point duration to an integer duration is subject to undefined behavior when the floating-point value is NaN, infinity, 
+        or too large to be representable by the target's integer type. Otherwise, casting to an integer duration is subject to truncation as with any static_cast to an integer type. 
+    */
+}
+
+namespace dg::network_compact_serializer::constants{
+
+    static constexpr auto endianness                                = std::endian::little;
+    static constexpr bool IS_SAFE_INTEGER_CONVERSION_ENABLED        = true;
+    static constexpr bool DESERIALIZATION_HAS_CLEAR_CONTAINER_RIGHT = true;
+    static constexpr uint8_t SERIALIZATION_VERSION_CONTROL          = 1;
 }
 
 namespace dg::network_compact_serializer::exception_space{
@@ -396,6 +405,14 @@ namespace dg::network_compact_serializer::exception_space{
         inline auto what() const noexcept -> const char *{
 
             return "bad version control";
+        }
+    };
+
+    struct bad_format: std::exception{
+
+        inline auto what() const noexcept -> const char *{
+
+            return "bad format";
         }
     };
 }
@@ -457,6 +474,18 @@ namespace dg::network_compact_serializer::types_space{
 
     template <class ...Args>
     struct is_basic_string<std::basic_string<Args...>>: std::true_type{};
+
+    template <class T>
+    struct is_variant: std::false_type{};
+
+    template <class ...Args>
+    struct is_variant<std::variant<Args...>>: std::true_type{};
+
+    template <class T>
+    struct is_utc_timepoint: std::false_type{};
+    
+    template <>
+    struct is_utc_timepoint<std::chrono::time_point<std::chrono::utc_clock, std::chrono::nanoseconds>>: std::true_type{};
 
     template <class T, class = void>
     struct is_reflectible: std::false_type{};
@@ -524,8 +553,6 @@ namespace dg::network_compact_serializer::types_space{
     template <class T>
     using containee_or_empty_t = typename containee_or_empty<T>::type; 
 
-    //see: https://en.cppreference.com/w/cpp/language/types
-
     template <class T>
     static inline constexpr bool has_unique_serializable_representations_v              = std::disjunction_v<std::is_same<T, int8_t>, std::is_same<T, uint8_t>, 
                                                                                                              std::is_same<T, char>, std::is_same<T, unsigned char>, std::is_same<T, signed char>>;
@@ -571,6 +598,12 @@ namespace dg::network_compact_serializer::types_space{
 
     template <class T>
     static inline constexpr bool is_optional_v                                          = is_optional<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_variant_v                                           = is_variant<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_utc_timepoint_v                                     = is_utc_timepoint<T>::value;
 
     template <class T>
     static inline constexpr bool is_reflectible_v                                       = is_reflectible<T>::value;
@@ -831,6 +864,59 @@ namespace dg::network_compact_serializer::utility{
             return value;
         }
     }
+
+    template <class T1, class T>
+    constexpr auto is_safe_integer_castable(T value) noexcept -> bool{
+
+        static_assert(std::numeric_limits<T>::is_integer);
+        static_assert(std::numeric_limits<T1>::is_integer);
+
+        if constexpr(std::is_unsigned_v<T> && std::is_unsigned_v<T1>){
+            (void) value;
+        } else if constexpr(std::is_signed_v<T> && std::is_signed_v<T1>){
+            (void) value;
+        } else{
+            if constexpr(std::is_signed_v<T>){
+                if constexpr(sizeof(T) > sizeof(T1)){
+                    (void) value;
+                } else{
+                    if (value < 0){
+                        return false;
+                    } else{
+                        return true; //sizeof(signed) <= sizeof(unsigned)
+                    }
+                }
+            } else{
+                if constexpr(sizeof(T1) > sizeof(T)){
+                    (void) value;
+                } else{
+                    if (value > std::numeric_limits<T1>::max()){
+                        return false;
+                    } else{
+                        return true; //sizeof(unsigned) >= sizeof(signed)
+                    }
+                }
+            }
+        }
+
+        if (value > std::numeric_limits<T1>::max()){
+            return false;
+        }
+
+        if (value < std::numeric_limits<T1>::min()){
+            return false;
+        }
+
+        return true;
+    }
+
+    template <class T>
+    constexpr auto is_met_variant_index_requirements(T variant_idx) noexcept -> bool{
+
+        return variant_idx != std::variant_npos 
+                && is_safe_integer_castable<types::variant_index_type>(variant_idx)
+                && safe_integer_cast<T>(safe_integer_cast<types::variant_index_type>(variant_idx)) == variant_idx;
+    }
 }
 
 namespace dg::network_compact_serializer::archive{
@@ -840,13 +926,13 @@ namespace dg::network_compact_serializer::archive{
         using Self = Counter;
 
         template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
-            
+        constexpr auto count(const T& data) const -> size_t{
+
             return sizeof(types_space::base_type_t<T>);
         }
 
         template <class T, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             size_t rs = this->count(bool{});
 
@@ -858,7 +944,7 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             size_t rs = this->count(bool{}); 
 
@@ -869,22 +955,54 @@ namespace dg::network_compact_serializer::archive{
             return rs;
         }
 
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(const T& data) const -> size_t{
+
+            if (!utility::is_met_variant_index_requirements(data.index())){
+                throw exception_space::bad_format();
+            }
+
+            size_t rs = this->count(types::variant_index_type{}); 
+
+            auto visitor = [&rs]<class VisitorArg>(VisitorArg&& visitor_arg){
+                rs += Self().count(std::forward<VisitorArg>(visitor_arg));
+            };
+
+            std::visit(visitor, data);
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<T>, bool> = true>
+        constexpr auto count(const T& data) const -> size_t{
+
+            auto dur            = data.time_since_epoch();
+            auto casted_dur     = std::chrono::duration_cast<types::serializable_duration_t>(dur);
+            auto storable_value = casted_dur.count();
+            
+            return this->count(storable_value);
+        }
+
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             using base_type     = types_space::base_type_t<T>;
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
             size_t rs           = 0u;
 
-            [&rs]<size_t ...IDX>(T&& data, const std::index_sequence<IDX...>) noexcept{
+            [&rs]<size_t ...IDX>(const T& data, const std::index_sequence<IDX...>){
                 rs += (Self().count(std::get<IDX>(data)) + ...);
-            }(std::forward<T>(data), idx_seq);
+            }(data, idx_seq);
 
             return rs;
         }
 
         template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
+
+            if (!utility::is_safe_integer_castable<types::size_type>(data.size())){
+                throw exception_space::bad_format();
+            }
 
             size_t rs = this->count(types::size_type{});
 
@@ -896,16 +1014,20 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const-> size_t{
+
+            if (!utility::is_safe_integer_castable<types::size_type>(data.size())){
+                throw exception_space::bad_format();
+            }
 
             return this->count(types::size_type{}) + static_cast<size_t>(data.size()) * sizeof(types_space::containee_t<types_space::base_type_t<T>>);
         }
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             size_t rs       = 0u;
-            auto archiver   = [&rs]<class ...Args>(Args&& ...args) noexcept{
+            auto archiver   = [&rs]<class ...Args>(Args&& ...args){
                 rs += (Self().count(std::forward<Args>(args)) + ...);
             };
             data.dg_reflect(archiver);
@@ -919,14 +1041,14 @@ namespace dg::network_compact_serializer::archive{
         using Self = Forward;
 
         template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
-            
-            network_compact_serializer::utility::SyncedEndiannessService::dump(buf, std::forward<T>(data));
+        constexpr void put(char *& buf, const T& data) const{
+
+            network_compact_serializer::utility::SyncedEndiannessService::dump(buf, data);
             std::advance(buf, sizeof(types_space::base_type_t<T>));
         }
 
         template <class T, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             this->put(buf, static_cast<bool>(data));
 
@@ -936,28 +1058,59 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
-            this->put(buf, static_cast<bool>(data));
+            this->put(buf, static_cast<bool>(data.has_value()));
 
             if (data){
                 this->put(buf, *data);
             }
         }
 
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, const T& data) const{
+
+            if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
+                throw exception_space::bad_format();
+            }
+
+            types::variant_index_type demoted_variant_idx = network_compact_serializer::utility::safe_integer_cast<types::variant_index_type>(data.index());
+            this->put(buf, demoted_variant_idx);
+
+            auto visitor = [&buf]<class VariantArg>(VariantArg&& variant_arg){
+                Self().put(buf, std::forward<VariantArg>(variant_arg));
+            };
+
+            std::visit(visitor, data);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, const T& data) const{
+
+            auto dur            = data.time_since_epoch();
+            auto casted_dur     = std::chrono::duration_cast<types::serializable_duration_t>(dur);
+            auto storable_value = casted_dur.count();
+
+            this->put(buf, storable_value);
+        }
+
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             using base_type     = types_space::base_type_t<T>;
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
 
-            []<size_t ...IDX>(char *& buf, T&& data, const std::index_sequence<IDX...>) noexcept{
+            []<size_t ...IDX>(char *& buf, const T& data, const std::index_sequence<IDX...>){
                 (Self().put(buf, std::get<IDX>(data)), ...);
-            }(buf, std::forward<T>(data), idx_seq);
+            }(buf, data, idx_seq);
         }
 
         template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
+
+            if (!network_compact_serializer::utility::is_safe_integer_castable<types::size_type>(data.size())){
+                throw exception_space::bad_format();
+            }
 
             this->put(buf, network_compact_serializer::utility::safe_integer_cast<types::size_type>(data.size()));
 
@@ -967,10 +1120,14 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             using base_type = types_space::base_type_t<T>;
             using elem_type = types_space::containee_t<base_type>;
+            
+            if (!network_compact_serializer::utility::is_safe_integer_castable<types::size_type>(data.size())){
+                throw exception_space::bad_format();
+            }
 
             this->put(buf, network_compact_serializer::utility::safe_integer_cast<types::size_type>(data.size()));
 
@@ -983,9 +1140,9 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
-            auto archiver = [&buf]<class ...Args>(Args&& ...args) noexcept{
+            auto archiver = [&buf]<class ...Args>(Args&& ...args){
                 (Self().put(buf, std::forward<Args>(args)), ...);
             };
 
@@ -1037,6 +1194,40 @@ namespace dg::network_compact_serializer::archive{
             }
         }
 
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, T&& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+            types::variant_index_type variant_idx;
+            this->put(buf, variant_idx);
+
+            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+                (
+                    [&]{
+                        if (IDX == network_compact_serializer::utility::safe_integer_cast<size_t>(variant_idx)){
+                            std::variant_alternative_t<IDX, base_type> containee;
+                            this->put(buf, containee);
+                            data = base_type(std::in_place_index_t<IDX>{}, std::move(containee));
+                        }
+                    }(), ...
+                );
+            }(std::make_index_sequence<std::variant_size_v<base_type>>());
+        }
+
+        template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, T&& data) const{
+
+            using data_timepoint_t = types_space::base_type_t<T>;
+            using data_dur_t = typename data_timepoint_t::duration;
+
+            typename types::serializable_duration_t::rep tick;
+
+            this->put(buf, tick);
+            auto serializable_dur = types::serializable_duration_t(tick);
+            auto data_dur = std::chrono::duration_cast<data_dur_t>(serializable_dur);
+            data = data_timepoint_t(data_dur);
+        }
+
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(const char *& buf, T&& data) const{
 
@@ -1044,7 +1235,7 @@ namespace dg::network_compact_serializer::archive{
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
 
             []<size_t ...IDX>(const char *& buf, T&& data, const std::index_sequence<IDX...>){
-                (Self().put(buf, std::get<IDX>(data)), ...);
+                (Self().put(buf, std::get<IDX>(std::forward<T>(data))), ...);
             }(buf, std::forward<T>(data), idx_seq);
         }
 
@@ -1157,6 +1348,46 @@ namespace dg::network_compact_serializer::archive{
             }
         }
 
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+            types::variant_index_type variant_idx;
+            this->put(buf, buf_sz, variant_idx);
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;   
+
+            if (variant_idx >= VARIANT_COUNT){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+                (
+                    [&]{
+                        if (IDX == network_compact_serializer::utility::safe_integer_cast<size_t>(variant_idx)){
+                            std::variant_alternative_t<IDX, base_type> containee;
+                            this->put(buf, buf_sz, containee);
+                            data = base_type(std::in_place_index_t<IDX>{}, std::move(containee));
+                        }
+                    }(), ...
+                );
+            }(std::make_index_sequence<VARIANT_COUNT>());
+        }
+
+        template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using data_timepoint_t = types_space::base_type_t<T>;
+            using data_dur_t = typename data_timepoint_t::duration;
+            
+            typename types::serializable_duration_t::rep tick;
+
+            this->put(buf, buf_sz, tick);
+            auto serializable_dur = types::serializable_duration_t(tick);
+            auto data_dur = std::chrono::duration_cast<data_dur_t>(serializable_dur);
+            data = data_timepoint_t(data_dur);
+        }
+
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
 
@@ -1164,7 +1395,7 @@ namespace dg::network_compact_serializer::archive{
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
 
             []<size_t ...IDX>(const char *& buf, size_t& buf_sz, T&& data, const std::index_sequence<IDX...>){
-                (Self().put(buf, buf_sz, std::get<IDX>(data)), ...);
+                (Self().put(buf, buf_sz, std::get<IDX>(std::forward<T>(data))), ...);
             }(buf, buf_sz, std::forward<T>(data), idx_seq);
         }
 
@@ -1310,6 +1541,10 @@ namespace dg::network_compact_serializer::archive{
             return 228u;
         } else if constexpr(types_space::is_reflectible_v<T>){
             return 229u;
+        } else if constexpr(types_space::is_variant_v<T>){
+            return 230u;
+        } else if constexpr(types_space::is_utc_timepoint_v<T>){
+            return 231u;
         } else{
             static_assert(FALSE_VAL<>);
         }
@@ -1320,13 +1555,13 @@ namespace dg::network_compact_serializer::archive{
         using Self = DgStdCounter;
 
         template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             return sizeof(types::dgstd_unsigned_serialization_header_t) + sizeof(types_space::base_type_t<T>);
         }
 
         template <class T, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(bool{});
 
@@ -1338,7 +1573,7 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(bool{}); 
 
@@ -1349,23 +1584,55 @@ namespace dg::network_compact_serializer::archive{
             return rs;
         }
 
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(const T& data) const -> size_t{
+
+            if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
+                throw exception_space::bad_format();
+            }
+
+            size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(types::variant_index_type{});
+
+            auto visitor = [&rs]<class VisitorArg>(VisitorArg&& visitor_arg){
+                rs += Self().count(std::forward<VisitorArg>(visitor_arg));
+            };
+
+            std::visit(visitor, data);
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<T>, bool> = true>
+        constexpr auto count(const T& data) const -> size_t{
+
+            auto dur            = data.time_since_epoch();
+            auto casted_dur     = std::chrono::duration_cast<types::serializable_duration_t>(dur);
+            auto storable_value = casted_dur.count();
+
+            return this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(storable_value);
+        }
+
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             using base_type     = types_space::base_type_t<T>;
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
 
             size_t rs           = this->count(types::dgstd_unsigned_serialization_header_t{});
 
-            [&rs]<size_t ...IDX>(T&& data, const std::index_sequence<IDX...>) noexcept{
+            [&rs]<size_t ...IDX>(const T& data, const std::index_sequence<IDX...>){
                 rs += (Self().count(std::get<IDX>(data)) + ...);
-            }(std::forward<T>(data), idx_seq);
+            }(data, idx_seq);
 
             return rs;
         }
 
         template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
+
+            if (!network_compact_serializer::utility::is_safe_integer_castable<types::size_type>(data.size())){
+                throw exception_space::bad_format();
+            }
 
             size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(types::size_type{});
 
@@ -1377,7 +1644,11 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
+
+            if (!network_compact_serializer::utility::is_safe_integer_castable<types::size_type>(data.size())){
+                throw exception_space::bad_format();
+            }
 
             return this->count(types::dgstd_unsigned_serialization_header_t{})
                    + this->count(types::dgstd_unsigned_serialization_header_t{})  
@@ -1386,11 +1657,11 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
+        constexpr auto count(const T& data) const -> size_t{
 
             size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{});
 
-            auto archiver   = [&rs]<class ...Args>(Args&& ...args) noexcept{
+            auto archiver   = [&rs]<class ...Args>(Args&& ...args){
                 rs += (Self().count(std::forward<Args>(args)) + ...);
             };
 
@@ -1411,7 +1682,7 @@ namespace dg::network_compact_serializer::archive{
         using Self = DgStdForward;
 
         template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             using base_type = types_space::base_type_t<T>; 
 
@@ -1420,12 +1691,12 @@ namespace dg::network_compact_serializer::archive{
             network_compact_serializer::utility::SyncedEndiannessService::dump(buf, serialization_header);
             std::advance(buf, sizeof(types::dgstd_unsigned_serialization_header_t));
 
-            network_compact_serializer::utility::SyncedEndiannessService::dump(buf, std::forward<T>(data));
+            network_compact_serializer::utility::SyncedEndiannessService::dump(buf, data);
             std::advance(buf, sizeof(base_type));
         }
 
         template <class T, std::enable_if_t<types_space::is_unique_ptr_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             using base_type = types_space::base_type_t<T>;
 
@@ -1438,35 +1709,74 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             using base_type = types_space::base_type_t<T>; 
 
             this->put(buf, get_dgstd_serialization_header<base_type>());
-            this->put(buf, static_cast<bool>(data));
+            this->put(buf, static_cast<bool>(data.has_value()));
 
             if (data){
                 this->put(buf, *data);
             }
         }
 
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, const T& data) const{
+
+            using base_type = types_space::base_type_t<T>; 
+
+            if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
+                throw exception_space::bad_format();
+            }
+
+            types::variant_index_type demoted_variant_idx = network_compact_serializer::utility::safe_integer_cast<types::variant_index_type>(data.index());
+
+            this->put(buf, get_dgstd_serialization_header<base_type>());
+            this->put(buf, demoted_variant_idx);
+
+            auto visitor = [&buf]<class VariantArg>(VariantArg&& variant_arg){
+                Self().put(buf, std::forward<VariantArg>(variant_arg));
+            };
+
+            std::visit(visitor, data);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, const T& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+
+            this->put(buf, get_dgstd_serialization_header<base_type>());
+
+            auto dur            = data.time_since_epoch();
+            auto casted_dur     = std::chrono::duration_cast<types::serializable_duration_t>(dur);
+            auto storable_value = casted_dur.count();
+
+            this->put(buf, storable_value);
+        }
+
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             using base_type     = types_space::base_type_t<T>;
             const auto idx_seq  = std::make_index_sequence<std::tuple_size_v<base_type>>{};
 
             this->put(buf, get_dgstd_serialization_header<base_type>());
 
-            []<size_t ...IDX>(char *& buf, T&& data, const std::index_sequence<IDX...>) noexcept{
+            []<size_t ...IDX>(char *& buf, const T& data, const std::index_sequence<IDX...>){
                 (Self().put(buf, std::get<IDX>(data)), ...);
-            }(buf, std::forward<T>(data), idx_seq);
+            }(buf, data, idx_seq);
         }
 
         template <class T, std::enable_if_t<types_space::is_noncpyable_linear_container_v<types_space::base_type_t<T>> || types_space::is_nonlinear_container_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
-            using base_type     = types_space::base_type_t<T>;
+            using base_type = types_space::base_type_t<T>;
+
+            if (!utility::is_safe_integer_castable<types::size_type>(data.size())){
+                throw exception_space::bad_format();
+            }
 
             this->put(buf, get_dgstd_serialization_header<base_type>());
             this->put(buf, network_compact_serializer::utility::safe_integer_cast<types::size_type>(data.size()));
@@ -1477,10 +1787,14 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_cpyable_linear_container_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             using base_type = types_space::base_type_t<T>;
             using elem_type = types_space::containee_t<base_type>;
+
+            if (!utility::is_safe_integer_castable<types::size_type>(data.size())){
+                throw exception_space::bad_format();
+            }
 
             this->put(buf, get_dgstd_serialization_header<base_type>());
             this->put(buf, get_dgstd_serialization_header<elem_type>());
@@ -1495,13 +1809,13 @@ namespace dg::network_compact_serializer::archive{
         }
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
+        constexpr void put(char *& buf, const T& data) const{
 
             using base_type = types_space::base_type_t<T>;
 
             this->put(buf, get_dgstd_serialization_header<base_type>());
 
-            auto archiver = [&buf]<class ...Args>(Args&& ...args) noexcept{
+            auto archiver = [&buf]<class ...Args>(Args&& ...args){
                 (Self().put(buf, std::forward<Args>(args)), ...);
             };
 
@@ -1588,6 +1902,64 @@ namespace dg::network_compact_serializer::archive{
             }
         }
 
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+
+            types::dgstd_unsigned_serialization_header_t expected_header    = {};
+            this->put(buf, buf_sz, expected_header);
+            types::dgstd_unsigned_serialization_header_t header             = get_dgstd_serialization_header<base_type>();
+
+            if (header != expected_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            types::variant_index_type variant_idx;
+            this->put(buf, buf_sz, variant_idx);
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
+
+            if (variant_idx >= VARIANT_COUNT){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+                (
+                    [&]
+                    {
+                        if (IDX == network_compact_serializer::utility::safe_integer_cast<size_t>(variant_idx)){
+                            std::variant_alternative_t<IDX, base_type> containee;
+                            this->put(buf, buf_sz, containee);
+                            data = base_type(std::in_place_index_t<IDX>{}, std::move(containee));
+                        }
+                    }(), ...
+                );
+            }(std::make_index_sequence<VARIANT_COUNT>());
+        }
+
+        template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type     = types_space::base_type_t<T>;
+            using data_dur_t    = typename base_type::duration;
+
+            types::dgstd_unsigned_serialization_header_t expected_header    = {};
+            this->put(buf, buf_sz, expected_header);
+            types::dgstd_unsigned_serialization_header_t header             = get_dgstd_serialization_header<base_type>();
+
+            if (header != expected_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            typename types::serializable_duration_t::rep tick;
+
+            this->put(buf, buf_sz, tick);
+            auto serialization_dur = types::serializable_duration_t(tick);
+            auto data_dur = std::chrono::duration_cast<data_dur_t>(serialization_dur);
+            data = base_type(data_dur);
+        }
+
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
         void put(const char *& buf, size_t& buf_sz, T&& data) const{
 
@@ -1603,7 +1975,7 @@ namespace dg::network_compact_serializer::archive{
             }
 
             []<size_t ...IDX>(const char *& buf, size_t& buf_sz, T&& data, const std::index_sequence<IDX...>){
-                (Self().put(buf, buf_sz, std::get<IDX>(data)), ...);
+                (Self().put(buf, buf_sz, std::get<IDX>(std::forward<T>(data))), ...);
             }(buf, buf_sz, std::forward<T>(data), idx_seq);
         }
 
@@ -1719,13 +2091,13 @@ namespace dg::network_compact_serializer{
     //other than that, we are fine
 
     template <class T>
-    constexpr auto size(const T& obj) noexcept -> size_t{
+    constexpr auto size(const T& obj) -> size_t{
 
         return dg::network_compact_serializer::archive::Counter{}.count(obj);
     }
 
     template <class T>
-    constexpr auto serialize_into(char * buf, const T& obj) noexcept -> char *{
+    constexpr auto serialize_into(char * buf, const T& obj) -> char *{
 
         dg::network_compact_serializer::archive::Forward{}.put(buf, obj);
         return buf;
@@ -1739,13 +2111,13 @@ namespace dg::network_compact_serializer{
     }
 
     template <class T>
-    constexpr auto integrity_size(const T& obj) noexcept -> size_t{
+    constexpr auto integrity_size(const T& obj) -> size_t{
 
         return network_compact_serializer::size(obj) + network_compact_serializer::size(types::hash_type{});
     }
 
     template <class T>
-    constexpr auto integrity_serialize_into(char * buf, const T& obj, uint32_t secret = 0u) noexcept -> char *{ 
+    constexpr auto integrity_serialize_into(char * buf, const T& obj, uint32_t secret = 0u) -> char *{ 
 
         char * first                = buf;
         char * last                 = dg::network_compact_serializer::serialize_into(first, obj);
@@ -1786,13 +2158,13 @@ namespace dg::network_compact_serializer{
     }
 
     template <class T>
-    constexpr auto capintegrity_size(const T& obj) noexcept -> size_t{
+    constexpr auto capintegrity_size(const T& obj) -> size_t{
 
         return dg::network_compact_serializer::size(uint64_t{}) + dg::network_compact_serializer::integrity_size(obj);
     }
 
     template <class T>
-    constexpr auto capintegrity_serialize_into(char * buf, const T& obj, uint32_t secret = 0u) noexcept -> char *{
+    constexpr auto capintegrity_serialize_into(char * buf, const T& obj, uint32_t secret = 0u) -> char *{
 
         char * first    = std::next(buf, dg::network_compact_serializer::size(uint64_t{}));
         char * last     = dg::network_compact_serializer::integrity_serialize_into(first, obj, secret);
@@ -1823,13 +2195,13 @@ namespace dg::network_compact_serializer{
     }
 
     template <class T>
-    constexpr auto dgstd_size(const T& obj) noexcept -> size_t{
+    constexpr auto dgstd_size(const T& obj) -> size_t{
 
         return dg::network_compact_serializer::archive::DgStdCounter{}.count(obj) + network_compact_serializer::size(types::hash_type{}) + network_compact_serializer::size(types::version_control_t{});
     }
 
     template <class T>
-    constexpr auto dgstd_serialize_into(char * buf, const T& obj, uint32_t secret = 0u) noexcept -> char *{
+    constexpr auto dgstd_serialize_into(char * buf, const T& obj, uint32_t secret = 0u) -> char *{
 
         char * first                = buf;
         char * last                 = first;

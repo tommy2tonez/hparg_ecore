@@ -86,6 +86,7 @@
         "ranges": "cpp",
         "cerrno": "cpp",
         "cursor": "cpp",
-        "source_location": "cpp"
+        "source_location": "cpp",
+        "text_encoding": "cpp"
     }
 }

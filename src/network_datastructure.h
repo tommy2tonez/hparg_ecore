@@ -636,7 +636,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
             //alright, we arent being greedy, we might step into the undefined territory
 
-            using rebinded_allocator = typename std::allocator_traits<Allocator>::typename rebind_alloc<std::aligned_storage_t<sizeof(T), alignof(T)>>;
+            using rebinded_allocator = typename std::allocator_traits<Allocator>::template rebind_alloc<std::aligned_storage_t<sizeof(T), alignof(T)>>;
 
             std::vector<std::aligned_storage_t<sizeof(T), alignof(T)>, rebinded_allocator> data_arr;
             size_t off;
@@ -1921,7 +1921,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             using virtual_addr_t                = get_virtual_addr_t<VirtualAddrType>;
             using node_t                        = Node<HasStructureReordering, Key, Mapped, VirtualAddrType>;
 
-            static inline constexpr virtual_addr_t NULL_VRITUAL_ADDR    = null_addr_v<virtual_addr_t>;
+            static inline constexpr virtual_addr_t NULL_VIRTUAL_ADDR    = null_addr_v<virtual_addr_t>;
             static inline constexpr uint64_t MIN_CAP                    = 8u;
             static inline constexpr uint64_t MAX_CAP                    = size_t{1} << 50;
 
@@ -1945,7 +1945,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                 const Allocator& allocator): cyclic_unordered_node_map(bucket_count, _hasher, Pred(), allocator){}
 
             constexpr cyclic_unordered_node_map(size_type bucket_count,
-                                                const Allocator& allocator): cyclic_unordered_node_map(bucket_count, Hahser(), allocator){}
+                                                const Allocator& allocator): cyclic_unordered_node_map(bucket_count, Hasher(), allocator){}
 
             constexpr explicit cyclic_unordered_node_map(const Allocator& allocator): cyclic_unordered_node_map(self::min_capacity(), allocator){}
 
@@ -1970,7 +1970,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                 const Allocator& allocator): cyclic_unordered_node_map(init_list.begin(), init_list.end(), bucket_count, Hasher(), allocator){}
             
             template <class KeyLike, class ...Args>
-            constexpr auto try_emplace(KeyLike&& key, Arg&& ...args) -> std::pair<iterator, bool>{
+            constexpr auto try_emplace(KeyLike&& key, Args&& ...args) -> std::pair<iterator, bool>{
 
                 return this->internal_insert(unordered_map_variants::node_initialize<node_t>(key_type(std::forward<KeyLike>(key)), mapped_type(std::forward<Args>(args)...), NULL_VIRTUAL_ADDR));
             }
@@ -1982,7 +1982,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class ValueLike = std::pair<const Key, Mapped>>
-            constexpr void insert(ValueLike&& value) -> std::pair<iterator, bool>{
+            constexpr auto insert(ValueLike&& value) -> std::pair<iterator, bool>{
 
                 return this->internal_insert(unordered_map_variants::node_initialize<node_t>(key_type(dg_forward_like<ValueLike>(value.first)), mapped_type(dg_forward_like<ValueLike>(value.second)), NULL_VIRTUAL_ADDR));
             }
@@ -2344,14 +2344,12 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             BidirIterator base_node_iterator;
 
-            using key_type              = std::decay_t<decltype(std::declval<BidirIterator&>()->key)>;
-            using base_iterator_type    = BidirIterator::value_type; 
 
         public:
 
-            using self                  = unordered_set_node_external_iterator;
-            using difference_type       = std::ptrdiff_t;
-            using value_type            = type_like_t<base_iterator_type, key_type>;
+            using self              = unordered_set_node_external_iterator;
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = std::remove_reference_t<decltype(std::declval<BidirIterator&>()->key)>;
 
             template <class T = BidirIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T>, bool> = true>
             constexpr unordered_set_node_external_iterator(): base_node_iterator(){}
@@ -2412,8 +2410,8 @@ namespace dg::network_datastructure::unordered_map_variants{
             Pred pred;
             Allocator allocator;
 
-            using unfancy_iterator          = std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>::iterator;
-            using unfancy_const_iterator    = std::vector<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>::const_iterator;
+            using nofancy_iterator          = decltype(virtual_storage_vec)::iterator;
+            using nofancy_const_iterator    = decltype(virtual_storage_vec)::const_iterator;
             using node_t                    = UnorderedSetNode<KeyType, VirtualAddrType>;
 
         public:
@@ -2427,8 +2425,8 @@ namespace dg::network_datastructure::unordered_map_variants{
             using const_reference           = const value_type&;
             using pointer                   = typename std::allocator_traits<Allocator>::pointer;
             using const_pointer             = typename std::allocator_traits<Allocator>::const_pointer;
-            using iterator                  = unordered_set_node_external_iterator<unfancy_iterator>;
-            using const_iterator            = unordered_set_node_external_iterator<unfancy_const_iterator>;
+            using iterator                  = unordered_set_node_external_iterator<nofancy_iterator>;
+            using const_iterator            = unordered_set_node_external_iterator<nofancy_const_iterator>;
             using size_type                 = std::size_t;
             using difference_type           = std::ptrdiff_t;
             using self                      = unordered_node_set;
@@ -2957,8 +2955,8 @@ namespace dg::network_datastructure::unordered_map_variants{
             Pred pred;
             Allocator allocator;
 
-            using unfancy_iterator          = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>>::iterator;
-            using unfancy_const_iterator    = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>>::const_iterator;
+            using nofancy_iterator          = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>>::iterator;
+            using nofancy_const_iterator    = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>>::const_iterator;
             using node_t                    = UnorderedSetNode<KeyType, VirtualAddrType>;
 
         public:
@@ -2972,8 +2970,8 @@ namespace dg::network_datastructure::unordered_map_variants{
             using const_reference           = const value_type&;
             using pointer                   = typename std::allocator_traits<Allocator>::pointer; //
             using const_pointer             = typename std::allocator_traits<Allocator>::const_pointer; //
-            using iterator                  = unordered_set_node_external_iterator<unfancy_iterator>;
-            using const_iterator            = unordered_set_node_external_iterator<unfancy_const_iterator>;
+            using iterator                  = unordered_set_node_external_iterator<nofancy_iterator>;
+            using const_iterator            = unordered_set_node_external_iterator<nofancy_const_iterator>;
             using size_type                 = std::size_t;
             using difference_type           = std::ptrdiff_t;
             using self                      = cyclic_unordered_node_set;

@@ -121,6 +121,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t VARIANT_VBE                         = 00u;
     static inline constexpr exception_t QUEUE_FULL                          = 00u;
     static inline constexpr exception_t UNSPECIFIED_ERROR                   = 1024u;
+    static inline constexpr exception_t BAD_OPERATION                       = 00u;
 
     inline auto wrap_cuda_exception(cuda_exception_t) noexcept -> exception_t{
 
