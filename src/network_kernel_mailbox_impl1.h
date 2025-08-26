@@ -975,7 +975,7 @@ namespace dg::network_kernel_mailbox_impl1::utility{
         return rs;
     }
 
-    static auto ipv6_compact_to_basicstd_formatted_str(const IPv6& data, void * output_ptr, size_t output_sz) noexcept -> std::expected<size_t, exception_t>{
+    static auto ipv6_compact_to_basicstd_formatted_str(const IPv6& data, char * output_ptr, size_t output_sz) noexcept -> std::expected<size_t, exception_t>{
 
         constexpr size_t SEPARATOR_SZ       = 7u;
         constexpr char SEMANTIC_SEPARATOR   = ':'; 
@@ -1239,8 +1239,12 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
         }
 
         auto kernel_ip = utility::kernel_get_cstyle_buffer_ipv6(std::get<IPv6>(to_addr.ip.ip)); 
+        
+        if (!kernel_ip.has_value()){
+            return kernel_ip.error();
+        }
 
-        if (inet_pton(AF_INET6, kernel_ip.data(), &server.sin6_addr) == -1){
+        if (inet_pton(AF_INET6, kernel_ip->data(), &server.sin6_addr) == -1){
             return dg::network_exception::wrap_kernel_error(errno);
         }
 
@@ -1284,7 +1288,11 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
         auto kernel_ip = utility::kernel_get_cstyle_buffer_ipv4(std::get<IPv4>(to_addr.ip.ip)); 
 
-        if (inet_pton(AF_INET, kernel_ip.data(), &server.sin_addr) == -1){
+        if (!kernel_ip.has_value()){
+            return kernel_ip.error();
+        }
+
+        if (inet_pton(AF_INET, kernel_ip->data(), &server.sin_addr) == -1){
             return dg::network_exception::wrap_kernel_error(errno);
         }
 
@@ -1354,12 +1362,7 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
 
         public:
 
-            static_assert(std::is_trivial_v<T>);
-
-            temporal_finite_unordered_set(size_t cap): base(){
-
-                this->base.reserve(cap);
-            }
+            temporal_finite_unordered_set(size_t cap): base(dg::cyclic_unordered_node_set<T>::size_to_capacity(cap)){}
 
             template <class KeyLike>
             inline void insert(KeyLike&& key) noexcept{
@@ -3391,7 +3394,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 for (size_t i = 0u; i < sz; ++i){
                     types::packet_polymorphic_t key = packet_service::get_packet_polymorphic_type(base_packet_arr[i]);
-                    auto feed_arg                   = InternalPushFeedArgument{.packet_ptr      = std::make_move_iterator(std::next(base_packet_arr, i)); 
+                    auto feed_arg                   = InternalPushFeedArgument{.packet_ptr      = std::make_move_iterator(std::next(base_packet_arr, i)),
                                                                                .exception_ptr   = std::next(exception_arr, i)};
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), key, feed_arg);
@@ -3470,7 +3473,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 sz                  = std::min(output_pkt_arr_cap, static_cast<size_t>(pkt_vec->size()));
                 size_t remaining_sz = pkt_vec->size() - sz; 
-                std::copy(std::make_move_iterator(std::next(pkt_vec->begin()), remaining_sz), std::make_move_iterator(pkt_vec->end()), output_pkt_arr);
+                std::copy(std::next(std::make_move_iterator(pkt_vec->begin()), remaining_sz), std::make_move_iterator(pkt_vec->end()), output_pkt_arr);
                 pkt_vec->resize(remaining_sz);
 
                 if (!pkt_vec->empty()){
@@ -3538,7 +3541,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                         if (!this->waiting_queue->empty()){
                             auto [fetching_addr, smp]   = this->waiting_queue->front();
-                            this->waiting_queue.pop_front();
+                            this->waiting_queue->pop_front();
                             *fetching_addr              = std::move(inbound_vec.value());
                             smp->release();
 
@@ -3581,9 +3584,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                 if constexpr(DEBUG_MODE_FLAG){
                                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                                     std::abort();
-                                } else[
+                                } else{
                                     std::unreachable();
-                                ]
+                                }
                             }
                         }
                     }();
@@ -3746,7 +3749,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 sz = std::min(static_cast<size_t>(pkt_vec->size()), output_pkt_arr_cap); 
                 size_t rem_sz = pkt_vec->size() - sz;
 
-                std::copy(std::make_move_iterator(pkt_vec->begin(), rem_sz), std::make_move_iterator(pkt_vec->end()), output_pkt_arr);
+                std::copy(std::next(std::make_move_iterator(pkt_vec->begin()), rem_sz), std::make_move_iterator(pkt_vec->end()), output_pkt_arr);
                 pkt_vec->resize(rem_sz);
 
                 if (!pkt_vec->empty()){
@@ -4909,7 +4912,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             return std::make_unique<HashDistributedBufferContainer>(std::move(base_vec_up),
                                                                     base_vec.size(),
-                                                                    zero_buffer_retry_sz,
                                                                     consumption_sz);
         }
 
@@ -4940,11 +4942,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             size_t tentative_consume_sz     = std::min(distribution_queue_sz, waiting_queue_sz) >> consume_factor;
             size_t normalized_consume_sz    = std::max(tentative_consume_sz, static_cast<size_t>(1u));
 
-            return std::make_unique<FairDispatchWareHouse>(dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
-                                                           dg::pow2_cyclic_queue<std::pair<std::optional<> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
-                                                           dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
-                                                           std::make_unique<std::mutex>(),
-                                                           normalized_consume_sz);
+            return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
+                                                                dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
+                                                                dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
+                                                                std::make_unique<std::mutex>(),
+                                                                normalized_consume_sz);
         }
 
         static auto get_prioritized_packet_container(size_t heap_capacity,
@@ -5107,9 +5109,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(leftover_queue_capacity, MIN_LEFTOVER_QUEUE_CAPACITY, MAX_LEFTOVER_QUEUE_CAPACITY) != leftover_queue_capacity)[
+            if (std::clamp(leftover_queue_capacity, MIN_LEFTOVER_QUEUE_CAPACITY, MAX_LEFTOVER_QUEUE_CAPACITY) != leftover_queue_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            ]
+            }
 
             size_t tentative_consume_sz     = std::min(packet_vec_queue_capacity, waiting_queue_capacity) >> consume_factor;
             size_t normalized_consume_sz    = std::max(tentative_consume_sz, static_cast<size_t>(1u));
@@ -5535,7 +5537,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 size_t adjusted_delivery_sz         = std::min(std::min(fr_warehouse_get_sz, this->to_warehouse_push_cap), this->to_warehouse->max_consume_size());
                 size_t deliverer_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&delivery_resolutor, adjusted_delivery_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> deliverer_buf(deliverer_allocation_cost);
-                auto deliverer                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&deliverer_resolutor, adjusted_delivery_sz, deliverer_buf.get()));
+                auto deliverer                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&delivery_resolutor, adjusted_delivery_sz, deliverer_buf.get()));
 
                 for (size_t i = 0u; i < fr_warehouse_get_sz; ++i){
                     dg::network_producer_consumer::delvrsrv_deliver(deliverer.get(), std::move(recv_packet_arr[i]));
@@ -5561,7 +5563,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         }
                     }
                 }
-            }
+            };
     };
 
     class OutBoundWorker: public virtual dg::network_concurrency::WorkerInterface{
@@ -5622,7 +5624,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                         auto mailchimp_arg      = InternalMailChimpArgument{};
                         mailchimp_arg.dst       = packet_arr[i].to_addr;
-                        mailchimp_arg.content   = packet_service::serialize_packet(std::move(packet_arr[i]));
+                        mailchimp_arg.content   = dg::network_exception_handler::nothrow_log(packet_service::serialize_packet(std::move(packet_arr[i])));
 
                         dg::network_producer_consumer::delvrsrv_deliver(mailchimp_deliverer.get(), std::move(mailchimp_arg));
                     }
@@ -5665,9 +5667,9 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     }
 
                     for (size_t i = 0u; i < sz; ++i){
-                        if (dg::network_exception::is_failed(exception_arr[i]))[
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
-                        ]
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i])); //
+                        }
                     }
 
                     for (size_t i = 0u; i < sz; ++i){

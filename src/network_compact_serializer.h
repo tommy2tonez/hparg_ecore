@@ -31,6 +31,7 @@ namespace dg::network_compact_serializer::network_trivial_serializer::constants{
 namespace dg::network_compact_serializer::network_trivial_serializer::types{
 
     using size_type = uint64_t;
+    using variant_idx_t = uint8_t;
 }
 
 namespace dg::network_compact_serializer::network_trivial_serializer::types_space{
@@ -958,6 +959,11 @@ namespace dg::network_compact_serializer::archive{
         template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
         constexpr auto count(const T& data) const -> size_t{
 
+            using base_type = types_space::base_type_t<T>;
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
+            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+
             if (!utility::is_met_variant_index_requirements(data.index())){
                 throw exception_space::bad_format();
             }
@@ -1069,6 +1075,11 @@ namespace dg::network_compact_serializer::archive{
 
         template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(char *& buf, const T& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
+            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
 
             if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
                 throw exception_space::bad_format();
@@ -1198,6 +1209,10 @@ namespace dg::network_compact_serializer::archive{
         constexpr void put(const char *& buf, T&& data) const{
 
             using base_type = types_space::base_type_t<T>;
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
+            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+
             types::variant_index_type variant_idx;
             this->put(buf, variant_idx);
 
@@ -1587,6 +1602,11 @@ namespace dg::network_compact_serializer::archive{
         template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
         constexpr auto count(const T& data) const -> size_t{
 
+            using base_type = types_space::base_type_t<T>;
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
+            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+
             if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
                 throw exception_space::bad_format();
             }
@@ -1724,7 +1744,10 @@ namespace dg::network_compact_serializer::archive{
         template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(char *& buf, const T& data) const{
 
-            using base_type = types_space::base_type_t<T>; 
+            using base_type = types_space::base_type_t<T>;
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
+            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
 
             if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
                 throw exception_space::bad_format();

@@ -19,6 +19,7 @@ namespace dg::network_trivial_serializer::constants{
 namespace dg::network_trivial_serializer::types{
 
     using size_type = uint64_t;
+    using variant_index_type = uint8_t;
 }
 
 namespace dg::network_trivial_serializer::types_space{
@@ -49,17 +50,26 @@ namespace dg::network_trivial_serializer::types_space{
     template <class T>
     struct is_dg_arithmetic<T, std::void_t<std::enable_if_t<std::is_floating_point_v<T>>>>: std::bool_constant<std::numeric_limits<T>::is_iec559>{}; 
 
-    template <class T>
-    static constexpr bool is_tuple_v        = is_tuple<T>::value; 
+    template <class T, class = void>
+    struct is_variant: std::false_type{};
+
+    template <class ...Args>
+    struct is_variant<std::variant<Args...>>: std::true_type{};
 
     template <class T>
-    static constexpr bool is_optional_v     = is_optional<T>::value;
+    static constexpr bool is_tuple_v            = is_tuple<T>::value; 
 
     template <class T>
-    static constexpr bool is_reflectible_v  = is_reflectible<T>::value;
+    static constexpr bool is_optional_v         = is_optional<T>::value;
 
     template <class T>
-    static constexpr bool is_dg_arithmetic_v = is_dg_arithmetic<T>::value;
+    static constexpr bool is_reflectible_v      = is_reflectible<T>::value;
+
+    template <class T>
+    static constexpr bool is_dg_arithmetic_v    = is_dg_arithmetic<T>::value;
+
+    template <class T>
+    static constexpr bool is_variant_v          = is_variant<T>::value;
 
     template <class T>
     struct base_type: std::enable_if<true, T>{};
@@ -144,6 +154,19 @@ namespace dg::network_trivial_serializer::utility{
             return rs;
         }
     };
+
+    template <class First, class ...Args>
+    static constexpr auto max_many(First first, Args... args) -> First
+    {
+        First result = first;
+        std::array<First, sizeof...(Args)> second_arr{args...}; 
+
+        for (size_t i = 0u; i < sizeof...(Args); ++i){
+            result = std::max(result, second_arr[i]);
+        }
+
+        return result;
+    }
 }
 
 namespace dg::network_trivial_serializer::archive{
@@ -170,7 +193,15 @@ namespace dg::network_trivial_serializer::archive{
                 };
                 data.dg_reflect(archiver);
                 return rs;
-            } else{
+            } else if constexpr(types_space::is_variant_v<btype>){
+                bool rs = true;
+
+                [&]<class ...Args>(const std::variant<Args...>&) noexcept{
+                    rs &= (IsSerializable().is_serializable(Args()) && ...);
+                }(data);
+
+                return rs;
+            } else {
                 return false;
             }
         }
@@ -212,6 +243,23 @@ namespace dg::network_trivial_serializer::archive{
 
             static_assert(noexcept(data.dg_reflect(archiver)));
             data.dg_reflect(archiver);
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(T&& data) const noexcept -> size_t{
+
+            using btype = types_space::base_type_t<T>;
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<btype>;
+            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+
+            size_t rs = count(types::variant_index_type{});
+
+            [&]<class ...Args>(const std::variant<Args...>&) noexcept{
+                rs += utility::max_many(Counter{}.count(Args())...);
+            }(data);
 
             return rs;
         }
@@ -263,6 +311,32 @@ namespace dg::network_trivial_serializer::archive{
 
             static_assert(noexcept(data.dg_reflect(archiver)));
             data.dg_reflect(archiver);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, T&& data) const noexcept{
+
+            using btype = types_space::base_type_t<T>;
+
+            constexpr size_t VARIANT_COUNT = std::variant_size_v<btype>;
+            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+
+            auto variant_idx = data.index();
+
+            if constexpr(DEBUG_MODE_FLAG){
+                if (variant_idx == std::variant_npos){
+                    std::abort();
+                }
+            }
+
+            types::variant_index_type casted_variant_idx = static_cast<types::variant_index_type>(variant_idx);
+            Self().put(buf, casted_variant_idx);
+
+            auto visitor = [&buf]<class Arg>(Arg&& arg){
+                Self().put(buf, std::forward<Arg>(arg));
+            };
+
+            std::visit(visitor, data);
         }
     };
 
@@ -319,6 +393,35 @@ namespace dg::network_trivial_serializer::archive{
 
             static_assert(noexcept(data.dg_reflect(archiver)));
             data.dg_reflect(archiver);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_variant_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, T&& data) const noexcept{
+
+            using btype = types_space::base_type_t<T>;
+            static constexpr size_t VARIANT_COUNT = std::variant_size_v<btype>;
+            
+            types::variant_index_type variant_idx;
+            Self().put(buf, variant_idx);
+
+            if constexpr(DEBUG_MODE_FLAG){
+                if (variant_idx >= VARIANT_COUNT){
+                    std::abort();
+                }
+            }
+
+            [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
+                (
+                    [&]
+                    {
+                        if (IDX == variant_idx){
+                            std::variant_alternative_t<IDX, btype> containee;
+                            Self().put(buf, containee);
+                            data = btype(std::in_place_index_t<IDX>{}, std::move(containee));
+                        }
+                    }(), ...
+                );
+            }(std::make_index_sequence<VARIANT_COUNT>());
         }
     };
 }

@@ -18,6 +18,7 @@
 #include "network_memlock_proxyspin.h"
 #include "network_producer_consumer.h"
 // #include "network_kernel_mailbox_impl1.h"
+#include "network_trivial_serializer.h"
 #include <iostream>
 
 template <class Task>
@@ -153,6 +154,12 @@ int main(){
     auto timepoint2 = dg::network_compact_serializer::dgstd_deserialize<std::chrono::time_point<std::chrono::utc_clock, std::chrono::nanoseconds>>(buf3);
     
     std::cout << (timepoint == timepoint2) << "<value>" << std::endl;
+    
+    std::variant<int, float> sth2{};
+
+    dg::network_trivial_serializer::serialize_into(nullptr, sth2);
+    dg::network_trivial_serializer::deserialize_into(sth2, nullptr);
+
     // // size_t a                    = {};
     // // size_t b                    = {};
     // // auto [aa, bb]               = std::tie(a, b); 

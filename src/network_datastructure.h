@@ -2943,7 +2943,7 @@ namespace dg::network_datastructure::unordered_map_variants{
         return !(lhs == rhs);
     }
 
-    template <class KeyType, class VirtualAddrType = std::size_t, class Hasher = std::hash<KeyType>, class Pred = std::equal_to<KeyType>, class Allocator = std::allocator<KeyType>, class LoadFactor = std::ratio<7, 8>>
+    template <class KeyType, class VirtualAddrType = std::size_t, class Hasher = std::hash<KeyType>, class Pred = std::equal_to<KeyType>, class Allocator = std::allocator<KeyType>, class LoadFactor = std::ratio<4, 8>>
     class cyclic_unordered_node_set{
 
         private:

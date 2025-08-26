@@ -120,6 +120,9 @@ namespace dg::network_std_container{
     template <class T>
     using unordered_unstable_set    = tsl::robin_set<T, optional_type_t<hasher<T>>, optional_type_t<equal_to<T>>, dg::network_allocation::NoExceptAllocator<T>, false, tsl::rh::power_of_two_growth_policy<2>>;
 
+    template <class T>
+    using cyclic_unordered_node_set = dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_set<T, std::size_t, optional_type_t<hasher<T>>, optional_type_t<equal_to<T>>, dg::network_allocation::NoExceptAllocator<T>>; 
+
     template <class Key, class Value>
     using unordered_map             = std::unordered_map<Key, Value, optional_type_t<hasher<Key>>, optional_type_t<equal_to<Key>>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
 
@@ -148,6 +151,9 @@ namespace dg{
 
     template <class Key>
     using unordered_unstable_set    = dg::network_std_container::unordered_unstable_set<Key>; 
+
+    template <class Key>
+    using cyclic_unordered_node_set = dg::network_std_container::cyclic_unordered_node_set<Key>;
 
     template <class Key, class Value>
     using unordered_map             = dg::network_std_container::unordered_map<Key, Value>;
