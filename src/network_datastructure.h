@@ -61,7 +61,7 @@ namespace dg::network_datastructure::cyclic_queue{
             BaseIterator iter_head;
             intmax_t virtual_idx;
             pow2_cyclic_queue_index_getter_device index_getter;
-        
+
         public:
 
             using self              = pow2_cyclic_queue_iterator; 
@@ -281,6 +281,16 @@ namespace dg::network_datastructure::cyclic_queue{
             constexpr auto end() noexcept -> iterator{
 
                 return iterator(this->data_arr.begin(), this->sz, this->get_index_getter_device());
+            }
+
+            constexpr auto cbegin() const noexcept -> const_iterator{
+
+                return this->begin();
+            }
+
+            constexpr auto cend() const noexcept -> const_iterator{
+
+                return this->cend();
             }
 
             constexpr auto size() const noexcept -> size_t{
@@ -802,6 +812,16 @@ namespace dg::network_datastructure::cyclic_queue{
             constexpr auto end() noexcept -> iterator{
 
                 return iterator(_internal_vector_semantic_iterator(this->data_arr.begin()), this->sz, this->get_index_getter_device());
+            }
+
+            constexpr auto cbegin() const noexcept -> const_iterator{
+
+                return this->begin();
+            }
+
+            constexpr auto cend() const noexcept -> const_iterator{
+
+                return this->cend();
             }
 
             constexpr auto size() const noexcept -> size_t{
@@ -2196,21 +2216,14 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return hashed_value & static_cast<size_t>(this->bucket_vec.size() - 1u);
             }
 
-            //how precisely do we solve this problem?
-
-            //we'll use induction to solve this problem
-            //assume that (org_virtual_addr + virtual_addr_offset) & (virtual_storage_vec.capacity() - 1u) returns the idx of the storage
-
-            //we cant use if, we cant use modulo, so we'd have to "promote" that value
-
-            constexpr auto to_storage_addr(virtual_addr_t org_virtual_addr) noexcept -> virtual_addr_t{
+            constexpr auto to_storage_addr(virtual_addr_t org_virtual_addr) const noexcept -> virtual_addr_t{
 
                 static_assert(std::is_unsigned_v<virtual_addr_t>);
 
                 return (this->virtual_addr_offset + static_cast<size_t>(org_virtual_addr)) & static_cast<size_t>(this->virtual_storage_vec.capacity() - 1u);
             }
 
-            constexpr auto to_virtual_addr(virtual_addr_t storage_addr) noexcept -> virtual_addr_t{
+            constexpr auto to_virtual_addr(virtual_addr_t storage_addr) const noexcept -> virtual_addr_t{
 
                 static_assert(std::is_unsigned_v<virtual_addr_t>);
 
@@ -2451,19 +2464,19 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             constexpr explicit unordered_node_set(size_type bucket_count,
                                                   const Hasher& _hasher       = Hasher(),
-                                                  const Allocator& allocator  = Allocator(),
-                                                  const Pred& pred            = Pred()): virtual_storage_vec(allocator),
-                                                                                         bucket_vec(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<std::size_t>(self::max_capacity())), self::NULL_VIRTUAL_ADDR, allocator),
-                                                                                         _hasher(_hasher),
-                                                                                         pred(pred),
-                                                                                         allocator(allocator){
+                                                  const Pred& pred            = Pred(),
+                                                  const Allocator& allocator  = Allocator()): virtual_storage_vec(allocator),
+                                                                                              bucket_vec(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<std::size_t>(self::max_capacity())), self::NULL_VIRTUAL_ADDR),
+                                                                                             _hasher(_hasher),
+                                                                                              pred(pred),
+                                                                                              allocator(allocator){
 
                 this->virtual_storage_vec.reserve(self::right_capacity_to_size(this->capacity()));
             }
 
             constexpr unordered_node_set(size_type bucket_count,
                                          const Hasher& _hasher,
-                                         const Allocator& allocator): unordered_node_set(bucket_count, _hasher, allocator, Pred()){}
+                                         const Allocator& allocator): unordered_node_set(bucket_count, _hasher, Pred(), allocator){}
 
             constexpr unordered_node_set(size_type bucket_count,
                                          const Allocator& allocator): unordered_node_set(bucket_count, Hasher(), allocator){}
@@ -2478,7 +2491,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                          size_type bucket_count,
                                          const Hasher& _hasher      = Hasher(),
                                          const Pred& pred           = Pred(),
-                                         const Allocator& allocator = Allocator()): unordered_node_set(bucket_count, _hasher, allocator, pred){
+                                         const Allocator& allocator = Allocator()): unordered_node_set(bucket_count, _hasher, pred, allocator){
 
                 this->insert(first, last); //bad, leak
             }
@@ -2506,6 +2519,10 @@ namespace dg::network_datastructure::unordered_map_variants{
                                          size_type bucket_count,
                                          const Hasher& _hasher,
                                          const Allocator& allocator): unordered_node_set(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
+            
+            constexpr unordered_node_set(std::initializer_list<value_type> init_list,
+                                         size_type bucket_count,
+                                         const Allocator& allocator): unordered_node_set(init_list, bucket_count, Hasher(), allocator){}
 
             __attribute__((noinline)) constexpr void rehash(size_type tentative_new_cap){
 
@@ -2816,7 +2833,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 if (*insert_reference == self::NULL_VIRTUAL_ADDR){
                     *insert_reference   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
-                    this->virtual_storage_vec.emplace_back(std::forward<BucketLike>(bucket));
+                    this->virtual_storage_vec.push_back(std::forward<BucketLike>(bucket));
                     auto rs             = std::make_pair(std::prev(this->virtual_storage_vec.cend()), true); //this might be "ambiguous," we would rather do a previous statement
 
                     return rs;
@@ -2989,17 +3006,17 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             constexpr explicit cyclic_unordered_node_set(size_type bucket_count,
                                                          const Hasher& _hasher      = Hasher(),
-                                                         const Allocator& allocator = Allocator(),
-                                                         const Pred& pred           = Pred()): virtual_storage_vec(unordered_map_variants::ulog2(self::right_capacity_to_size(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<size_t>(self::max_capacity())))), allocator),
-                                                                                               bucket_vec(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<size_t>(self::max_capacity())), self::NULL_VIRTUAL_ADDR, allocator),
-                                                                                               virtual_addr_offset(0u),
-                                                                                               _hasher(_hasher),
-                                                                                               allocator(allocator),
-                                                                                               pred(pred){}
+                                                         const Pred& pred           = Pred(),
+                                                         const Allocator& allocator = Allocator()): virtual_storage_vec(unordered_map_variants::ulog2(self::right_capacity_to_size(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<size_t>(self::max_capacity()))))),
+                                                                                                    bucket_vec(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<size_t>(self::max_capacity())), self::NULL_VIRTUAL_ADDR, allocator),
+                                                                                                    virtual_addr_offset(0u),
+                                                                                                    _hasher(_hasher),
+                                                                                                    allocator(allocator),
+                                                                                                    pred(pred){}
 
             constexpr cyclic_unordered_node_set(size_type bucket_count,
                                                 const Hasher& _hasher,
-                                                const Allocator& allocator): cyclic_unordered_node_set(bucket_count, _hasher, allocator, Pred()){}
+                                                const Allocator& allocator): cyclic_unordered_node_set(bucket_count, _hasher, Pred(), allocator){}
 
             constexpr cyclic_unordered_node_set(size_type bucket_count,
                                                 const Allocator& allocator): cyclic_unordered_node_set(bucket_count, Hasher(), allocator){}
@@ -3014,7 +3031,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                 size_type bucket_count,
                                                 const Hasher& _hasher       = Hasher(),
                                                 const Pred& pred            = Pred(),
-                                                const Allocator& allocator  = Allocator()): cyclic_unordered_node_set(bucket_count, _hasher, allocator, pred){
+                                                const Allocator& allocator  = Allocator()): cyclic_unordered_node_set(bucket_count, _hasher, pred, allocator){
 
                 this->insert(first, last);
             }
@@ -3042,6 +3059,10 @@ namespace dg::network_datastructure::unordered_map_variants{
                                                 size_type bucket_count,
                                                 const Hasher& _hasher,
                                                 const Allocator& allocator): cyclic_unordered_node_set(init_list.begin(), init_list.end(), bucket_count, _hasher, allocator){}
+
+            constexpr cyclic_unordered_node_set(std::initializer_list<value_type> init_list,
+                                                size_type bucket_count,
+                                                const Allocator& allocator): cyclic_unordered_node_set(init_list, bucket_count, Hasher(), allocator){}
 
             template <class ...Args>
             constexpr auto emplace(Args&& ...args) -> std::pair<const_iterator, bool>{
@@ -3217,36 +3238,16 @@ namespace dg::network_datastructure::unordered_map_variants{
                 return hashed_value & static_cast<size_t>(this->bucket_vec.size() - 1u);
             }
 
-            //we'll use induction to solve this problem
-            //assume that (org_virtual_addr + virtual_addr_offset) & (virtual_storage_vec.capacity() - 1u) returns the idx of the storage
-            //we cant use if, we cant use modulo, so we'd have to "promote" that value
-
-            constexpr auto to_storage_addr(virtual_addr_t org_virtual_addr) noexcept -> virtual_addr_t{
+            constexpr auto to_storage_addr(virtual_addr_t org_virtual_addr) const noexcept -> virtual_addr_t{
 
                 static_assert(std::is_unsigned_v<virtual_addr_t>);
 
                 return (this->virtual_addr_offset + static_cast<size_t>(org_virtual_addr)) & static_cast<size_t>(this->virtual_storage_vec.capacity() - 1u);
             }
 
-            constexpr auto to_virtual_addr(virtual_addr_t storage_addr) noexcept -> virtual_addr_t{
+            constexpr auto to_virtual_addr(virtual_addr_t storage_addr) const noexcept -> virtual_addr_t{
 
                 static_assert(std::is_unsigned_v<virtual_addr_t>);
-
-                //we are to solve the problem of (a + b) % n == storage_addr
-
-                //we first took the storage_offset by doing a % n 
-                //we then take the difference with a promoted storage_addr, such that a % n + difference = storage_addr + n 
-
-                //if difference = storage_addr + n - a % n 
-                //if b == difference
-
-                //then a + b = a % n + b % n == a % n - a % n + storage_addr + n = (storage_addr + n) % n == storage_addr   
-
-                //we can further prove the eqn if the take the difference -> other_difference + n
-
-                //the shortcut to think about this is to think in terms of infinite repeating range
-                //we need to move the pointer to the storage_addr in the infinite range
-                //we "encode" the value of storage_addr by using the property of modulo
 
                 virtual_addr_t storage_offset       = this->virtual_addr_offset & static_cast<size_t>(this->virtual_storage_vec.capacity() - 1u);
                 size_t promoted_storage_addr        = static_cast<size_t>(storage_addr) + this->virtual_storage_vec.capacity();
@@ -3267,7 +3268,7 @@ namespace dg::network_datastructure::unordered_map_variants{
                 const virtual_addr_t * current  = &this->bucket_vec[bucket_idx];
 
                 while (true){
-                    if (*current == self::NULL_VIRTUAL_ADDR || this->pred(this->virtual_storage_vec[this->to_storage_addr(*current)], key)){
+                    if (*current == self::NULL_VIRTUAL_ADDR || this->pred(this->virtual_storage_vec[this->to_storage_addr(*current)].key, key)){
                         return current;
                     }
 
@@ -3297,7 +3298,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 //static_assert(noexcept(this->virtual_storage_vec.pop_front()));
 
-                virtual_addr_t * bucket_reference       = this->internal_find_bucket_reference(this->virtual_storage_vec.front().first);
+                virtual_addr_t * bucket_reference       = this->internal_find_bucket_reference(this->virtual_storage_vec.front().key);
                 *bucket_reference                       = this->virtual_storage_vec.front().nxt_addr;
                 this->virtual_storage_vec.pop_front();
                 this->virtual_addr_offset               += this->virtual_storage_vec.capacity() - 1u;
@@ -3315,7 +3316,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 if (*insert_reference == self::NULL_VIRTUAL_ADDR){
                     *insert_reference   = this->to_virtual_addr(this->virtual_storage_vec.size());
-                    this->virtual_storage_vec.emplace_back(std::forward<BucketLike>(bucket));
+                    this->virtual_storage_vec.push_back(std::forward<BucketLike>(bucket));
                     auto rs             = std::make_pair(std::prev(this->virtual_storage_vec.cend()), true);
 
                     return rs;

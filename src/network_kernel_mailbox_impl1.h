@@ -49,31 +49,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
-//we'll add a connectivity component to avoid the worst case of friend addresses not responding
-//the problem is that we need to keep track of the inbound + outbound, the response rate, this is hard
-//this is different from the NAT inbound or friend addr inbound + outbound in the sense that we thru the not-historically-thru IP, and block the IP that does not response after certain time
-//there is also a NUMA problem, such is that we are only doing this on a certain set of NUMA nodes to avoid pollution of false cache update from memory orderings + friends
-//we'll worry about that later
-//we'd rather build an optimization engine to tune the configurables -> certain number
-
-//alright, Mom told me to make the inbound to be adaptive and the outbound to be dg::vector<>&&
-//we are being "too dur"
-//that's probably a good idea, for the reasons being: we instantly send out the packets as soon as we get it, in nanoseconds
-//                                                    we know the dst recv threshold + virtues (when we planned things), so we can actually make the dst receives + process the pkts as soon as possible also
-//                                                    we can pad the outbound to a certain number of bytes to thru the requests with lowest latency possible
-//                                                    we control the smph addr + cron tile to do efficient outbounds 
-
-//alright, I sound like a proud boy but this is our proudest socket achievement in recent years
-//the "optimization" is not actually hindering us from implementing an adaptive smp release size for inbound containers, that's another topic that we have yet to talk about
-//we aren't going there YET, that'd be in the backlogs
-
-//the logic we have achieved here is 1 send == max 1 recv (with lower chance of failing, higher chance of success), this is the hinge of all communication protocol
-//we built the flash_stream_x on top of this protocol, and the 1 send == max 1 response (...) with the help of REST dedicated id
-
-//the sole reason that we are doing the dg::vector<Packet> is to reduce the latency, the leftover latency, which would trigger a chain reaction for our massive P2P network
-//we are 99% relying on the cron tile to do it job punctually, hit every packet transmission possible with 99% success rate for delivery
-//we'd make sure of that
+#include "network_hash.h"
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -199,16 +175,6 @@ namespace dg::network_kernel_mailbox_impl1::model{
         }
     };
 
-    // struct ConnectivityEntry{
-    //     std::chrono::time_point<std::chrono::utc_clock> connect_attempt_ts;
-    //     bool was_responded;
-    // };
-
-    //its complicated, we want to use __uint128_t to store unordered_set fling
-    //we must use __uint128_t to store unordered_set fling
-    //dont worry fellas, we are writing a product that's gonna be out in the wild, working for you, rooting for you
-    //not me, not customers, not malicious intentions, the product if reaches a certain logit density will be automatically released in the wild
-
     struct GlobalPacketIdentifier{
         local_packet_id_t local_packet_id;
         factory_id_t factory_id;
@@ -307,7 +273,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(static_cast<PacketHeader&>(*this), static_cast<XOnlyAckPacket&>(*this)); //alright, up for debate, we might need to use std::array<>
+            reflector(static_cast<PacketHeader&>(*this), static_cast<XOnlyAckPacket&>(*this));
         }
     };
 
@@ -338,10 +304,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
     };
 
     struct Packet: PacketHeader{
-        std::variant<XOnlyKRescuePacket, XOnlyRequestPacket, XOnlyAckPacket> xonly_content; //alright, the question is whether this is optional polymorphic, assume non-optimal polymorphic for now (this introduces so many complexities), we'll add measurements
-                                                                                            //or we can do it the std_way, the use-case of Packet is not defined if it is to be optional_polymorphic after being <brought_to_life> via <factory_pattern>
-                                                                                            //we have to make sure this internally by our virtues of not triggering valueless_by_exception (program is UNDEFINED if this is to ever happen)
-                                                                                            //this is our std_way of implementation, in C there are 8192 ways to do things wrong, so it's fine if we make it 8193  
+        std::variant<XOnlyKRescuePacket, XOnlyRequestPacket, XOnlyAckPacket> xonly_content;
     };
 
     struct ScheduledPacket{
@@ -351,7 +314,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
     struct QueuedPacket{
         Packet pkt;
-        std::chrono::time_point<std::chrono::steady_clock> queued_time; //steady clock is a clock that never goes back in time, only true if we are on the same thread of execution, to avoid exotic error or errors that chance worse than RAM, we are to make sure that our queue state is accurate
+        std::chrono::time_point<std::chrono::steady_clock> queued_time;
     };
 
     struct MailBoxArgument{
@@ -601,14 +564,7 @@ namespace dg::network_kernel_mailbox_impl1::utility{
     template <class T>
     static auto reflectible_is_equal(const T& lhs, const T& rhs) noexcept -> bool{
 
-        constexpr size_t SERIALIZATION_SZ           = dg::network_trivial_serializer::size(T{});
-        std::array<char, SERIALIZATION_SZ> lhs_buf  = {};
-        std::array<char, SERIALIZATION_SZ> rhs_buf  = {};
-
-        dg::network_trivial_serializer::serialize_into(lhs_buf.data(), lhs);
-        dg::network_trivial_serializer::serialize_into(rhs_buf.data(), rhs);
-
-        return std::memcmp(lhs_buf.data(), rhs_buf.data(), SERIALIZATION_SZ) == 0;
+        return dg::network_trivial_serializer::reflectible_is_equal(lhs, rhs);
     }
 
     template <class ...Args, class Iterator>

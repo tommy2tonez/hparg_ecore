@@ -88,6 +88,9 @@ namespace dg::network_trivial_serializer::types_space{
 
     template <class T>
     using base_type_t = typename base_type<T>::type;
+
+    template <class T>
+    using optional_containee_t = typename T::value_type;
 }
 
 namespace dg::network_trivial_serializer::utility{
@@ -177,27 +180,45 @@ namespace dg::network_trivial_serializer::archive{
         constexpr auto is_serializable(T&& data) const noexcept -> bool{
 
             using btype = types_space::base_type_t<T>;
-            
+
             if constexpr(types_space::is_dg_arithmetic_v<btype>){
                 return true;
             } else if constexpr(types_space::is_optional_v<btype>){
-                return is_serializable(data.value());
+                using containee_t = types_space::optional_containee_t<btype>; 
+
+                if constexpr(std::is_nothrow_default_constructible_v<containee_t>){
+                    return IsSerializable().is_serializable(containee_t());
+                } else{
+                    return false;
+                }
             } else if constexpr(types_space::is_tuple_v<btype>){
                 return [&]<size_t ...IDX>(const std::index_sequence<IDX...>) noexcept{
                     return (IsSerializable{}.is_serializable(std::get<IDX>(data)) && ...);
                 }(std::make_index_sequence<std::tuple_size_v<btype>>{});
             } else if constexpr(types_space::is_reflectible_v<btype>){
-                bool rs = true;
-                auto archiver = [&rs]<class ...Args>(Args&& ...args) noexcept{
-                    rs &= (IsSerializable().is_serializable(std::forward<Args>(args)) && ...);
-                };
-                data.dg_reflect(archiver);
-                return rs;
+                if constexpr(std::is_nothrow_default_constructible_v<btype>){
+                    bool rs = true;
+                    auto archiver = [&rs]<class ...Args>(Args&& ...args) noexcept{
+                        rs &= (IsSerializable().is_serializable(std::forward<Args>(args)) && ...);
+                    };
+                    data.dg_reflect(archiver);
+                    return rs;
+                } else{
+                    return false;
+                }
             } else if constexpr(types_space::is_variant_v<btype>){
                 bool rs = true;
 
                 [&]<class ...Args>(const std::variant<Args...>&) noexcept{
-                    rs &= (IsSerializable().is_serializable(Args()) && ...);
+                    (
+                        [&]{
+                            if constexpr(std::is_nothrow_default_constructible_v<Args>){
+                                rs &= IsSerializable().is_serializable(Args());
+                            } else{
+                                rs &= false;
+                            }
+                        }(), ...
+                    );
                 }(data);
 
                 return rs;
@@ -208,7 +229,7 @@ namespace dg::network_trivial_serializer::archive{
     };
 
     struct Counter{
-        
+
         template <class T, std::enable_if_t<types_space::is_dg_arithmetic_v<types_space::base_type_t<T>>, bool> = true>
         constexpr auto count(T&& data) const noexcept -> size_t{
 
@@ -253,7 +274,9 @@ namespace dg::network_trivial_serializer::archive{
             using btype = types_space::base_type_t<T>;
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<btype>;
-            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u; 
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             size_t rs = count(types::variant_index_type{});
 
@@ -282,7 +305,7 @@ namespace dg::network_trivial_serializer::archive{
 
             using value_type = typename types_space::base_type_t<T>::value_type;
             char * tmp = buf;
-            put(tmp, static_cast<bool>(data));
+            put(tmp, static_cast<bool>(data.has_value()));
 
             if (data){
                 put(tmp, data.value());
@@ -319,9 +342,12 @@ namespace dg::network_trivial_serializer::archive{
             using btype = types_space::base_type_t<T>;
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<btype>;
-            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;  
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             auto variant_idx = data.index();
+            char * tmp = buf;
 
             if constexpr(DEBUG_MODE_FLAG){
                 if (variant_idx == std::variant_npos){
@@ -330,13 +356,14 @@ namespace dg::network_trivial_serializer::archive{
             }
 
             types::variant_index_type casted_variant_idx = static_cast<types::variant_index_type>(variant_idx);
-            Self().put(buf, casted_variant_idx);
+            Self().put(tmp, casted_variant_idx);
 
-            auto visitor = [&buf]<class Arg>(Arg&& arg){
-                Self().put(buf, std::forward<Arg>(arg));
+            auto visitor = [&tmp]<class Arg>(Arg&& arg){
+                Self().put(tmp, std::forward<Arg>(arg));
             };
 
             std::visit(visitor, data);
+            buf += Counter().count(data);
         }
     };
 
@@ -356,14 +383,15 @@ namespace dg::network_trivial_serializer::archive{
         template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(const char *& buf, T&& data) const noexcept{
 
-            using obj_type  = std::remove_reference_t<decltype(*data)>;
+            using btype     = types_space::base_type_t<T>;
+            using obj_type  = types_space::optional_containee_t<btype>;
+
             auto tmp        = buf;
             bool status     = {}; 
             put(tmp, status);
 
             if (status){
-                // static_assert(noexcept(obj_type()));
-                auto obj = obj_type();
+                obj_type obj;
                 put(tmp, obj);
                 data = std::move(obj);
             } else{
@@ -400,9 +428,10 @@ namespace dg::network_trivial_serializer::archive{
 
             using btype = types_space::base_type_t<T>;
             static constexpr size_t VARIANT_COUNT = std::variant_size_v<btype>;
-            
+
             types::variant_index_type variant_idx;
-            Self().put(buf, variant_idx);
+            const char * tmp = buf;
+            Self().put(tmp, variant_idx);
 
             if constexpr(DEBUG_MODE_FLAG){
                 if (variant_idx >= VARIANT_COUNT){
@@ -416,12 +445,14 @@ namespace dg::network_trivial_serializer::archive{
                     {
                         if (IDX == variant_idx){
                             std::variant_alternative_t<IDX, btype> containee;
-                            Self().put(buf, containee);
+                            Self().put(tmp, containee);
                             data = btype(std::in_place_index_t<IDX>{}, std::move(containee));
                         }
                     }(), ...
                 );
             }(std::make_index_sequence<VARIANT_COUNT>());
+
+            buf += Counter{}.count(data);
         }
     };
 }
@@ -429,22 +460,32 @@ namespace dg::network_trivial_serializer::archive{
 namespace dg::network_trivial_serializer{
 
     template <class T, class = void>
+    struct is_serializable_helper: std::false_type{};
+
+    template <class T>
+    struct is_serializable_helper<T, std::void_t<std::enable_if_t<archive::IsSerializable().is_serializable(T{})>>>: std::true_type{};
+
+    template <class T, class = void>
     struct is_serializable: std::false_type{};
 
     template <class T>
-    struct is_serializable<T, std::void_t<std::enable_if_t<archive::IsSerializable().is_serializable(T{})>>>: std::true_type{};
-    
+    struct is_serializable<T, std::void_t<std::enable_if_t<std::is_nothrow_default_constructible_v<T>>>>: is_serializable_helper<T>{};
+
     template <class T>
     static inline constexpr bool is_serializable_v = is_serializable<T>::value;
     
     template <class T>
     constexpr auto size(T&& obj) noexcept -> size_t{
 
+        static_assert(is_serializable_v<types_space::base_type_t<T>>);
+
         return archive::Counter{}.count(std::forward<T>(obj));
     }
 
     template <class T>
     constexpr auto serialize_into(char * buf, const T& obj) noexcept -> char *{
+
+        static_assert(is_serializable_v<types_space::base_type_t<T>>);
 
         archive::Forward().put(buf, obj);
         return buf;
@@ -453,12 +494,14 @@ namespace dg::network_trivial_serializer{
     template <class T>
     constexpr auto deserialize_into(T& obj, const char * buf) noexcept -> const char *{
 
+        static_assert(is_serializable_v<types_space::base_type_t<T>>); //
+
         archive::Backward().put(buf, obj);
         return buf;
     }
 
     template <class T>
-    constexpr auto reflectible_is_equal(T lhs, T rhs) noexcept -> bool{
+    constexpr auto reflectible_is_equal(const T& lhs, const T& rhs) noexcept -> bool{
 
         constexpr size_t REFLECTIBLE_SZ = dg::network_trivial_serializer::size(T{});
 

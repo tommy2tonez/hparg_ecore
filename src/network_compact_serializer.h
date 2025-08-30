@@ -170,8 +170,6 @@ namespace dg::network_compact_serializer::network_trivial_serializer::archive{
             
             if constexpr(types_space::is_dg_arithmetic_v<btype>){
                 return true;
-            } else if constexpr(types_space::is_optional_v<btype>){
-                return is_serializable(data.value());
             } else if constexpr(types_space::is_tuple_v<btype>){
                 return [&]<size_t ...IDX>(const std::index_sequence<IDX...>) noexcept{
                     return (IsSerializable{}.is_serializable(std::get<IDX>(data)) && ...);
@@ -195,13 +193,6 @@ namespace dg::network_compact_serializer::network_trivial_serializer::archive{
         constexpr auto count(T&& data) const noexcept -> size_t{
 
             return sizeof(types_space::base_type_t<T>);
-        }
-
-        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr auto count(T&& data) const noexcept -> size_t{
-
-            using value_type = typename types_space::base_type_t<T>::value_type;
-            return count(bool{}) + count(value_type());
         }
 
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
@@ -242,20 +233,6 @@ namespace dg::network_compact_serializer::network_trivial_serializer::archive{
             buf += sizeof(types_space::base_type_t<T>);
         }
 
-        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(char *& buf, T&& data) const noexcept{
-
-            using value_type = typename types_space::base_type_t<T>::value_type;
-            char * tmp = buf;
-            put(tmp, static_cast<bool>(data.has_value()));
-
-            if (data){
-                put(tmp, data.value());
-            }
-
-            buf += Counter{}.count(data);
-        }
-
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(char *& buf, T&& data) const noexcept{
 
@@ -290,26 +267,6 @@ namespace dg::network_compact_serializer::network_trivial_serializer::archive{
             using _MemIO    = utility::SyncedEndiannessService;
             data            = _MemIO::load<btype>(buf);
             buf             += sizeof(btype);
-        }
-
-        template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
-        constexpr void put(const char *& buf, T&& data) const noexcept{
-
-            using obj_type  = std::remove_reference_t<decltype(*data)>;
-            auto tmp        = buf;
-            bool status     = {}; 
-            put(tmp, status);
-
-            if (status){
-                // static_assert(noexcept(obj_type()));
-                auto obj = obj_type();
-                put(tmp, obj);
-                data = std::move(obj);
-            } else{
-                data = {};
-            }
-
-            buf += Counter{}.count(data);
         }
 
         template <class T, std::enable_if_t<types_space::is_tuple_v<types_space::base_type_t<T>>, bool> = true>
@@ -962,7 +919,9 @@ namespace dg::network_compact_serializer::archive{
             using base_type = types_space::base_type_t<T>;
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
-            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;  
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             if (!utility::is_met_variant_index_requirements(data.index())){
                 throw exception_space::bad_format();
@@ -1079,7 +1038,9 @@ namespace dg::network_compact_serializer::archive{
             using base_type = types_space::base_type_t<T>;
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
-            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;  
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
                 throw exception_space::bad_format();
@@ -1259,12 +1220,6 @@ namespace dg::network_compact_serializer::archive{
             
             using base_type = types_space::base_type_t<T>;
             using elem_type = types_space::containee_t<base_type>;
-
-            //we are very tempted to do a clear operation as hinted by other programmers as bugs, we'll add this feature as optional
-            //yet if they invoked deserialization on an unempty container, it is already a bug (all kinds of bugs ranging from leak bugs to memory corruption bugs to memory exhaustion bugs, to etc)
-            //it's very super complicated to add a clear operation, we've yet to want to do so, we rather make a new container, put to the new container and do a move operation
-            //every deserialization to an unempty container is already undefined
-            //this is precisely why this is called compact serializer, we dont want to add features that wont be used
 
             auto sz         = types::size_type{};
             auto isrter     = network_compact_serializer::utility::get_inserter<base_type>();
@@ -1605,7 +1560,9 @@ namespace dg::network_compact_serializer::archive{
             using base_type = types_space::base_type_t<T>;
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
-            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;  
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
                 throw exception_space::bad_format();
@@ -1691,12 +1648,6 @@ namespace dg::network_compact_serializer::archive{
         }
     };
 
-    //the problem we cant get over is the false positive, which we can decrease by using a begin end transaction format
-    //or we'd want to reduce the chances by increasing the header types width and kind of randomize the values 
-    //this is proven to be the most effective way for this type
-
-    //the adding the header would only to serve to reduce the false positive (maybe true positive, which we dont care)
-
     struct DgStdForward{
 
         using Self = DgStdForward;
@@ -1747,7 +1698,9 @@ namespace dg::network_compact_serializer::archive{
             using base_type = types_space::base_type_t<T>;
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
-            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;  
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             if (!network_compact_serializer::utility::is_met_variant_index_requirements(data.index())){
                 throw exception_space::bad_format();
@@ -2096,22 +2049,6 @@ namespace dg::network_compact_serializer::archive{
 }
 
 namespace dg::network_compact_serializer{
-
-    //I was thinking about the namespace, overriding + logics fling (https://leetcode.com/problems/simplify-path/description/)
-    //assume we have a dependency, the dependency logic is correct
-    //assume we join dependencies, one of the dependency logic is corrupted
-
-    //what might have happened? ambiguous resolution, we are referencing types:exception_t or dg::network_compact_serializer::types::exception_t, C++ guarantees that we are referencing the dg::network_compact_serializer::types::exception_t, without explicit ambiguous error (this is very buggy), it seems like somebody could have two different dependencies and try to override the logics of types::exception_t by declaring a dg::network_compact_serializer::types::exception_t
-    //global function names, immediate scope of overriding, nothing happens
-    //global scope of overriding, something happens 
-
-    //assume the current logic is correct, nothing happens, assume the current logic is altered (only because our referencing function is altered, it cannot be the inscope overrided functions, inscope is from the ifndef -> endif)
-    //the problem that we see often is the write() + read() global functions
-
-    //vulnerable points when writing code, references types::exception_t instead of dg::network_compact_serializer::types::exception_t
-    //references a global function (without namespace)
-
-    //other than that, we are fine
 
     template <class T>
     constexpr auto size(const T& obj) -> size_t{

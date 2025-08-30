@@ -17,9 +17,11 @@
 #include "network_compact_serializer.h"
 #include "network_memlock_proxyspin.h"
 #include "network_producer_consumer.h"
-// #include "network_kernel_mailbox_impl1.h"
+#include "network_kernel_mailbox_impl1.h"
 #include "network_trivial_serializer.h"
+#include "network_std_container.h"
 #include <iostream>
+#include "assert.h"
 
 template <class Task>
 auto timeit(Task task) -> size_t{
@@ -34,15 +36,16 @@ auto timeit(Task task) -> size_t{
 struct Foo{
     uint32_t x;
     std::optional<uint64_t> y;
+    std::variant<int, float> z;
 
     template <class Reflector>
     void dg_reflect(const Reflector& reflector) const{
-        reflector(x, y);
+        reflector(x, y, z);
     }
 
     template <class Reflector>
     void dg_reflect(const Reflector& reflector){
-        reflector(x, y);
+        reflector(x, y, z);
     }
 
     bool operator ==(const Foo& other) const noexcept{
@@ -86,102 +89,35 @@ struct Bar{
     }
 };
 
-struct FooBar{
-    int a;
-    size_t b;
-
-    template <class Reflector>
-    constexpr void region_reflect(const Reflector& reflector) const noexcept{
-        reflector(a, b);
-    }
-
-    template <class Reflector>
-    constexpr void region_reflect(const Reflector& reflector) noexcept{
-        reflector(a, b);
-    }
-};
-
-template <class FooBar>
-consteval auto some_foo() -> size_t{
-
-    FooBar foo_bar{};
-    // std::vector<size_t> rs = {};
-    size_t sz = 0u; 
-
-    foo_bar.region_reflect([&]<class ...Args>(Args... args) noexcept{
-        sz = sizeof...(args);
-    });
-
-    return sz;
-}
-
-class KeyValueTest: public virtual dg::network_producer_consumer::KVConsumerInterface<size_t, size_t>{
-
-    public:
-
-        size_t * total;
-
-    public:
-
-        void push(const size_t& idx, std::move_iterator<size_t *> arr, size_t sz) noexcept{
-
-            *this->total += sz;
-        }
-};
-
 int main(){
 
-    Bar bar{};
-    std::string buf = dg::network_compact_serializer::dgstd_serialize<dg::string>(bar);
-    Bar bar1 = dg::network_compact_serializer::dgstd_deserialize<Bar>(buf);
+    Bar bar{{{1, std::nullopt, int{1}}, {2, 2, float{2}}, {3, std::nullopt, int{3}}},
+            {{1, 2}, {2, 1}, {3, 3}, {4, 2}},
+            {1, 2},
+            {2, 3},
+            std::make_unique<Foo>(Foo{1, std::nullopt, {}}),
+            1.2f,
+            1.0f};
 
-    std::cout << static_cast<size_t>(bar == bar1) << "<test>" << std::endl;
+    {
+        std::string serialized = dg::network_compact_serializer::dgstd_serialize<std::string>(bar);
+        Bar deserialized = dg::network_compact_serializer::dgstd_deserialize<Bar>(serialized);
+        std::string serialized2 = dg::network_compact_serializer::dgstd_serialize<std::string>(deserialized);
 
-    // for (auto&& value : static_cast<std::vector<int>&&>(std::vector<int>{1, 2, 3})){
-    //     static_assert(std::is_same_v<decltype(value), int&>);
-    // }
+        assert(serialized == serialized2);
+    }
+    {
+        std::string serialized = dg::network_compact_serializer::serialize<std::string>(bar);
+        Bar deserialized = dg::network_compact_serializer::deserialize<Bar>(serialized);
+        std::string serialized2 = dg::network_compact_serializer::serialize<std::string>(deserialized);
 
-    std::variant<int, double> sth(1);
-    std::string buf2 = dg::network_compact_serializer::serialize<std::string>(sth);
+        assert(serialized == serialized2);
+    }
+    {
+        std::string serialized = dg::network_compact_serializer::integrity_serialize<std::string>(bar);
+        Bar deserialized = dg::network_compact_serializer::integrity_deserialize<Bar>(serialized);
+        std::string serialized2 = dg::network_compact_serializer::integrity_serialize<std::string>(deserialized);
 
-    std::variant<int, double> other_sth = dg::network_compact_serializer::deserialize<std::variant<int, double>>(buf2);
-
-    std::cout << std::get<int>(other_sth) << "<value>" << std::endl;
-
-    std::chrono::time_point<std::chrono::utc_clock, std::chrono::nanoseconds> timepoint = std::chrono::utc_clock::now();
-
-    std::string buf3 = dg::network_compact_serializer::dgstd_serialize<dg::string>(timepoint);
-    auto timepoint2 = dg::network_compact_serializer::dgstd_deserialize<std::chrono::time_point<std::chrono::utc_clock, std::chrono::nanoseconds>>(buf3);
-    
-    std::cout << (timepoint == timepoint2) << "<value>" << std::endl;
-    
-    std::variant<int, float> sth2{};
-
-    dg::network_trivial_serializer::serialize_into(nullptr, sth2);
-    dg::network_trivial_serializer::deserialize_into(sth2, nullptr);
-
-    // // size_t a                    = {};
-    // // size_t b                    = {};
-    // // auto [aa, bb]               = std::tie(a, b); 
-
-    // // size_t SZ                   = size_t{1} << 28;
-    // // size_t total                = 0u;
-    // // auto internal_resolutor     = KeyValueTest{};
-    // // internal_resolutor.total    = &total;
-
-    // // auto handle                 = dg::network_producer_consumer::delvrsrv_kv_open_raiihandle(&internal_resolutor, 32768).value();
-
-    // // auto random_vec             = std::vector<size_t>(SZ);
-    // // std::generate(random_vec.begin(), random_vec.end(), std::bind(std::uniform_int_distribution<size_t>{}, std::mt19937{}));
-
-    // // auto task = [&]() noexcept{
-    // //     for (size_t value: random_vec){
-    // //         dg::network_producer_consumer::delvrsrv_kv_deliver(handle.get(), value & 127u, value);
-    // //     }
-    // // };
-
-    // // std::cout << timeit(task) << "<ms>" << total << std::endl;
-
-    // // using lock_t = dg::network_memlock_impl1::Lock<size_t, std::integral_constant<size_t, 2>>;
-    // // dg::network_memlock::recursive_lock_guard_many(lock_t{}, nullptr, nullptr);
+        assert(serialized == serialized2);
+    }
 }

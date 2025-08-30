@@ -19,6 +19,7 @@
 #include "network_datastructure.h"
 #include "network_exception_handler.h"
 #include "network_type_traits_x.h"
+#include "network_hash_factory.h"
 
 namespace dg::network_producer_consumer{
 
@@ -538,7 +539,7 @@ namespace dg::network_producer_consumer{
     static constexpr bool FALSE_VAL = false;
 
     template <class KeyType, class MappedType>
-    using kv_feed_unordered_map_t = dg::network_datastructure::unordered_map_variants::unordered_node_map<KeyType, MappedType>;
+    using kv_feed_unordered_map_t = dg::network_datastructure::unordered_map_variants::unordered_node_map<KeyType, MappedType, std::size_t, std::integral_constant<bool, true>, dg::network_hash_factory::default_hasher<KeyType>, dg::network_hash_factory::default_equal_to<KeyType>>;
 
     template<class KeyType, class EventType>
     struct KVDeliveryHandle{
