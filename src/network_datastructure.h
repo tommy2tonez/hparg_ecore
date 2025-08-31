@@ -1953,7 +1953,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             constexpr explicit cyclic_unordered_node_map(size_type bucket_count,
                                                          const Hasher& _hasher = Hasher(),
                                                          const Pred& pred = Pred(),
-                                                         const Allocator& allocator = Allocator()): virtual_storage_vec(unordered_map_variants::ulog2(self::right_capacity_to_size(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<size_t>(self::max_capacity())))), allocator),
+                                                         const Allocator& allocator = Allocator()): virtual_storage_vec(unordered_map_variants::ulog2(self::right_capacity_to_size(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<size_t>(self::max_capacity()))))),
                                                                                                     bucket_vec(unordered_map_variants::min_size_clamp(static_cast<std::size_t>(unordered_map_variants::ceil2(bucket_count)), static_cast<std::size_t>(self::min_capacity()), static_cast<size_t>(self::max_capacity())), self::NULL_VIRTUAL_ADDR, allocator),
                                                                                                     virtual_addr_offset(0u),
                                                                                                     _hasher(_hasher),
@@ -2241,12 +2241,12 @@ namespace dg::network_datastructure::unordered_map_variants{
                 //static_assert(noexcept(this->_hasher(key)));
                 //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].key, key)));
 
-                size_t hashed_value         = this->_hasher(key);
-                size_t bucket_idx           = this->to_bucket_index(hashed_value);
-                virtual_addr_t * current    = &this->bucket_vec[bucket_idx];
+                size_t hashed_value             = this->_hasher(key);
+                size_t bucket_idx               = this->to_bucket_index(hashed_value);
+                const virtual_addr_t * current  = &this->bucket_vec[bucket_idx];
 
                 while (true){
-                    if (*current == self::NULL_VIRTUAL_ADDR || this->pred(this->virtual_storage_vec[this->to_storage_addr(*current)], key)){
+                    if (*current == self::NULL_VIRTUAL_ADDR || this->pred(this->virtual_storage_vec[this->to_storage_addr(*current)].first, key)){
                         return current;
                     }
 

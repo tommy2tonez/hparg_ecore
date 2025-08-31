@@ -115,6 +115,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t SOCKET_STREAM_SEGMENT_FILLING       = 69u;
     static inline constexpr exception_t SOCKET_STREAM_LEAK                  = 70u;
     static inline constexpr exception_t SOCKET_STREAM_BAD_OUTBOUND_RULE     = 71u;
+    static inline constexpr exception_t SOCKET_STREAM_CORRUPTED_PACKET      = 00u;
     static inline constexpr exception_t ALOTTED_BUFFER_EXCEEDED             = 72u;
 
     static inline constexpr exception_t EXPECTED_NOT_INITIALIZED            = 00u;

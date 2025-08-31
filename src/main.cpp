@@ -22,6 +22,7 @@
 #include "network_std_container.h"
 #include <iostream>
 #include "assert.h"
+#include "network_kernel_mailbox_impl1_x.h"
 
 template <class Task>
 auto timeit(Task task) -> size_t{
@@ -91,33 +92,6 @@ struct Bar{
 
 int main(){
 
-    Bar bar{{{1, std::nullopt, int{1}}, {2, 2, float{2}}, {3, std::nullopt, int{3}}},
-            {{1, 2}, {2, 1}, {3, 3}, {4, 2}},
-            {1, 2},
-            {2, 3},
-            std::make_unique<Foo>(Foo{1, std::nullopt, {}}),
-            1.2f,
-            1.0f};
-
-    {
-        std::string serialized = dg::network_compact_serializer::dgstd_serialize<std::string>(bar);
-        Bar deserialized = dg::network_compact_serializer::dgstd_deserialize<Bar>(serialized);
-        std::string serialized2 = dg::network_compact_serializer::dgstd_serialize<std::string>(deserialized);
-
-        assert(serialized == serialized2);
-    }
-    {
-        std::string serialized = dg::network_compact_serializer::serialize<std::string>(bar);
-        Bar deserialized = dg::network_compact_serializer::deserialize<Bar>(serialized);
-        std::string serialized2 = dg::network_compact_serializer::serialize<std::string>(deserialized);
-
-        assert(serialized == serialized2);
-    }
-    {
-        std::string serialized = dg::network_compact_serializer::integrity_serialize<std::string>(bar);
-        Bar deserialized = dg::network_compact_serializer::integrity_deserialize<Bar>(serialized);
-        std::string serialized2 = dg::network_compact_serializer::integrity_serialize<std::string>(deserialized);
-
-        assert(serialized == serialized2);
-    }
+    auto sock = dg::network_kernel_mailbox_impl1_flash_streamx::spawn({});
+    auto sock2 = dg::network_kernel_mailbox_impl1::spawn({});
 }
