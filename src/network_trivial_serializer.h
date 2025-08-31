@@ -186,7 +186,7 @@ namespace dg::network_trivial_serializer::archive{
             } else if constexpr(types_space::is_optional_v<btype>){
                 using containee_t = types_space::optional_containee_t<btype>; 
 
-                if constexpr(std::is_nothrow_default_constructible_v<containee_t>){
+                if constexpr(std::is_default_constructible_v<containee_t>){
                     return IsSerializable().is_serializable(containee_t());
                 } else{
                     return false;
@@ -196,7 +196,7 @@ namespace dg::network_trivial_serializer::archive{
                     return (IsSerializable{}.is_serializable(std::get<IDX>(data)) && ...);
                 }(std::make_index_sequence<std::tuple_size_v<btype>>{});
             } else if constexpr(types_space::is_reflectible_v<btype>){
-                if constexpr(std::is_nothrow_default_constructible_v<btype>){
+                if constexpr(std::is_default_constructible_v<btype>){
                     bool rs = true;
                     auto archiver = [&rs]<class ...Args>(Args&& ...args) noexcept{
                         rs &= (IsSerializable().is_serializable(std::forward<Args>(args)) && ...);
@@ -212,7 +212,7 @@ namespace dg::network_trivial_serializer::archive{
                 [&]<class ...Args>(const std::variant<Args...>&) noexcept{
                     (
                         [&]{
-                            if constexpr(std::is_nothrow_default_constructible_v<Args>){
+                            if constexpr(std::is_default_constructible_v<Args>){
                                 rs &= IsSerializable().is_serializable(Args());
                             } else{
                                 rs &= false;
@@ -469,7 +469,7 @@ namespace dg::network_trivial_serializer{
     struct is_serializable: std::false_type{};
 
     template <class T>
-    struct is_serializable<T, std::void_t<std::enable_if_t<std::is_nothrow_default_constructible_v<T>>>>: is_serializable_helper<T>{};
+    struct is_serializable<T, std::void_t<std::enable_if_t<std::is_default_constructible_v<T>>>>: is_serializable_helper<T>{};
 
     template <class T>
     static inline constexpr bool is_serializable_v = is_serializable<T>::value;

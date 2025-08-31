@@ -1908,7 +1908,7 @@ namespace dg::network_datastructure::unordered_map_variants{
         return !(lhs == rhs);
     }
 
-    template <class Key, class Mapped, class Hasher = std::hash<Key>, class VirtualAddrType = std::size_t, class HasStructureReordering = std::integral_constant<bool, true>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
+    template <class Key, class Mapped, class Hasher = std::hash<Key>, class VirtualAddrType = std::size_t, class HasStructureReordering = std::integral_constant<bool, true>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<4, 8>>
     class cyclic_unordered_node_map{
 
         private:

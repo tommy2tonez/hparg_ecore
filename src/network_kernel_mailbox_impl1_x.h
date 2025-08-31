@@ -5,7 +5,7 @@
 
 #include <memory>
 #include "network_kernel_mailbox_impl1.h"
-#include "network_trivial_serializer.h"
+#include "network_compact_trivial_serializer.h"
 #include "network_concurrency.h"
 #include "network_std_container.h"
 #include <chrono>
@@ -447,222 +447,6 @@ namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
 namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
-    //alright, we'll be back to implement if there are issues or requests
-    //this is good enough, we dont have time
-    //the only problem is the problem of affinity, we'll write an affined function to do customized mapping of containers
-    //the problem quickly resolves if are to increase latency -> 10ms per consumption or production
-    //yet we are very laggy, this is probably for the best because there is literally nothing free
-    
-    //whenever I felt like I did something wrong
-    //let's see the options
-
-    //low latency, low thruput
-    //low latency, high thruput (this is what we want)
-        //low latency, high thruput low cap switch signal
-            //a lot of memory orderings (unavoidable)
-
-        //low latency, high thruput high cap switch signal
-            //OK, no <a lot of memory orderings>, no-busy state might result in the worst case of <worst_case_latency> * <bouncing_container_sz>
-                //we are interested in offsetting the cost of <worst_case_latency> * <bouncing_container_sz>
-                //this is doable via padding requests (empty requests without doing actual things to push the order thru with low latency)
-
-    //high latency, low thruput (this is not what we want)
-    //high latency, high thruput
-
-    //it seems that 10ms is best for logit density mining
-    //after consulted with my friends in the STD, they preferred we staying in the nanoseconds territory, I explained that has a lot to do with request pads
-    //because low_latency + low cap ::wait is a recipe for disaster, we are polluting the system with cmpexchg instructions
-
-    //we are awared of the std::memory_order_relaxed serialization at the subscribe function
-    //we dont have a way to work around this yet, because the anomaly dampener for the uniform distribution is important in producer + consumer pattern
-    //we are aiming for at most 1s / latency_time memory orders per second
-    //or 1MB - 10MB of digesting data/ memory order
-    //the latter would sat the RAM bandwidth faster so the memory ordering is no longer an issue
-
-    //we use the digestion size of roughly 1 << 16/ load to offset the cost of access synchronization mechanisms
-    //we use random hash table to increase compute
-    //those are two very different things
-    //one is CPU efficiency by increasing producing + consuming sz
-    //another is task thruput by using more CPU resource concurrently
-
-    //------
-    //my std friends liked the idea of no synchronization computation + high frequency computing
-    //yet ... they still want to have certain mechanisms to do tile synchronizations (backward + forward by using immediate semaphore tiles) 
-    //------
-
-    //I feel like doing containers (we'll be doing containers before getting back to this problem), node_fast_map + node_fast_set containers 
-
-    //I was thinking about the scheduling techniques
-    //let's skim through the options:
-    
-    //static number:
-        //exact scheduler forward + backward
-        //  - discretized enumerated exact scheduler
-        //  - exact exact scheduler
-
-        //frequency scheduler forward + backward
-        //  - discretized enumerated extract frequency scheduler
-        //  - exact frequency scheduler
-
-    //adaptive number:
-        //  - ... 
-
-    //alright, we can literally list 1024 ways to do the scheduled forward + backward thing
-    //we dont care, we want to prove that doing things our way is complete and the overhead is within a certain acceptable compute flops
-
-    //assume that there is only one forward tile on the memregion
-        //- we can use empty reference tile to bring the acummulated uncertainty between frequencied regions -> our expecting scheduled time
-        //- the overhead of doing so is bouncing_memregion * lock_overhead + memevent queueing overheads + etc.
-        //- the overhead of the mempress collector is fixed, it's always ticking
-        //- we can't guarantee that things would be frequencied as specified, this is a statistics fling that we have to collect + use machine learning to tune our engine
-        //- what we can guarantee is that the machine will snap into certain states after a certain time, abs_window + fixed retransmission_window + fixed_retransmission_sz are to serve the purpose
-        //- and the frequency is not adaptive, it is utc_clock::discretized_time_range, we can implicitly expect (or soft_synchronize) that the machine will behave correctly if certain empty state has been reached
-
-    //assume that there are more than one forward tile on the memregion:
-        //- only statistic calibration can give you the answer
-
-    //alright, I was thinking about delvrsrv + hash_table injection
-    //it's a radix of radix sort + distributed hash_table invoke
-    //we want to fit the hash table -> 64KB of cache memory before we load/ read the table(s) in batches
-    //alright fellas, I literally dont have time to argue with yall
-
-    //I have a timeline to push this to the mainframe, by using fully detached infrastructure + fixed window transmission (we have seeked advices, it's the best route for this kind of forever detached tree training computation, there is literally not a single explicit synchronization instruction, we just peek the tree to test for integrity)
-    //flash_streamx is only for 64KB transmission packet, with the event trigger size of 1MB/consumption
-    //the hashtable is the best for temporal cache retrieval, with the sole operations are insert and clear 
-    //the hashtable is also best for delvrsrv_kv hash_table, with the sole operations are insert, iteration and clear
-    //the hashtable cannot be further optimized, can be used concurrently on multicore with no SIMD instructions available, it's the best memory footprint wise speaking, we are literally considering uint8_t as virtual_addr_t for kv_feeder
-    //our client is very stingent on the time and the usability of this
-    //so we have tons of work to do
-
-    //alright, I have gotten three specific feedbacks
-    //first is to drain the swamp periodically for distributed container
-    //second is to think about the requirements of destroy
-    //let's see the variables that we could collect for our priority queue
-    //- user-specified index
-    //- stream start_time
-    //- stream absolute timeout
-    //- stream collected latency array
-    //- stream progress
-    //- system current state
-    //- from IP
-    //- # of current concurrent IPs
-    //third is to be considerate about the temporal unordered_map + temporal unordered set memory access pattern, is there something we could do on the sender side to offset this cost, we also dont want to be predictable for the reason being predictable == exploitable 
-
-    //we implemented (1)
-    //we are thinking about implementing (3) without actually overstepping into the-micro-optimization-and-enables-exploitation territory
-    //it's a hashing problem, we can clue the region of frequent accesses by using IP, and their packet id should be incremental
-    //alright, one last request is to implement a select-like feature of std by using encapsulated global affined variables injection. Our client does not want to be forced to wait to get data. We live in a free world fellas
-    //assume the reactor threshold is N, we can expect that the latency of all the guys above the threshold to be in the nanoseconds range
-    //we can assume the guys below the threshold to be not in the nanoseconds range. We must specify that N to be the peeking size for each of the subcontainer because thats the worst latency scenerio, and the consumer must have the consume size of subcontainer_sz * N
-    //we have seeked advices that the reactor threshold must be of 10 MB, and the worst draining latency must be of 10ms. We want the water pipe to run all the time to push data through, to achieve the best performance scenerio of 1GB/(100*k memory orderings)
-    //we will work on improving the memory footprint of maps and sets. its super very complicated
-
-    //we are only worried about the force WAIT (both send and recv, external interface), not the select feature of reaching a certain threshold, implementing that is super hard to be efficient
-    //so we'll implement a global static affined injection of timeout
-    //that's good enough for MVP, we'll move on for now, we'll circle back to do profile guided optimizations
-    //this is not a good answer, this seems more like a patch
-    //because it really is
-
-    template <class ID>
-    class AffinedTimeoutController{
-
-        private:
-
-            using self = AffinedTimeoutController;
-
-            static inline std::vector<stdx::hdi_container<std::optional<std::chrono::nanoseconds>>> timeout_container = []{
-
-                size_t container_sz = dg::network_concurrency::THREAD_COUNT;
-                auto rs = std::vector<stdx::hdi_container<std::optional<std::chrono::nanoseconds>>>(container_sz);
-
-                for (size_t i = 0u; i < container_sz; ++i){
-                    rs[i].value = std::nullopt;
-                }
-
-                return rs;
-            }();
-
-        public:
-
-            static consteval auto get_min_timeout() noexcept -> std::chrono::nanoseconds{
-
-                return std::chrono::nanoseconds::min();
-            }
-
-            static consteval auto get_max_timeout() noexcept -> std::chrono::nanoseconds{
-
-                return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes(1));
-            }
-
-            static void abs_set(std::optional<std::chrono::nanoseconds> timeout_period) noexcept{
-
-                self::timeout_container[dg::network_concurrency::this_thread_idx()].value = timeout_period;
-            } 
-
-            static void set(std::chrono::nanoseconds timeout_period) noexcept{
-
-                self::timeout_container[dg::network_concurrency::this_thread_idx()].value = std::clamp(timeout_period, self::get_min_timeout(), self::get_max_timeout());                
-            }
-
-            static void clear() noexcept{
-
-                self::timeout_container[dg::network_concurrency::this_thread_idx()].value = std::nullopt;
-            }
-
-            static auto get() noexcept -> std::optional<std::chrono::nanoseconds>{
-
-                return self::timeout_container[dg::network_concurrency::this_thread_idx()].value;
-            }
-    };
-
-    struct ClientRecvSignature{};
-    using client_affined_timeout_controller = AffinedTimeoutController<ClientRecvSignature>;  
-
-    template <class ID>
-    struct AffinedBlockOnExhaustionController{
-
-        private:
-
-            using self = AffinedBlockOnExhaustionController;
-
-            static inline std::vector<stdx::hdi_container<std::optional<bool>>> flag_container = []{
-
-                size_t container_sz = dg::network_concurrency::THREAD_COUNT;
-                auto rs = std::vector<stdx::hdi_container<std::optional<bool>>>(container_sz);
-
-                for (size_t i = 0u; i < container_sz; ++i){
-                    rs[i].value = std::nullopt;
-                }
-
-                return rs;
-            }();
-
-        public:
-
-            static void abs_set(std::optional<bool> state) noexcept{
-
-                self::flag_container[dg::network_concurrency::this_thread_idx()].value = state;
-            }
-
-            static void set(bool flag) noexcept{
-
-                self::flag_container[dg::network_concurrency::this_thread_idx()].value = flag; 
-            }
-
-            static void clear() noexcept{
-
-                self::flag_container[dg::network_concurrency::this_thread_idx()].value = std::nullopt;
-            }
-
-            static auto get() noexcept -> std::optional<bool>{
-
-                return self::flag_container[dg::network_concurrency::this_thread_idx()].value;
-            }
-    };
-
-    struct ClientSendSignature{};
-    using client_affined_blocksend_controller = AffinedBlockOnExhaustionController<ClientSendSignature>; 
-
     using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
 
@@ -710,14 +494,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t, uint64_t, bool>;
 
-        size_t header_sz    = dg::network_compact_serializer::integrity_size(header_t{});
+        size_t header_sz    = dg::network_compact_trivial_serializer::size(header_t{});
         size_t old_sz       = segment.buf.size();
         size_t new_sz       = old_sz + header_sz;
         auto header         = header_t{segment.id, segment.segment_idx, segment.segment_sz, segment.mm_integrity_value, segment.has_mm_integrity_value};
 
         try{
             segment.buf.resize(new_sz);
-            dg::network_compact_serializer::integrity_serialize_into(std::next(segment.buf.data(), old_sz), header, PACKET_SEGMENT_SERIALIZATION_SECRET);
+            dg::network_compact_trivial_serializer::serialize_into(std::next(segment.buf.data(), old_sz), header, PACKET_SEGMENT_SERIALIZATION_SECRET);
             return std::expected<dg::string, exception_t>(std::move(segment.buf));
         } catch (...){
             return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
@@ -729,7 +513,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t, uint64_t, bool>;
 
-        size_t header_sz    = dg::network_compact_serializer::integrity_size(header_t{});
+        size_t header_sz    = dg::network_compact_trivial_serializer::size(header_t{});
         size_t buf_sz       = buf.size();
         auto header         = header_t{}; 
 
@@ -740,7 +524,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         size_t hdr_off      = buf.size() - header_sz;
         char * hdr_buf      = std::next(buf.data(), hdr_off);  
 
-        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::integrity_deserialize_into<header_t>)(header, hdr_buf, header_sz, PACKET_SEGMENT_SERIALIZATION_SECRET);
+        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_trivial_serializer::deserialize_into<header_t>)(header, hdr_buf, header_sz, PACKET_SEGMENT_SERIALIZATION_SECRET);
 
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);
@@ -763,7 +547,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         if (pkt.total_segment_sz != pkt.data.size()){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+            return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET);
         }
 
         if (pkt.total_segment_sz == 0u){
@@ -814,7 +598,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             uint64_t integrity_value = dg::network_hash::murmur_hash(rs->data(), rs->size(), PACKET_INTEGRITY_SECRET);
 
             if (mm_integrity_value != integrity_value){
-                return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED);
+                return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET);
             }
         }
 
@@ -953,18 +737,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            dg::unordered_unstable_map<Key, Value> map_container;
-            dg::pow2_cyclic_queue<std::pair<Key, Value>> cyclic_queue;
+            dg::cyclic_unordered_node_map<Key, Value> map_container;
 
         public:
 
-            temporal_finite_unordered_map(size_t tentative_cap){
-
-                size_t upcap            = stdx::ceil2(std::max(size_t{2}, tentative_cap));
-                size_t pow2_exponent    = stdx::ulog2(upcap);
-                this->map_container.reserve(upcap);
-                this->cyclic_queue      = dg::pow2_cyclic_queue<std::pair<Key, Value>>(pow2_exponent);
-            }
+            temporal_finite_unordered_map(size_t tentative_cap): map_container(dg::cyclic_unordered_node_map<Key, Value>::size_to_capacity(tentative_cap)){}
 
             template <class KeyLike>
             constexpr auto find(const KeyLike& keylike) noexcept{
@@ -999,61 +776,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
 
             template <class ...Args>
-            constexpr auto emplace(Args&& ...args) noexcept{
+            constexpr auto emplace(Args&& ...args) -> decltype(auto){
 
-                if (this->cyclic_queue.size() == this->cyclic_queue.capacity()) [[unlikely]]{
-                    this->cut_half();
-                }
-
-                std::pair<const Key, Value> kv_pair(std::forward<Args>(args)...);
-
-                auto rs = this->map_container.insert(kv_pair);
-                dg::network_exception_handler::nothrow_log(this->cyclic_queue.push_back(std::move(kv_pair)));
-
-                return rs;
+                return this->map_container.emplace(std::forward<Args>(args)...);
             }
 
-            template <class KeyArg, class ...Args>
-            constexpr auto try_emplace(KeyArg&& key, Args&&... value_args) noexcept{
+            template <class ...Args>
+            constexpr auto try_emplace(Args&&... args) -> decltype(auto){
 
-                if (this->cyclic_queue.size() == this->cyclic_queue.capacity()) [[unlikely]]{
-                    this->cut_half();
-                }
-
-                std::pair<const Key, Value> kv_pair(std::piecewise_construct,
-                                                    std::forward_as_tuple(std::forward<KeyArg>(key)),
-                                                    std::forward_as_tuple(std::forward<Args>(value_args)...));
-
-                auto rs = this->map_container.insert(kv_pair);
-                dg::network_exception_handler::nothrow_log(this->cyclic_queue.push_back(std::move(kv_pair)));
-
-                return rs;
-            }
-
-        private:
-
-            void cut_half() noexcept{
-
-                size_t half_sz      = this->cyclic_queue.size() >> 1;
-                size_t removable_sz = std::min(static_cast<size_t>(this->cyclic_queue.size()), half_sz);
-
-                this->cyclic_queue.erase_front_range(removable_sz);
-                this->map_container.clear();
-
-                for (size_t i = 0u; i < this->cyclic_queue.size(); ++i){
-                    this->map_container.insert(this->cyclic_queue[i]);
-                } 
+                return this->map_container.try_emplace(std::fowrard<Args>(args)...);
             }
     };
-
-    //we need to research our way through this
-    //distributed_hash_set by using radix tree
-    //done
-    //simd membership cmp
-    //done
-    //population extraction
-    //done
-    //we are not awared of other options
 
     template <class Key>
     class bloom_filter{
@@ -1076,9 +809,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 auto rand_gen   = std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
                 this->sz        = 0u; 
 
+                this->bloom_table               = dg::vector<bool>();
                 this->bloom_table.resize(upcap, false);
-                this->murmur_hash_secret_vec.resize(rehash_sz);
 
+                this->murmur_hash_secret_vec    = dg::vector<uint32_t>(rehash_sz);
                 std::generate(this->murmur_hash_secret_vec.begin(), this->murmur_hash_secret_vec.end(), rand_gen);
             }
 
@@ -1120,7 +854,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 return this->bloom_table.size();
             }
-        
+
         private:
 
             auto internal_numerical_key_search(size_t key) const noexcept -> bool{
@@ -1141,55 +875,86 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            bloom_filter<Key> bloom_filter1;
-            bloom_filter<Key> bloom_filter2;
-            size_t switchfoot_sz;
-            size_t clearfoot_sz;
-            size_t footstep_sz;
-            bool foot;
+            static inline constexpr uint8_t LEFT_SIDE   = 0u;
+            static inline constexpr uint8_t RIGHT_SIDE  = 1u;
+
+            bloom_filter<Key> left_bloom_filter;
+            bloom_filter<Key> right_bloom_filter;
+            size_t side_capacity;
+            size_t side_sz;
+            uint8_t side;
 
         public:
 
-            temporal_switching_bloom_filter(size_t cap, size_t rehash_sz, size_t reliability_decay): bloom_filter1(std::max(size_t{2}, cap), rehash_sz),
-                                                                                                     bloom_filter2(std::max(size_t{2}, cap), rehash_sz){
+            temporal_switching_bloom_filter(size_t cap, size_t rehash_sz, size_t reliability_decay): bloom_filter1(std::max(size_t{1}, cap), rehash_sz),
+                                                                                                     bloom_filter2(std::max(size_t{1}, cap), rehash_sz){
 
-                this->switchfoot_sz     = std::max(size_t{1}, this->bloom_filter1.capacity() >> reliability_decay);
-                this->clearfoot_sz      = switchfoot_sz  * 2u;
-                this->footstep_sz       = 0u;
-                this->foot              = true;
+                this->side_capacity = std::max(size_t{1}, static_cast<size_t>(this->bloom_filter1.capacity() >> reliability_decay));
+                this->side_sz       = 0u;
+                this->side          = LEFT_SIDE;
             }
 
             auto not_contains(const Key& key) const noexcept -> bool{
 
-                return this->bloom_filter1.not_contains(key) && this->bloom_filter2.not_contains(key);
+                return this->left_bloom_filter.not_contains(key) && this->right_bloom_filter.not_contains(key);
             }
 
             void insert(const Key& key) noexcept{
 
-                if (this->bloom_filter1.size() + this->bloom_filter2.size() == this->clearfoot_sz){
-                    if (this->foot){
-                        this->bloom_filter2.clear();
+                if (this->side_sz == this->side_capacity){
+                    this->switch_side();
+                }
+
+                if (this->side == LEFT_SIDE){
+                    this->left_bloom_filter.insert(key);
+                } else if (this->side == RIGHT_SIDE){
+                    this->right_bloom_filter.insert(key);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
                     } else{
-                        this->bloom_filter1.clear();
+                        std::unreachable();
                     }
                 }
 
-                if (this->footstep_sz == this->switchfoot_sz){
-                    this->foot          = !this->foot;
-                    this->footstep_sz   = 0u;
-                }
+                this->side_sz += 1u;
+            }
+        
+        private:
 
-                if (this->foot){
-                    this->bloom_filter1.insert(key);
-                } else{
-                    this->bloom_filter2.insert(key);
-                }
+            void switch_side() noexcept{
 
-                this->footstep_sz += 1;
+                switch (this->side){
+                    case LEFT_SIDE:
+                    {
+                        this->right_bloom_filter.clear();
+                        this->side_sz   = 0u;
+                        this->side      = RIGHT_SIDE;
+
+                        return;
+                    }
+                    case RIGHT_SIDE:
+                    {
+                        this->left_bloom_filter.clear();
+                        this->side_sz   = 0u;
+                        this->side      = LEFT_SIDE;
+
+                        return;
+                    }
+                    default:
+                    {
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                }
             }
     };
 
-    //OK, version control by internalizing dependencies, we wont have version control problems
     class dg_binary_semaphore{
 
         private:
@@ -1198,74 +963,59 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         public:
 
-            constexpr dg_binary_semaphore(std::ptrdiff_t state): base(state){}
+            constexpr dg_binary_semaphore(std::ptrdiff_t initial_count): base(initial_count){}
 
-            auto acquire() noexcept -> exception_t{
+            inline __attribute__((force_inline)) void acquire() noexcept{
 
                 try{
                     this->base.acquire();
-                    return dg::network_exception::SUCCESS;
                 } catch (...){
-                    return dg::network_exception::wrap_std_exception(std::current_exception());
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception(std::current_exception())));
+                    std::abort();
                 }
-
             }
 
-            auto release() noexcept -> exception_t{
+            inline __attribute__((force_inline)) void release() noexcept{
 
                 try{
                     this->base.release(1u);
-                    return dg::network_exception::SUCCESS;
                 } catch(...){
-                    return dg::network_exception::wrap_std_exception(std::current_exception());
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::wrap_std_exception(std::current_exception())));
+                    std::abort();
                 }
             }
 
-            template <class Rep, class Period>
-            auto try_acquire_for(std::chrono::duration<Rep, Period> dur) noexcept -> std::expected<bool, exception_t>{
+            inline __attribute__((force_inline)) std::expected<bool, exception_t> try_acquire_for(std::chrono::nanoseconds timeout) noexcept{
 
                 try{
-                    return base.try_acquire_for(dur);
-                } catch (...){
-                    return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
-                }
-            }
-
-            template <class Clock, class Duration>
-            auto try_acquire_until(std::chrono::time_point<Clock, Duration> abs_time) noexcept -> std::expected<bool, exception_t>{
-
-                try{
-                    return base.try_acquire_until(abs_time);
+                    return this->base.try_acquire_for(timeout);
                 } catch (...){
                     return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
                 }
             }
     };
 
-    //OK, version control by internalizing dependencies, we wont have version control problems
-    //the complex reactor will try to subscribe -> the smp_queue serialized access state, and notify most of the times (not all of the time if the threshold is reached)
-
     class ComplexReactor{
 
         private:
 
-            dg::vector<std::shared_ptr<dg_binary_semaphore>> smp_queue; //smp_queue serialized access state
-            size_t smp_queue_cap; //const states
-            std::mutex mtx_smp_queue; //smp_queue serialized access state 
+            dg::vector<std::shared_ptr<semaphore_impl::dg_binary_semaphore>> mtx_queue;
+            size_t mtx_queue_cap;
+            std::atomic_flag mtx_mtx_queue;
+            stdx::inplace_hdi_container<std::atomic<intmax_t>> counter;
+            stdx::inplace_hdi_container<std::atomic<intmax_t>> wakeup_threshold;
+            stdx::inplace_hdi_container<std::atomic<size_t>> mtx_queue_sz;
 
-            stdx::inplace_hdi_container<std::atomic<intmax_t>> counter; //counter states 
-            stdx::inplace_hdi_container<std::atomic<intmax_t>> wakeup_threshold; //mostly_const (preinitialized)
-
-            stdx::inplace_hdi_container<std::atomic<size_t>> smp_queue_sz; //smp_queue serialized access states
+            static inline constexpr size_t MTX_QUEUE_EXPECTED_SIZE = 32u; 
 
         public:
 
-            ComplexReactor(size_t smp_queue_cap): smp_queue(),
-                                                  smp_queue_cap(smp_queue_cap), 
-                                                  mtx_smp_queue(),
+            ComplexReactor(size_t mtx_queue_cap): mtx_queue(),
+                                                  mtx_queue_cap(mtx_queue_cap), 
+                                                  mtx_mtx_queue(),
                                                   counter(std::in_place_t{}, 0),
                                                   wakeup_threshold(std::in_place_t{}, 0),
-                                                  smp_queue_sz(std::in_place_t{}, 0u){}
+                                                  mtx_queue_sz(std::in_place_t{}, 0u){}
 
             void increment(size_t sz) noexcept{
 
@@ -1274,33 +1024,44 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 this->counter.value.fetch_add(sz, std::memory_order_relaxed); //increment
                 intmax_t expected = this->wakeup_threshold.value.load(std::memory_order_relaxed);
+                dg::vector<std::shared_ptr<semaphore_impl::dg_binary_semaphore>> smp_vec = {};
+                smp_vec.reserve(MTX_QUEUE_EXPECTED_SIZE);
 
                 for (size_t epoch = 0u; epoch < INCREMENT_RETRY_SZ; ++epoch){
                     intmax_t current = this->counter.value.load(std::memory_order_relaxed);
 
                     if (current < expected){
-                        return;
+                        break;
                     }
 
                     std::atomic_signal_fence(std::memory_order_seq_cst);
-                    size_t current_queue_sz = this->smp_queue_sz.value.load(std::memory_order_relaxed);
+                    size_t current_queue_sz = this->mtx_queue_sz.value.load(std::memory_order_relaxed);
 
                     if (current_queue_sz == 0u){
-                        return;
+                        break;
                     }
 
-                    bool try_lock_rs = this->mtx_smp_queue.try_lock(); 
+                    bool try_lock_rs = stdx::try_lock(this->mtx_mtx_queue, std::memory_order_relaxed); 
 
                     if (!try_lock_rs){
-                        stdx::lock_yield(FAILED_LOCK_SLEEP);
+                        stdx::lock_yield(FAILED_LOCK_SLEEP); //we proved that this just needs to yield the time of critical sections (so we could transfer the responsibility of waking up to whoever holding the lock then on)
+                                                             //so a lock acquisition is not mandatory here
+                                                             //the odd cases of anomaly, such as kernel intervention of round-robin + etc. is handled by the default wakers
                         continue;
                     }
 
-                    this->unsafe_notify_subscribers();
-                    this->mtx_smp_queue.unlock();
+                    {
+                        stdx::unlock_guard<std::atomic_flag> lck_grd(this->mtx_mtx_queue);
 
-                    return;
+                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
+                        smp_vec = this->mtx_queue;
+                        this->mtx_queue.clear();
+                    }
+
+                    break;
                 }
+
+                this->do_release(smp_vec);
             }
 
             void decrement(size_t sz) noexcept{
@@ -1320,112 +1081,60 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             void subscribe(std::chrono::nanoseconds waiting_time) noexcept{
 
-                constexpr uint8_t ACTION_NO         = 0u;
-                constexpr uint8_t ACTION_ACQUIRE    = 1u;
-                constexpr uint8_t ACTION_THRU       = 2u;
-
                 intmax_t current    = this->counter.value.load(std::memory_order_relaxed);
                 intmax_t expected   = this->wakeup_threshold.value.load(std::memory_order_relaxed);
 
                 if (current >= expected){
-                    return; //OK
+                    return;
                 }
 
-                std::shared_ptr<dg_binary_semaphore> spinning_smp = dg::network_allocation::make_shared<dg_binary_semaphore>(0);
+                std::shared_ptr<semaphore_impl::dg_binary_semaphore> waiting_smp = dg::network_allocation::make_shared<semaphore_impl::dg_binary_semaphore>(0);
+                dg::vector<std::shared_ptr<semaphore_impl::dg_binary_semaphore>> smp_vec = {};
+                smp_vec.reserve(MTX_QUEUE_EXPECTED_SIZE);
 
-                uint8_t action = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(this->mtx_smp_queue);
+                [&, this]() noexcept{
+                    stdx::xlock_guard<std::atomic_flag> lck_grd(this->mtx_mtx_queue);
 
-                    //register the subscriber to the queue
-                    //hope that the subscriber will be notified if a certain threshold is reached, not guaranteed 
-                    //let's see where the notifications are
-                    //alright, wait is very complicated to implement, the problem we are facing is the unit problem
-                    //I'm telling yall that the unit in host_asynchronous can be solved, yet the unit problem in the mailbox or UDP 8K cannot be solved
-                    //this is an entire different radix of things, our entire system only point of compromision is THIS
-
-                    exception_t register_err    = this->unsafe_register_subscriber(spinning_smp);
-                    
-                    if (dg::network_exception::is_failed(register_err)){
-                        return ACTION_NO; //OK
-                    }
-
-                    intmax_t new_current        = this->counter.value.load(std::memory_order_relaxed); 
-
-                    if (new_current >= expected){
-                        this->unsafe_notify_subscribers();
-                        return ACTION_THRU;
-                    }
-
-                    return ACTION_ACQUIRE;
-                }();
-
-                switch (action){
-                    case ACTION_NO:
-                    {
-                        std::this_thread::sleep_for(waiting_time);
-                        break;
-                    }
-                    case ACTION_ACQUIRE:
-                    {
-                        std::expected<bool, exception_t> smp_err = spinning_smp->try_acquire_for(waiting_time);
-
-                        if (!smp_err.has_value()){
-                            dg::network_log_stackdump::error(dg::network_exception::verbose(smp_err.error()));
-                        }
-
-                        break;
-                    }
-                    case ACTION_THRU:
-                    {
-                        break;
-                    }
-                    default:
-                    {
-                        if constexpr(DEBUG_MODE_FLAG){
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (this->mtx_queue.size() == this->mtx_queue_cap){
                             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                             std::abort();
-                        } else{
-                            std::unreachable();
                         }
                     }
-                }
+
+                    this->mtx_queue.push_back(waiting_smp);
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    this->mtx_queue_sz.value.fetch_add(1u, std::memory_order_relaxed);
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                    intmax_t new_current = this->counter.value.load(std::memory_order_relaxed); 
+
+                    if (new_current >= expected){
+                        stdx::seq_cst_guard seqcst_tx;
+
+                        this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
+                        smp_vec = this->mtx_queue;
+                        this->mtx_queue.clear();
+                    }
+                }();
+
+                this->do_release(smp_vec);
+                std::atomic_signal_fence(std::memory_order_seq_cst); // another fence
+                waiting_smp->acquire();
             }
 
         private:
 
-            auto unsafe_register_subscriber(std::shared_ptr<dg_binary_semaphore> smp) noexcept -> exception_t{
+            inline __attribute__((force_inline)) void do_release(dg::vector<std::shared_ptr<semaphore_impl::dg_binary_semaphore>>& smp_vec){
 
-                if (smp == nullptr){
-                    return dg::network_exception::INVALID_ARGUMENT;
+                for (const auto& smp: smp_vec){
+                    smp->release();
                 }
 
-                if (this->smp_queue.size() == this->smp_queue_cap){
-                    return dg::network_exception::QUEUE_FULL;
-                }
-
-                this->smp_queue.push_back(std::move(smp));
-                stdx::seq_cst_guard seqcst_tx;
-                this->smp_queue_sz.value.fetch_add(1u, std::memory_order_relaxed);
-            }
-
-            void unsafe_notify_subscribers() noexcept{
-
-                stdx::seq_cst_guard seqcst_tx;
-                size_t old_sz = this->smp_queue_sz.value.exchange(0u, std::memory_order_relaxed);
-
-                for (size_t i = 0u; i < old_sz; ++i){ //we are inferring the sz read to establish implicit memory ordering
-                    exception_t smp_err = this->smp_queue[i]->release();
-
-                    if (dg::network_exception::is_failed(smp_err)){
-                        dg::network_log_stackdump::error(dg::network_exception::verbose(smp_err));
-                    }
-                }
-
-                this->smp_queue.clear();
+                smp_vec.clear();
             }
     };
 
-    //OK, this is too expensive, we have to increase the <incrementing_id> -> __uint128_t to chance better than RAM, whenever we have a question about random accuracy, we need to know whether it chances better than RAM or not
     class PacketIDGenerator: public virtual PacketIDGeneratorInterface{
 
         private:
@@ -1477,6 +1186,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map;
             const std::chrono::nanoseconds abs_timeout_dur;
+            const size_t ticking_clock_resolution;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> thru_sz_per_load;
 
@@ -1484,9 +1194,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             TemporalAbsoluteTimeoutInBoundGate(temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map,
                                                std::chrono::nanoseconds abs_timeout_dur,
+                                               size_t ticking_clock_resolution,
                                                std::unique_ptr<std::mutex> mtx,
                                                stdx::hdi_container<size_t> thru_sz_per_load) noexcept: abstimeout_map(std::move(abstimeout_map)),
                                                                                                        abs_timeout_dur(abs_timeout_dur),
+                                                                                                       ticking_clock_resolution(ticking_clock_resolution),
                                                                                                        mtx(std::move(mtx)),
                                                                                                        thru_sz_per_load(std::move(thru_sz_per_load)){}
 
@@ -1501,20 +1213,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                std::chrono::time_point<std::chrono::steady_clock> now              = std::chrono::steady_clock::now();
-                std::chrono::time_point<std::chrono::steady_clock> timeout_value    = now + this->abs_timeout_dur;
+                auto ticking_steady_clock = dg::ticking_clock<std::chrono::steady_clock>(this->ticking_clock_resolution); 
 
                 for (size_t i = 0u; i < sz; ++i){
                     auto map_ptr = this->abstimeout_map.find(global_id_arr[i]);
 
                     if (map_ptr == this->abstimeout_map.end()){
+                        auto timeout_value = ticking_steady_clock.get() + this->abs_timeout_dur;
                         auto [emplace_ptr, status] = this->abstimeout_map.try_emplace(global_id_arr[i], timeout_value);
                         dg::network_exception_handler::dg_assert(status);
                         exception_arr[i] = dg::network_exception::SUCCESS; 
                         continue;
                     }
 
-                    if (map_ptr->second <= now){
+                    if (map_ptr->second <= ticking_steady_clock.get()){
                         exception_arr[i] = dg::network_exception::SOCKET_STREAM_TIMEOUT;
                         continue;                        
                     }
@@ -1573,18 +1285,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     size_t partitioned_idx      = hashed_value & (this->pow2_base_arr_sz - 1u);
                     auto feed_arg               = InternalFeedArgument{};
                     feed_arg.id                 = global_id_arr[i];
-                    feed_arg.bad_exception_ptr  = std::next(exception_arr, i); 
+                    feed_arg.bad_exception_ptr  = std::next(exception_arr, i);
 
                     dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, feed_arg);
                 }
-
             }
 
             auto max_consume_size() noexcept -> size_t{
 
                 return this->thru_sz_per_load;
             }
-        
+
         private:
 
             struct InternalFeedArgument{
@@ -1881,7 +1592,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 for (size_t i = 0u; i < segment_sz; ++i){
                     size_t first                                    = segment_bsz * i;
-                    size_t last                                     = std::min(segment_bsz * (i + 1), buf.size()); 
+                    size_t last                                     = std::min(static_cast<size_t>(segment_bsz * (i + 1)), static_cast<size_t>(buf.size())); 
                     PacketSegment segment                           = {};
                     segment.id                                      = pkt_stream_id;
                     segment.segment_idx                             = i;
@@ -2740,23 +2451,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             std::unique_ptr<std::unique_ptr<InBoundContainerInterface>[]> buffer_container_vec;
             size_t pow2_buffer_container_vec_sz;
-            size_t zero_buffer_retry_sz;
-            std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred;
-            size_t drain_peek_cap_per_container;
             size_t consume_sz_per_load; 
 
         public:
 
             HashDistributedBufferContainer(std::unique_ptr<std::unique_ptr<InBoundContainerInterface>[]> buffer_container_vec,
                                            size_t pow2_buffer_container_vec_sz,
-                                           size_t zero_buffer_retry_sz,
-                                           std::unique_ptr<ProducerDrainerPredicateInterface> drainer_pred,
-                                           size_t drain_peek_cap_per_container,
                                            size_t consume_sz_per_load) noexcept: buffer_container_vec(std::move(buffer_container_vec)),
                                                                                  pow2_buffer_container_vec_sz(pow2_buffer_container_vec_sz),
-                                                                                 zero_buffer_retry_sz(zero_buffer_retry_sz),
-                                                                                 drainer_pred(std::move(drainer_pred)),
-                                                                                 drain_peek_cap_per_container(drain_peek_cap_per_container),
                                                                                  consume_sz_per_load(consume_sz_per_load){}
 
             void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -2776,11 +2478,19 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
-                if (this->drainer_pred->is_should_drain()){
-                    this->internal_drain(output_buffer_arr, sz, output_buffer_arr_cap);
-                    this->drainer_pred->reset();
-                } else{
-                    this->internal_curious_pop(output_buffer_arr, sz, output_buffer_arr_cap);
+                sz = 0u; 
+
+                for (size_t i = 0u; i < this->pow2_buffer_container_vec_sz; ++i){
+                    size_t remaining_cap = output_buffer_arr_cap - sz;
+                    
+                    if (remaining_cap == 0u){
+                        return;
+                    }
+
+                    dg::string * tmp_output_buffer_arr = std::next(output_buffer_arr, sz); 
+                    size_t tmp_sz{};
+                    this->buffer_container_vec[i]->pop(tmp_output_buffer_arr, tmp_sz, remaining_cap);
+                    sz += tmp_sz;
                 }
             }
 
@@ -2788,67 +2498,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 return this->consume_sz_per_load;
             }
-        
-        private:
-
-            void internal_curious_pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
-
-                sz = 0u;
-
-                for (size_t i = 0u; i < this->zero_buffer_retry_sz; ++i){
-                    size_t random_value = dg::network_randomizer::randomize_int<size_t>();
-                    size_t random_idx   = random_value & (this->pow2_buffer_container_vec_sz - 1u);
-
-                    this->buffer_container_vec[random_idx]->pop(output_buffer_arr, sz, output_buffer_arr_cap);
-
-                    if (sz != 0u){
-                        return;
-                    }
-                }
-            }
-
-            void internal_drain(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
-
-                sz = 0u;
-                dg::string * current_output_arr = output_buffer_arr;
-                size_t current_cap  = output_buffer_arr_cap;
-                size_t start_seek   = dg::network_randomizer::randomize_int<size_t>() >> 1; //alright this is one of the myths, because container_vec_sz is already pow2 
-
-                for (size_t i = 0u; i < this->pow2_buffer_container_vec_sz; ++i){
-                    if (current_cap == 0u){
-                        return;
-                    }
-
-                    size_t peeking_cap  = std::min(current_cap, this->drain_peek_cap_per_container);
-                    size_t adjusted_idx = (start_seek + i) & (this->pow2_buffer_container_vec_sz - 1u);
-                    size_t current_sz   = {};
-                    this->buffer_container_vec[adjusted_idx]->pop(current_output_arr, current_sz, peeking_cap);
-                    current_cap         -= current_sz;
-                    sz                  += current_sz;
-                    std::advance(current_output_arr, current_sz);
-                }
-            }
     };
 
     //OK
-
-    template <class T>
-    class ReactingBufferContainer{};
-
-    template <class ID>
-    class ReactingBufferContainer<AffinedTimeoutController<ID>>: public virtual InBoundContainerInterface{
+    class ReactingBufferContainer: public virtual BufferContainerInterface{
 
         private:
 
-            std::unique_ptr<InBoundContainerInterface> base;
+            std::unique_ptr<BufferContainerInterface> base;
             std::unique_ptr<ComplexReactor> reactor;
             std::chrono::nanoseconds max_wait_time;
 
         public:
 
-            using timeout_controller = AffinedTimeoutController<ID>; //its incredibly hard to not use dep injection, if we are to go down the route of including this as part of the interface, it's not gonna last 
-
-            ReactingBufferContainer(std::unique_ptr<InBoundContainerInterface> base,
+            ReactingBufferContainer(std::unique_ptr<BufferContainerInterface> base,
                                     std::unique_ptr<ComplexReactor> reactor,
                                     std::chrono::nanoseconds max_wait_time) noexcept: base(std::move(base)),
                                                                                       reactor(std::move(reactor)),
@@ -2864,20 +2527,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-                std::optional<std::chrono::nanoseconds> user_specified_timeout = timeout_controller::get();
-
-                if (user_specified_timeout.has_value()){
-                    if (user_specified_timeout.value() == std::chrono::nanoseconds::min()){
-                        (void) user_specified_timeout;
-                    } else{
-                        this->reactor->subscribe(user_specified_timeout.value());
-                    }
-                } else{
-                    this->reactor->subscribe(this->max_wait_time);
-                }
-
+                this->reactor->subscribe(this->max_wait_time);
                 std::atomic_signal_fence(std::memory_order_seq_cst);
-
                 this->base->pop(output_buffer_arr, sz, output_buffer_arr_cap);
                 this->reactor->decrement(sz);
             }
@@ -2886,6 +2537,203 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 return this->base->max_consume_size();
             }
+    };
+
+    //OK
+    class FairInBoundBufferContainer: public virtual BufferContainerInterface{
+
+        private:
+
+            dg::pow2_cyclic_queue<dg::vector<dg::string>> distribution_queue;
+            dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue;
+            dg::pow2_cyclic_queue<dg::vector<dg::string>> leftover_queue;
+            std::unique_ptr<std::mutex> mtx;
+            stdx::hdi_container<size_t> consume_sz_per_load;
+        
+        public:
+
+            FairInBoundBufferContainer(dg::pow2_cyclic_queue<dg::vector<dg::string>> distribution_queue,
+                                       dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue,
+                                       dg::pow2_cyclic_queue<dg::vector<dg::string>> leftover_queue,
+                                       std::unique_ptr<std::mutex> mtx,
+                                       size_t consume_sz_per_load): distribution_queue(std::move(distribution_queue)),
+                                                                    waiting_queue(std::move(waiting_queue)),
+                                                                    leftover_queue(std::move(leftover_queue)),
+                                                                    mtx(std::move(mtx)),
+                                                                    consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
+
+            void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                if (sz == 0u){
+                    return;
+                }
+
+                dg::string * base_buffer_arr = buffer_arr.base();
+                dg::vector<dg::string> buffer_vec = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<dg::string>>(std::make_move_iterator(base_buffer_arr),
+                                                                                                                                                                std::next(std::make_move_iterator(base_buffer_arr), sz)));                
+                semaphore_impl::dg_binary_semaphore * releasing_smp = nullptr;
+
+                exception_t err = [&, this]() noexcept{
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->waiting_queue.empty()){
+                        auto [dst, smp] = this->waiting_queue.front();
+                        this->waiting_queue.pop_front();
+                        *dst = std::move(buffer_vec);
+                        releasing_smp = smp;
+
+                        return dg::network_exception::SUCCESS;
+                    }
+
+                    if (this->distribution_queue.size() != this->distribution_queue.capacity()){
+                        dg::network_exception_handler::nothrow_log(this->distribution_queue.push_back(std::move(buffer_vec)));
+                        return dg::network_exception::SUCCESS;
+                    }
+
+                    return dg::network_exception::QUEUE_FULL;
+                }();
+
+                if (dg::network_exception::is_failed(err)){
+                    std::copy(std::make_move_iterator(buffer_vec.begin()), std::make_move_iterator(buffer_vec.end()), base_buffer_arr);
+                    std::fill(exception_arr, std::next(exception_arr, sz), err);
+                    return;
+                }
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+
+                if (releasing_smp != nullptr){
+                    releasing_smp->release();
+                }
+            }
+
+            void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
+
+                std::optional<dg::vector<dg::string>> str_vec(std::nullopt); 
+                semaphore_impl::dg_binary_semaphore smp(0);
+                
+                bool is_acquire_required = [&, this]() noexcept{
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->leftover_queue.empty()){
+                        str_vec = std::move(this->leftover_queue.front());
+                        this->leftover_queue.pop_front();
+                        return false;
+                    }
+
+                    if (!this->distribution_queue.empty()){
+                        str_vec = std::move(this->distribution_queue.front());
+                        this->distribution_queue.pop_front();
+                        return false;
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->waiting_queue.push_back(std::make_pair(&str_vec, &smp)));
+                    return true;
+                }();
+
+                if (is_acquire_required){
+                    smp.acquire();
+                }
+
+                dg::network_exception_handler::dg_assert(str_vec.has_value());
+                sz = std::min(output_buffer_arr_cap, static_cast<size_t>(str_vec->size()));
+                size_t rem_sz = str_vec->size() - sz;                
+
+                std::copy(std::make_move_iterator(std::next(str_vec->begin(), rem_sz)),
+                          std::make_move_iterator(str_vec->end()),
+                          output_buffer_arr);
+
+                str_vec->resize(rem_sz);
+
+                if (!str_vec->empty()){
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->waiting_queue.empty()){
+                        auto [dst, smp] = this->waiting_queue.front();
+                        this->waiting_queue.pop_front();
+                        *dst = std::move(str_vec.value());
+                        smp->release();
+                    } else{
+                        dg::network_exception_handler::nothrow_log(this->leftover_queue.push_back(std::move(str_vec.value())));
+                    }
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t{
+
+                return this->consume_sz_per_load.value;
+            }
+    };
+
+    //OK
+    class BufferContainerRedistributorWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<BufferContainerInterface> fr_warehouse;
+            std::shared_ptr<BufferContainerInterface> to_warehouse;
+            size_t fr_warehouse_get_cap;
+            size_t to_warehouse_push_cap;
+            size_t busy_threshold;
+
+        public:
+
+            BufferContainerRedistributorWorker(std::shared_ptr<BufferContainerInterface> fr_warehouse,
+                                               std::shared_ptr<BufferContainerInterface> to_warehouse,
+                                               size_t fr_warehouse_get_cap,
+                                               size_t to_warehouse_push_cap,
+                                               size_t busy_threshold) noexcept: fr_warehouse(std::move(fr_warehouse)),
+                                                                                to_warehouse(std::move(to_warehouse)),
+                                                                                fr_warehouse_get_cap(fr_warehouse_get_cap),
+                                                                                to_warehouse_push_cap(to_warehouse_push_cap),
+                                                                                busy_threshold(busy_threshold){}
+
+            bool run_one_epoch() noexcept{
+
+                dg::network_stack_allocation::NoExceptAllocation<dg::string[]> recv_buf_arr(this->fr_warehouse_get_cap);
+                size_t fr_warehouse_get_sz = 0u;
+
+                this->fr_warehouse->pop(recv_buf_arr.get(), fr_warehouse_get_sz, this->fr_warehouse_get_cap);
+
+                auto delivery_resolutor             = InternalDeliveryResolutor{};
+                delivery_resolutor.dst              = this->to_warehouse.get();
+
+                size_t adjusted_delivery_sz         = std::min(std::min(fr_warehouse_get_sz, this->to_warehouse_push_cap), this->to_warehouse->max_consume_size());
+                size_t deliverer_allocation_cost    = dg::network_producer_consumer::delvrsrv_allocation_cost(&delivery_resolutor, adjusted_delivery_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> deliverer_buf(deliverer_allocation_cost);
+                auto deliverer                      = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&delivery_resolutor, adjusted_delivery_sz, deliverer_buf.get()));
+
+                for (size_t i = 0u; i < fr_warehouse_get_sz; ++i){
+                    dg::network_producer_consumer::delvrsrv_deliver(deliverer.get(), std::move(recv_buf_arr[i]));
+                }
+
+                return fr_warehouse_get_sz >= this->busy_threshold;
+            }
+        
+        private:
+
+            struct InternalDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<dg::string>{
+
+                BufferContainerInterface * dst;
+
+                void push(std::move_iterator<dg::string *> data_arr, size_t data_arr_sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(data_arr_sz);
+                    this->dst->push(data_arr, data_arr_sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < data_arr_sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }
+            };
     };
 
     //OK
@@ -3762,7 +3610,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                          std::move(exhaustion_controller));
         }
 
-        template <class Controller>
         static auto get_reacting_buffer_container(std::unique_ptr<InBoundContainerInterface> base,
                                                   size_t reacting_threshold,
                                                   size_t concurrent_subscriber_cap,
@@ -3785,32 +3632,57 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<ReactingBufferContainer<Controller>>(std::move(base),
-                                                                         get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
-                                                                         wait_time);
+            return std::make_unique<ReactingBufferContainer(std::move(base),
+                                                            get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
+                                                            wait_time);
         }
 
-        static auto get_random_hash_distributed_buffer_container(std::vector<std::unique_ptr<InBoundContainerInterface>> base_vec,
-                                                                 std::chrono::nanoseconds drain_period,
-                                                                 size_t drain_peek_cap,
-                                                                 size_t zero_buffer_retry_sz = 8u) -> std::unique_ptr<InBoundContainerInterface>{
+
+        static auto get_fair_inbound_buffer_container(size_t distribution_queue_sz,
+                                                      size_t waiting_queue_sz,
+                                                      size_t leftover_queue_sz,
+                                                      size_t consume_factor = 4u) -> std::unique_ptr<BufferContainerInterface>{
+            
+            const size_t MIN_DISTRIBUTION_QUEUE_SZ  = size_t{1};
+            const size_t MAX_DISTRIBUTION_QUEUE_SZ  = size_t{1} << 20;
+            const size_t MIN_WAITING_QUEUE_SZ       = size_t{1};
+            const size_t MAX_WAITING_QUEUE_SZ       = size_t{1} << 20;
+            const size_t MIN_LEFTOVER_QUEUE_SZ      = size_t{1};
+            const size_t MAX_LEFTOVER_QUEUE_SZ      = size_t{1} << 20;
+                                    
+            if (std::clamp(distribution_queue_sz, MIN_DISTRIBUTION_QUEUE_SZ, MAX_DISTRIBUTION_QUEUE_SZ) != distribution_queue_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(waiting_queue_sz, MIN_WAITING_QUEUE_SZ, MAX_WAITING_QUEUE_SZ) != waiting_queue_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(leftover_queue_sz, MIN_LEFTOVER_QUEUE_SZ, MAX_LEFTOVER_QUEUE_SZ) != leftover_queue_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t tentative_consume_sz     = std::min(distribution_queue_sz, waiting_queue_sz) >> consume_factor;
+            size_t normalized_consume_sz    = std::max(tentative_consume_sz, static_cast<size_t>(1u));
+
+            return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
+                                                                dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
+                                                                dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
+                                                                std::make_unique<std::mutex>(),
+                                                                normalized_consume_sz);
+        }
+
+
+        static auto get_random_hash_distributed_buffer_container(std::vector<std::unique_ptr<InBoundContainerInterface>> base_vec) -> std::unique_ptr<InBoundContainerInterface>{
 
             const size_t MIN_BASE_VEC_SZ            = size_t{1};
             const size_t MAX_BASE_VEC_SZ            = size_t{1} << 20;
-            const size_t MIN_ZERO_BUFFER_RETRY_SZ   = size_t{1};
-            const size_t MAX_ZERO_BUFFER_RETRY_SZ   = size_t{1} << 20;
-            const size_t MIN_DRAIN_PEEK_CAP         = size_t{1};
-            const size_t MAX_DRAIN_PEEK_CAP         = size_t{1} << 30;
 
             if (std::clamp(base_vec.size(), MIN_BASE_VEC_SZ, MAX_BASE_VEC_SZ) != base_vec.size()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             if (!stdx::is_pow2(base_vec.size())){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (std::clamp(drain_peek_cap, MIN_DRAIN_PEEK_CAP, MAX_DRAIN_PEEK_CAP) != drain_peek_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -3826,15 +3698,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 base_vec_up[i]  = std::move(base_vec[i]);
             }
 
-            if (std::clamp(zero_buffer_retry_sz, MIN_ZERO_BUFFER_RETRY_SZ, MAX_ZERO_BUFFER_RETRY_SZ) != zero_buffer_retry_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
             return std::make_unique<HashDistributedBufferContainer>(std::move(base_vec_up),
                                                                     base_vec.size(),
-                                                                    zero_buffer_retry_sz,
-                                                                    get_timing_drainer(drain_period),
-                                                                    drain_peek_cap,
                                                                     consumption_sz);
         }
 
@@ -4431,421 +4296,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         return ConfigMaker::make(config);
     }
-
-    static auto internal_get_affined_blockonsend_permission_guard() noexcept{
-
-        auto prev_state             = client_affined_blocksend_controller::get();
-        auto resource_scope_guard   = [prev_state]() noexcept{
-            client_affined_blocksend_controller::abs_set(prev_state);
-        };
-
-        return stdx::resource_guard(resource_scope_guard);
-    } 
-
-    extern void send_2(dg::network_kernel_mailbox_impl1::core::MailboxInterface * obj, std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr, bool is_block) noexcept{
-
-        auto permission_guard = internal_get_affined_blockonsend_permission_guard();
-        client_affined_blocksend_controller::set(is_block);
-        stdx::safe_ptr_access(obj)->send(data_arr, sz, exception_arr);        
-    }
-
-    static auto internal_get_affined_timeout_guard() noexcept{
-
-        auto prev_state             = client_affined_timeout_controller::get();
-        auto resource_scope_guard   = [prev_state]() noexcept{
-            client_affined_timeout_controller::abs_set(prev_state);
-        };
-
-        return stdx::resource_guard(resource_scope_guard);
-    }
-
-    extern void recv_2(dg::network_kernel_mailbox_impl1::core::MailboxInterface * obj, dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap, std::chrono::nanoseconds timeout) noexcept{
-
-        auto timeout_guard = internal_get_affined_timeout_guard();
-        client_affined_timeout_controller::set(timeout);
-        stdx::safe_ptr_access(obj)->recv(output_arr, output_arr_sz, output_arr_cap);
-    }
 }
-
-// namespace dg::network_kernel_mailbox_impl1_radixx{
-
-//     //this is hard to write
-
-//     using Address = dg::network_kernel_mailbox_impl1::model::Address; 
-//     using radix_t = uint32_t; 
-
-//     struct RadixMessage{
-//         radix_t radix;
-//         dg::string content;
-
-//         template <class Reflector>
-//         void dg_reflect(const Reflector& reflector) const{
-//             reflector(radix, content);
-//         }
-
-//         template <class Reflector>
-//         void dg_reflect(const Reflector& reflector){
-//             reflector(radix, content);
-//         }
-//     };
-
-//     static auto serialize_radixmsg(RadixMessage&& inp) noexcept -> std::expected<dg::string, exception_t>{
-
-//     }
-
-//     static auto deserialize_radixmsg(dg::string&& inp) noexcept -> std::expected<RadixMessage, exception_t>{
-
-//     }
-
-//     struct RadixMailBoxArgument{
-//         Address to;
-//         dg::string content;
-//         radix_t radix;
-//     }; 
-
-//     struct RadixMailboxInterface{
-//         virtual ~RadixMailboxInterface() noexcept = default;
-//         virtual void send(std::move_iterator<RadixMailBoxArgument *> data_arr, size_t data_arr_sz, exception_t * exception_arr) noexcept = 0;
-//         virtual void recv(dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap, radix_t radix) noexcept = 0;
-//     };
-
-//     struct InBoundContainerInterface{
-//         virtual ~InBoundContainerInterface() noexcept = default;
-//         virtual void push(std::move_iterator<dg::string *>, size_t, exception_t *) noexcept = 0;
-//         virtual void pop(dg::string *, size_t&, size_t) noexcept = 0;
-//     };
-
-//     struct RadixInBoundContainerInterface{
-//         virtual ~RadixInBoundContainerInterface() noexcept = default;
-//         virtual void push(radix_t, std::move_iterator<dg::string *>, size_t, exception_t *) noexcept = 0;
-//         virtual void pop(radix_t, dg::string *, size_t&, size_t) noexcept = 0;
-//     };
-
-//     class RadixMailBox: public virtual RadixMailboxInterface{
-
-//         private:
-
-//             dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec; 
-//             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
-//             std::shared_ptr<InBoundContainerInterface> inbound_container;
-
-//         public:
-
-//             RadixMailBox(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec, 
-//                          std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
-//                          std::shared_ptr<InBoundContainerInterface> inbound_container) noexcept: daemon_vec(std::move(daemon_vec)),
-//                                                                                                  base(std::move(base)),
-//                                                                                                  inbound_container(std::move(inbound_container)){}
-            
-//     };
-
-//     struct Factory{
-
-//         static auto spawn_exhaustion_controller(size_t capacity) -> std::unique_ptr<ExhaustionControllerInterface>{
-
-//             const size_t MIN_CAPACITY   = 1u;
-//             const size_t MAX_CAPACITY   = size_t{1} << 20;
-
-//             if (std::clamp(capacity, MIN_CAPACITY, MAX_CAPACITY) != capacity){
-//                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-//             }
-
-//             auto mtx = std::make_unique<std::mutex>(); 
-//             return std::make_unique<StdExhaustionController>(0u, capacity, std::move(mtx));
-//         }
-
-//         static auto spawn_inbound_container() -> std::unique_ptr<InBoundContainerInterface>{
-
-//             auto map    = dg::unordered_map<radix_t, dg::deque<dg::string>>{};
-//             auto mtx    = std::make_unique<std::mutex>(); 
-
-//             return std::make_unique<InBoundContainer>(std::move(map), std::move(mtx));
-//         }
-
-//         static auto spawn_exhaustion_controlled_inbound_container(dg::unordered_map<radix_t, size_t> exhaustion_map,
-//                                                                   std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> executor) -> std::unique_ptr<InBoundContainerInterface>{
-            
-//             if (executor == nullptr){
-//                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-//             }
-
-//             dg::unordered_map<radix_t, std::unique_ptr<ExhaustionControllerInterface>> exhaustion_controller_map{};
-
-//             for (const auto& pair: exhaustion_map){
-//                 exhaustion_controller_map.insert(std::make_pair(std::get<0>(pair), spawn_exhaustion_controller(std::get<1>(pair))));
-//             }
-
-//             std::unique_ptr<InBoundContainerInterface> base = spawn_inbound_container();
-//             std::unique_ptr<std::mutex> mtx = std::make_unique<std::mutex>(); 
-
-//             return std::make_unique<ExhaustionControlledInBoundContainer>(std::move(base), std::move(exhaustion_controller_map), std::move(executor), std::move(mtx));
-//         }
-
-//         static auto spawn_mailbox_radixx(std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
-//                                          std::unique_ptr<InBoundContainerInterface> inbound_container,
-//                                          size_t num_inbound_worker) -> std::unique_ptr<RadixMailboxInterface>{
-            
-//             const size_t MIN_INBOUND_WORKER = 1u;
-//             const size_t MAX_INBOUND_WORKER = 1024u; 
-
-//             if (base == nullptr){
-//                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-//             }
-
-//             if (inbound_container == nullptr){
-//                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-//             }
-
-//             if (std::clamp(num_inbound_worker, MIN_INBOUND_WORKER, MAX_INBOUND_WORKER) != num_inbound_worker){
-//                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-//             }
-
-//             dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec{};
-//             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base_sp = std::move(base);
-//             std::shared_ptr<InBoundContainerInterface> inbound_container_sp = std::move(inbound_container);
-
-//             //TODO: this is buggy - this will be DL if exception raises - not to worry about this now
-//             for (size_t i = 0u; i < num_inbound_worker; ++i){
-//                 auto worker = std::make_unique<InBoundWorker>(base_sp, inbound_container_sp);
-//                 auto handle = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker)));
-//                 daemon_vec.push_back(std::move(handle));
-//             }
-
-//             return std::make_unique<RadixMailBox>(std::move(daemon_vec), base_sp, inbound_container_sp);
-//         }
-//     };
-
-//     struct Config{
-//         dg::unordered_map<radix_t, size_t> exhaustion_capacity_map;
-//         std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
-//         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> retry_device;
-//         size_t num_inbound_worker;
-//     };
-
-//     auto spawn(Config config) -> std::unique_ptr<RadixMailboxInterface>{
-
-//         auto inbound_container = Factory::spawn_exhaustion_controlled_inbound_container(config.exhaustion_capacity_map, config.retry_device);
-//         auto rs = Factory::spawn_mailbox_radixx(std::move(config.base), std::move(inbound_container), config.num_inbound_worker); 
-
-//         return rs;
-//     }
-// };
-
-/*
-namespace dg::network_kernel_mailbox_impl1_heartbeatx{
-
-    using radix_t = network_kernel_mailbox_impl1_radixx::radix_t; 
-
-    struct ObserverInterface{
-        virtual ~ObserverInterface() noexcept = default;
-        virtual void notify() noexcept = 0; //this has to be an exitable-in-all-scenerios-invoke - to enforce this - return a std::atomic<bool>& for notifier to set - it's the observer's worker responsibility to observe the std::atomic<bool>& intervally  
-    };
-
-    struct HeartBeatMonitorInterface{
-        virtual ~HeartBeatMonitorInterface() noexcept = default;
-        virtual void recv_signal(const Address&) noexcept = 0;
-        virtual bool check() noexcept = 0;
-    };
-
-    class HeartBeatMonitor: public virtual HeartBeatMonitorInterface{
-
-        private:
-
-            dg::unordered_map<Address, std::chrono::nanoseconds> address_ts_dict;
-            std::chrono::nanoseconds error_threshold;
-            std::chrono::nanoseconds termination_threshold;
-            std::unique_ptr<std::mutex> mtx;
-
-        public:
-
-            HeartBeatMonitor(dg::unordered_map<Address, std::chrono::nanoseconds> address_ts_dict,
-                             std::chrono::nanoseconds error_threshold,
-                             std::chrono::nanoseconds termination_threshold,
-                             std::unique_ptr<std::mutex> mtx) noexcept: address_ts_dict(std::move(address_ts_dict)),
-                                                                        error_threshold(std::move(error_threshold)),
-                                                                        termination_threshold(std::move(termination_threshold)),
-                                                                        mtx(std::move(mtx)){}
-
-            void recv_signal(const Address& addr) noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                auto ptr = this->address_ts_dict.find(addr);
-
-                if (ptr == this->address_ts_dict.end()){
-                    auto err_msg = this->make_foreign_heartbeat_error_msg(addr);
-                    dg::network_log::error_fast(err_msg.c_str());
-                    return;
-                }
-
-                ptr->second = dg::network_genult::unix_timestamp();
-            }
-
-            bool check() noexcept{
-
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                std::chrono::nanoseconds now = dg::network_genult::unix_timestamp(); 
-                bool status = true; 
-
-                for (const auto& pair: this->address_ts_dict){
-                    if (dg::network_genult::timelapsed(pair.second, now) > this->error_threshold){
-                        auto err_msg = this->make_missing_heartbeat_error_msg(pair.first); 
-                        dg::network_log::error_fast(err_msg.c_str());
-                        status = false;
-                    }
-
-                    if (dg::network_genult::timelapsed(pair.second, now) > this->termination_threshold){
-                        auto err_msg = this->make_missing_heartbeat_error_msg(pair.first);
-                        dg::network_log::critical(err_msg.c_str());
-                        std::abort();
-                    }
-                }
-
-                return status;
-            }
-        
-        private:
-
-            auto make_missing_heartbeat_error_msg(const Address& addr) const noexcept -> dg::string{ //global memory pool - better to be noexcept here
-
-                const char * fmt = "[NETWORKSTACK_HEARTBEAT] heartbeat not detected from {}:{}"; //ip-resolve is done externally - via log_reading - virtual ip is required to spawn proxy (if a node is not responding)
-                return std::format(fmt, addr.ip, size_t{addr.port});
-            }
-
-            auto make_foreign_heartbeat_error_msg(const Address& addr) const noexcept -> dg::string{
-
-                const char * fmt = "[NETWORKSTACK_HEARTBEAT] foreign heartbeat from {}:{}";
-                return std::format(fmt, addr.ip, size_t{addr.port});
-            }
-    };
-
-    class HeartBeatBroadcaster: public virtual dg::network_concurrency::WorkerInterface{
-
-        private:
-
-            dg::vector<Address> addr_table;
-            Address host_addr;
-            std::shared_ptr<network_kernel_mailbox_impl1_radixx::MailBoxInterface> mailbox;
-            radix_t heartbeat_channel; 
-
-        public:
-
-            HeartBeatBroadcaster(dg::vector<Address> addr_table,
-                                 Address host_addr,
-                                 std::shared_ptr<network_kernel_mailbox_impl1_radixx::MailBoxInterface> mailbox,
-                                 radix_t heartbeat_channel) noexcept addr_table(std::move(addr_table)),
-                                                                     host_addr(std::move(host_addr)),
-                                                                     mailbox(std::move(mailbox)),
-                                                                     heartbeat_channel(std::move(heartbeat_channel)){}
-
-            bool run_one_epoch() noexcept{
-                
-                size_t host_addr_sz = dg::network_compact_serializer::size(this->host_addr);
-                dg::string serialized_host_addr(host_addr_sz);
-                dg::network_compact_serializer::serialize_into(serialized_host_addr.data(), this->host_addr); 
-
-                for (const auto& addr: this->addr_table){
-                     this->mailbox->send(addr, serialized_host_addr, this->heartbeat_channel);
-                }
-
-                return true;
-            }
-    };
-
-    class HeartBeatReceiver: public virtual dg::network_concurrency::WorkerInterface{
-
-        private:
-
-            std::unique_ptr<HeartBeatMonitorInterface> heartbeat_monitor;
-            std::shared_ptr<network_kernel_mailbox_impl1_radixx::MailBoxInterface> mailbox;
-            std::shared_ptr<ObserverInterface> observer;
-            radix_t heartbeat_channel; 
-
-        public:
-
-            HeartBeatReceiver(std::unique_ptr<HeartBeatMonitorInterface> heartbeat_monitor,
-                              std::shared_ptr<network_kernel_mailbox_impl1_radixx::MailBoxInterface> mailbox,
-                              std::shared_ptr<ObserverInterface> observer,
-                              radix_t heartbeat_channel) noexcept: heartbeat_monitor(std::move(heartbeat_monitor)),
-                                                                   mailbox(std::move(mailbox)),
-                                                                   observer(std::move(observer)),
-                                                                   heartbeat_channel(std::move(heartbeat_channel)){}
-            
-            bool run_one_epoch() noexcept{
-
-                if (!this->heartbeat_monitor->check()){
-                    this->observer->notify();
-                }
-
-                std::optional<dg::string> buf = this->mailbox->recv(this->heartbeat_channel);
-                
-                if (!static_cast<bool>(buf)){
-                    return false;
-                }
-
-                Address heartbeat_addr{};
-                dg::network_compact_serializer::deserialize_into(hearbeat_addr, buf->data()); 
-                this->heartbeat_monitor->recv_signal(heartbeat_addr);
-
-                return true;
-            }
-    };
-
-    class MailBox: public virtual network_kernel_mailbox_impl1_radixx::MailBoxInterface{
-
-        private:
-
-            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemons;
-            std::shared_ptr<network_kernel_mailbox_impl1_radixx::MailBoxInterface> mailbox;
-
-        public:
-
-            MailBox(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemons,
-                    std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> mailbox) noexcept: daemons(std::move(daemons)),
-                                                                                                                 mailbox(std::move(mailbox)){}
-
-
-            void send(Address addr, dg::string buf, radix_t radix) noexcept{
-                
-                this->mailbox->send(std::move(addr), std::move(buf), radix);
-            }
-
-            auto recv(radix_t radix) noexcept -> std::optional<dg::string>{
-
-                return this->mailbox->recv(radix);
-            }
-    };
-}
-
-namespace dg::network_kernel_mailbox_impl1_concurrentx{
-
-
-    using radix_t = dg::network_kernel_mailbox_impl1_radixx::radix_t; 
-
-    template <size_t CONCURRENCY_SZ>
-    class ConcurrentMailBox: public virtual dg::network_kernel_mailbox_impl1_radixx::MailBoxInterface{
-
-        private:
-
-            dg::vector<std::unique_ptr<dg::network_kernel_mailbox_impl1_radixx::MailBoxInterface>> mailbox_vec;
-        
-        public:
-
-            ConcurrentMailBox(dg::vector<std::unique_ptr<dg::network_kernel_mailbox_impl1_radixx::MailBoxInterface>> mailbox_vec,
-                              std::integral_constant<size_t, CONCURRENCY_SZ>) noexcept: mailbox_vec(std::move(mailbox_vec)){}
-
-            void send(Address addr, dg::string buf, radix_t radix) noexcept{
-
-                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{}); 
-                this->mailbox_vec[idx]->send(std::move(addr), std::move(buf), radix);
-            }
-
-            auto recv(radix_t radix) noexcept -> std::optional<std::network_std_container::string>{
-
-                size_t idx = dg::network_randomizer::randomize_range(std::integral_constant<size_t, CONCURRENCY_SZ>{}); 
-                return this->mailbox_vec[idx]->recv(radix);
-            }
-    };
-}
-*/
 
 #endif

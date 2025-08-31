@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include "network_compact_serializer.h"
+#include "network_compact_trivial_serializer.h"
 #include <mutex>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -1488,7 +1489,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
         std::pair<uint64_t, uint64_t> integrity_hash    = dg::network_hash::murmur_hash_base(packet.content.data(), packet.content.size(), REQUEST_PACKET_SERIALIZATION_SECRET);
         auto x_header                                   = x_header_t{static_cast<const PacketHeader&>(packet), integrity_hash};
-        size_t header_sz                                = dg::network_compact_serializer::dgstd_size(x_header);
+        size_t header_sz                                = dg::network_compact_trivial_serializer::size(x_header);
         size_t content_sz                               = packet.content.size();
         size_t total_sz                                 = content_sz + header_sz;
 
@@ -1499,7 +1500,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         }
 
         char * header_ptr                               = std::next(packet.content.data(), content_sz);
-        dg::network_compact_serializer::dgstd_serialize_into(header_ptr, x_header, REQUEST_PACKET_SERIALIZATION_SECRET);
+        dg::network_compact_trivial_serializer::serialize_into(header_ptr, x_header, REQUEST_PACKET_SERIALIZATION_SECRET);
 
         return std::expected<dg::string, exception_t>(std::move(packet.content));
     }
@@ -1518,7 +1519,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
         using x_header_t    = std::pair<PacketHeader, std::pair<uint64_t, uint64_t>>;
 
-        size_t header_sz    = dg::network_compact_serializer::dgstd_size(x_header_t{});
+        size_t header_sz    = dg::network_compact_trivial_serializer::size(x_header_t{});
 
         if (bstream.size() < header_sz){
             return std::unexpected(dg::network_exception::SOCKET_CORRUPTED_PACKET);
@@ -1527,7 +1528,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         auto x_header       = x_header_t{};
         RequestPacket rs    = {};
         auto [left, right]  = stdx::backsplit_str(std::move(bstream), header_sz);
-        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize_into<x_header_t>)(x_header, right.data(), right.size(), REQUEST_PACKET_SERIALIZATION_SECRET);
+        exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_trivial_serializer::deserialize_into<x_header_t>)(x_header, right.data(), right.size(), REQUEST_PACKET_SERIALIZATION_SECRET);
 
         if (dg::network_exception::is_failed(err)){
             return std::unexpected(err);
@@ -1546,22 +1547,22 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static auto deserialize_ack_packet(dg::string bstream) noexcept -> std::expected<AckPacket, exception_t>{
 
-        return dg::network_compact_serializer::integrity_deserialize<AckPacket>(bstream, ACK_PACKET_SERIALIZATION_SECRET);
+        return dg::network_compact_serializer::dgstd_deserialize<AckPacket>(bstream, ACK_PACKET_SERIALIZATION_SECRET);
     }
 
     static auto deserialize_krescue_packet(dg::string bstream) noexcept -> std::expected<KRescuePacket, exception_t>{
 
-        return dg::network_compact_serializer::integrity_deserialize<KRescuePacket>(bstream, KRESCUE_PACKET_SERIALIZATION_SECRET);
+        return dg::network_compact_serializer::dgstd_deserialize<KRescuePacket>(bstream, KRESCUE_PACKET_SERIALIZATION_SECRET);
     }
 
     static auto serialize_packet(Packet packet) noexcept -> std::expected<dg::string, exception_t>{
 
-        constexpr size_t PACKET_POLYMORPHIC_HEADER_SZ                                   = dg::network_trivial_serializer::size(packet_polymorphic_t{});
+        constexpr size_t PACKET_POLYMORPHIC_HEADER_SZ                                   = dg::network_compact_trivial_serializer::size(packet_polymorphic_t{});
         std::array<char, PACKET_POLYMORPHIC_HEADER_SZ> polymorphic_writing_container    = {}; 
         dg::string serialized                                                           = {};
 
         if (is_request_packet(packet)){
-            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::request));
+            dg::network_compact_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::request));
             std::expected<dg::string, exception_t> tmp = serialize_request_packet(dg::network_exception_handler::nothrow_log(devirtualize_request_packet(std::move(packet))));
 
             if (!tmp.has_value()){
@@ -1570,7 +1571,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
             serialized = std::move(tmp.value());
         } else if (is_ack_packet(packet)){
-            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::ack));
+            dg::network_compact_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::ack));
             std::expected<dg::string, exception_t> tmp = serialize_ack_packet(dg::network_exception_handler::nothrow_log(devirtualize_ack_packet(std::move(packet))));
 
             if (!tmp.has_value()){
@@ -1579,7 +1580,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
             serialized = std::move(tmp.value());
         } else if (is_krescue_packet(packet)){
-            dg::network_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::krescue));
+            dg::network_compact_trivial_serializer::serialize_into(polymorphic_writing_container.data(), static_cast<packet_polymorphic_t>(constants::krescue));
             std::expected<dg::string, exception_t> tmp = serialize_krescue_packet(dg::network_exception_handler::nothrow_log(devirtualize_krescue_packet(std::move(packet))));
 
             if (!tmp.has_value()){
@@ -1607,7 +1608,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static auto deserialize_packet(dg::string bstream) noexcept -> std::expected<Packet, exception_t>{
 
-        constexpr size_t PACKET_POLYMORPHIC_HEADER_SZ   = dg::network_trivial_serializer::size(packet_polymorphic_t{});
+        constexpr size_t PACKET_POLYMORPHIC_HEADER_SZ   = dg::network_compact_trivial_serializer::size(packet_polymorphic_t{});
         auto [left, right]                              = stdx::backsplit_str(std::move(bstream), PACKET_POLYMORPHIC_HEADER_SZ);
 
         if (right.size() != PACKET_POLYMORPHIC_HEADER_SZ){
@@ -1615,7 +1616,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
         }
 
         packet_polymorphic_t packet_type = {};
-        dg::network_trivial_serializer::deserialize_into(packet_type, right.data());
+        dg::network_compact_trivial_serializer::deserialize_into(packet_type, right.data(), right.size());
 
         if (packet_type == constants::request){
             std::expected<RequestPacket, exception_t> devirtualized_packet = deserialize_request_packet(std::move(left));

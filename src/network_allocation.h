@@ -562,6 +562,10 @@ namespace dg::network_allocation{
 
     //the ... will continue the loop of being queued again etc.
     //we actually have found the method to do generic square matrix multiplication, we need to have a super driver to do backward propagation (we dont have the driver yet, we'll probably need 2-3 years to find the driver) 
+    //I still think that we should have a dedicated allocator for large pow2 buffers
+    //because chances are combining those guys would be proned to fragmentation, even though we have already guarantted that would not happen ...
+    //I think that we'd just fatten the leaf to 1024 bytes (or even 8K) for large buffers + direct allocator, just to make sure the atomicity of memory (we could reduce fragmentation this way) 
+    //the problem has always been the units ... because it is, it's very important that we keep every allocation < 16KB in our application, make sure that everything runs smooth and nice
 
     template <class Metadata>
     class DGStdAllocator{
@@ -581,34 +585,11 @@ namespace dg::network_allocation{
             std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Allocation>> smallbin_reuse_table; //too many indirections
 
             NaiveBumpAllocator bump_allocator;
-            size_t bump_allocator_refill_sz;
+            std::vector<size_t> bump_allocator_refill_sz_vec;
             size_t bump_allocator_version_control;
 
             std::vector<Allocation> freebin_vec;
             size_t freebin_vec_cap;
-
-            //we'd try to "extract" the memory patterns, because memory pattern means exact reusable, so there is no use for upsizing the bin
-            //upsizing the bins are taken cared of by the smallbin_reuse_table
-
-            //I mean it's possible that we are looking at stuffs like 17 upsizing to 18 ... 31, which are the sole special cases 
-            //we dont have a "better" approach per se in terms of allocation speed and average use cases, really, in real life scenerios, exact reuse is the most important, even though we cant cover the 18 .. 31 range
-
-            //the implementation of unordered_node_map is very important in the sense of capturing the stack frame allocation patterns of a busy loop
-            //we are guaranteed to capture the allocations in the frame after a certain initial iterations (the iterations to either clear the map or the iterations to fill the buckets or both)
-            //we need to use a finite pool of pow2_cyclic_queue by using a special finite Allocator, we'll be talking about this
-
-            //why is this proved to be "good?"
-            //in the sense of capturing the allocation stack frames
-
-            //assume that the allocation eats thru the bump_allocator -> another version
-            //the version control will hinder the reusability of other noises that have destructive interference with the allocations
-
-            //every "eat-thru-the-recycle-bin" allocation will be reusable hence (either clear the map or fill the buckets or both, etc.), during a sufficiently-busy loop
-            //so there is actually no cases where the logic of extracting the stack frame patterns is hindered
-
-            //this is incredibly very super important in multi-core system, yeah, 1024 cores only share 1 RAM channel, we have to be innovative about this kind of reusability
-            //we need to be innovative about the pagination, essentially we'd want to "prefetch" the allocating buckets by telling the external workers that we'd be getting that soon
-            //we need to also be innovative about the bump_allocator deallocations, this is only half of the answer 
 
             dg::network_datastructure::unordered_map_variants::unordered_node_map<size_t, dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_map;
             std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<void *>> exact_allocation_queue_allocation_vec;
@@ -645,7 +626,7 @@ namespace dg::network_allocation{
                            std::vector<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<Allocation>> smallbin_reuse_table,
 
                            NaiveBumpAllocator bump_allocator,
-                           size_t bump_allocator_refill_sz,
+                           std::vector<size_t> bump_allocator_refill_sz_vec,
                            size_t bump_allocator_version_control,
 
                            std::vector<Allocation> freebin_vec,
@@ -667,7 +648,7 @@ namespace dg::network_allocation{
                                                                                    smallbin_reuse_table(std::move(smallbin_reuse_table)),
 
                                                                                    bump_allocator(bump_allocator),
-                                                                                   bump_allocator_refill_sz(bump_allocator_refill_sz),
+                                                                                   bump_allocator_refill_sz_vec(std::move(bump_allocator_refill_sz_vec)),
                                                                                    bump_allocator_version_control(bump_allocator_version_control),
 
                                                                                    freebin_vec(std::move(freebin_vec)),
@@ -1029,11 +1010,11 @@ namespace dg::network_allocation{
             }
 
             //this does not meet the atomicity requirements of refilling
-            inline auto internal_dispatch_bump_allocator_refill() noexcept -> bool{
+            inline auto internal_dispatch_bump_allocator_refill(size_t bump_allocator_refill_sz) noexcept -> bool{
 
-                assert(this->bump_allocator_refill_sz % HEAP_LEAF_UNIT_ALLOCATION_SZ != 0u);
+                assert(bump_allocator_refill_sz % HEAP_LEAF_UNIT_ALLOCATION_SZ != 0u);
 
-                size_t requesting_interval_sz   = this->bump_allocator_refill_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ;
+                size_t requesting_interval_sz   = bump_allocator_refill_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ;
                 auto requesting_interval        = std::optional<interval_type>{};
 
                 this->heap_allocator->alloc(&requesting_interval_sz, 1u, &requesting_interval);
@@ -1049,9 +1030,20 @@ namespace dg::network_allocation{
                 this->bump_allocator                        = NaiveBumpAllocator(static_cast<char *>(requesting_buf.first), requesting_buf.second);
                 this->bump_allocator_version_control        += 1;
 
-                this->internal_update_allocation_sensor(this->bump_allocator_refill_sz);
+                this->internal_update_allocation_sensor(bump_allocator_refill_sz);
 
                 return true;
+            }
+
+            inline auto internal_dispatch_bump_allocator_refill() noexcept -> bool{
+
+                for (size_t refill_cand: this->bump_allocator_refill_sz_vec){
+                    if (internal_dispatch_bump_allocator_refill(refill_cand)){
+                        return true;
+                    }
+                }
+
+                return false;
             }
 
             constexpr auto internal_get_bump_allocator_user_ptr_size(size_t user_blk_sz) noexcept -> size_t{
@@ -1233,9 +1225,9 @@ namespace dg::network_allocation{
 
                 //inverse operation of internal_large_malloc
 
-                void * internal_ptr         = this->internal_get_largebin_internal_ptr_head(user_ptr);
-                size_t internal_ptr_sz      = this->internal_read_largebin_user_ptr_size(user_ptr) + LARGEBIN_ALLOCATION_HEADER_SZ; 
-                interval_type intv          = this->internal_aligned_buf_to_interval({internal_ptr, internal_ptr_sz});
+                void * internal_ptr     = this->internal_get_largebin_internal_ptr_head(user_ptr);
+                size_t internal_ptr_sz  = this->internal_read_largebin_user_ptr_size(user_ptr) + LARGEBIN_ALLOCATION_HEADER_SZ; 
+                interval_type intv      = this->internal_aligned_buf_to_interval({internal_ptr, internal_ptr_sz});
 
                 this->heap_allocator->free(&intv, 1u);
             }

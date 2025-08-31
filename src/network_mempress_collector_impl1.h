@@ -531,7 +531,7 @@ namespace dg::network_mempress_collector{
     //these guys have different virtues of try_get optimizations that I have yet to explore
     //an attempt to polymorphic the solution is not recommended
     //so we would want to see the howtos later
- 
+
     class ClockTryCollector: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
