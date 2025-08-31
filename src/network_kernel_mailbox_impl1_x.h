@@ -1806,13 +1806,13 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 size_t seed = dg::network_randomizer::randomize_int<size_t>() >> 1;  
 
                 for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i){
-                    size_t idx      = (seed + i) & (this->pow2_base_arr_sz - 1u);
                     size_t rem_cap  = cap - sz;
 
                     if (rem_cap == 0u){
                         return;
                     }
 
+                    size_t idx = (seed + i) & (this->pow2_base_arr_sz - 1u);
                     GlobalIdentifier * tmp_output_arr = std::next(output_arr, sz);
                     size_t tmp_output_arr_sz{};
 
@@ -2423,6 +2423,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 sz = 0u; 
+                size_t seed = dg::network_randomizer::randomize_int<size_t>() >> 1; 
 
                 for (size_t i = 0u; i < this->pow2_buffer_container_vec_sz; ++i){
                     size_t remaining_cap = output_buffer_arr_cap - sz;
@@ -2431,7 +2432,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         return;
                     }
 
-                    dg::string * tmp_output_buffer_arr = std::next(output_buffer_arr, sz); 
+                    size_t idx = (seed + i) & (this->pow2_buffer_container_vec_sz - 1u);
+                    dg::string * tmp_output_buffer_arr = std::next(output_buffer_arr, sz);
                     size_t tmp_sz{};
                     this->buffer_container_vec[i]->pop(tmp_output_buffer_arr, tmp_sz, remaining_cap);
                     sz += tmp_sz;

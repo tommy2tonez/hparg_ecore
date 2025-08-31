@@ -2426,18 +2426,20 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void get_retriables(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
 
                 sz = 0u;
+                size_t seed = dg::network_randomizer::randomize_int<size_t>() >> 1; 
 
                 for (size_t i = 0u; i < this->pow2_retransmission_controller_vec_sz; ++i){
                     size_t remaining_cap = output_pkt_arr_cap - sz;
-                    
+
                     if (remaining_cap == 0u){
                         return;
                     }
 
+                    size_t idx = (seed + i) & (this->pow2_retransmission_controller_vec_sz - 1u);
                     Packet * tmp_output_pkt_arr = std::next(output_pkt_arr, sz);
                     size_t tmp_sz{};
 
-                    this->retransmission_controller_vec[i]->get_retriables(tmp_output_pkt_arr, tmp_sz, remaining_cap);
+                    this->retransmission_controller_vec[idx]->get_retriables(tmp_output_pkt_arr, tmp_sz, remaining_cap);
                     sz += tmp_sz;
                 }
             }
@@ -2714,18 +2716,20 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
-                sz = 0u; 
+                sz = 0u;
+                size_t seed = dg::network_randomizer::randomize_int<size_t>() >> 1; 
 
                 for (size_t i = 0u; i < this->pow2_buffer_container_vec_sz; ++i){
                     size_t remaining_cap = output_buffer_arr_cap - sz;
-                    
+
                     if (remaining_cap == 0u){
                         return;
                     }
 
+                    size_t idx = (seed + i) & (this->pow2_buffer_container_vec_sz - 1u);
                     dg::string * tmp_output_buffer_arr = std::next(output_buffer_arr, sz); 
                     size_t tmp_sz{};
-                    this->buffer_container_vec[i]->pop(tmp_output_buffer_arr, tmp_sz, remaining_cap);
+                    this->buffer_container_vec[idx]->pop(tmp_output_buffer_arr, tmp_sz, remaining_cap);
                     sz += tmp_sz;
                 }
             }
@@ -3945,17 +3949,19 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_capacity) noexcept{
 
                 sz = 0u;
+                size_t seed = dg::network_randomizer::randomize_int<size_t>() >> 1; 
 
-                for (size_t i = 0u; i < pow2_packet_container_vec_sz; ++i){
+                for (size_t i = 0u; i < this->pow2_packet_container_vec_sz; ++i){
                     size_t remaining_cap = output_pkt_arr_capacity - sz;
-                    
+
                     if (remaining_cap == 0u){
                         return;
                     }
 
+                    size_t idx = (seed + i) & (this->pow2_packet_container_vec_sz - 1u); 
                     Packet * tmp_output_pkt_arr = std::next(output_pkt_arr, sz);
                     size_t tmp_sz{};
-                    this->packet_container_vec[i]->pop(tmp_output_pkt_arr, tmp_sz, remaining_cap);
+                    this->packet_container_vec[idx]->pop(tmp_output_pkt_arr, tmp_sz, remaining_cap);
                     sz += tmp_sz;
                 }
             }
