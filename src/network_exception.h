@@ -117,7 +117,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t SOCKET_STREAM_BAD_OUTBOUND_RULE     = 71u;
     static inline constexpr exception_t SOCKET_STREAM_CORRUPTED_PACKET      = 00u;
     static inline constexpr exception_t ALOTTED_BUFFER_EXCEEDED             = 72u;
-
+    static inline constexpr exception_t DUPLICATE_ENTRY                     = 00u;
     static inline constexpr exception_t EXPECTED_NOT_INITIALIZED            = 00u;
     static inline constexpr exception_t VARIANT_VBE                         = 00u;
     static inline constexpr exception_t QUEUE_FULL                          = 00u;
