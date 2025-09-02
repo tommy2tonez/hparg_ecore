@@ -2509,8 +2509,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         continue;
                     }
 
-                    base_pkt_arr[i].retransmission_count += 1;
-                    exception_t err                     = this->pkt_map.add(std::move(base_pkt_arr[i]), clock.get() + delay.value());
+                    base_pkt_arr[i].retransmission_count    += 1;
+                    exception_t err                         = this->pkt_map.add(std::move(base_pkt_arr[i]), clock.get() + delay.value());
 
                     if (dg::network_exception::is_failed(err)){
                         base_pkt_arr[i].retransmission_count    -= 1;

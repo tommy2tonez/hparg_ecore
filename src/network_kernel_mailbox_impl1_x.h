@@ -489,9 +489,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     //OK
     struct AssembledPacket{
-        dg::vector<PacketSegment> data;
+        dg::vector<std::optional<dg::string>> data;
         size_t collected_segment_sz;
         size_t total_segment_sz;
+        uint64_t mm_integrity_value;
+        bool has_mm_integrity_value;
     };
 
     //OK
@@ -560,13 +562,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         if (pkt.total_segment_sz == 1u){
-            return std::expected<dg::string, exception_t>(std::move(pkt.data.front().buf));
+            return std::expected<dg::string, exception_t>(std::move(pkt.data.front()));
         }
 
         size_t total_bsz = 0u;
 
         for (size_t i = 0u; i < pkt.total_segment_sz; ++i){
-            total_bsz += pkt.data[i].buf.size();
+            if (!pkt.data[i].has_value()){
+                return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET);
+            }
+
+            total_bsz += pkt.data[i]->size();
         }
 
         std::expected<dg::string, exception_t> rs = dg::network_exception::cstyle_initialize<dg::string>(total_bsz, 0);
@@ -578,7 +584,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         char * out_it = rs.value().data(); 
 
         for (size_t i = 0u; i < pkt.total_segment_sz; ++i){
-            out_it = std::copy(pkt.data[i].buf.begin(), pkt.data[i].buf.end(), out_it);
+            out_it = std::copy(pkt.data[i]->begin(), pkt.data[i]->end(), out_it);
         }
 
         return rs;
@@ -587,12 +593,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //OK
     static auto internal_integrity_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
 
-        if (pkt.data.size() == 0u){
-            return internal_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(pkt));
-        }
-
-        uint64_t mm_integrity_value                 = pkt.data.front().mm_integrity_value;
-        bool has_mm_integrity_value                 = pkt.data.front().has_mm_integrity_value;
+        uint64_t mm_integrity_value                 = pkt.mm_integrity_value;
+        bool has_mm_integrity_value                 = pkt.has_mm_integrity_value;
         std::expected<dg::string, exception_t> rs   = internal_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(pkt));
 
         if (!rs.has_value()){
@@ -1968,11 +1970,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (base_segment_arr[i].segment_sz == 0u){
-                        assembled_arr[i] = this->make_empty_assembled_packet(0u);
+                        assembled_arr[i] = this->make_empty_assembled_packet(0u,
+                                                                             base_segment_arr[i].mm_integrity_value,
+                                                                             base_segment_arr[i].has_mm_integrity_value);
                         continue;
                     }
 
-                    auto map_ptr = this->packet_map.find(base_segment_arr[i].id);
+                    auto map_ptr        = this->packet_map.find(base_segment_arr[i].id);
+                    bool is_new_map_ptr = false;
 
                     if (map_ptr == this->packet_map.end()){
                         if (base_segment_arr[i].segment_sz > this->max_segment_sz_per_stream){
@@ -1990,7 +1995,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             continue;
                         }
 
-                        std::expected<AssembledPacket, exception_t> waiting_pkt = this->make_empty_assembled_packet(base_segment_arr[i].segment_sz);
+                        std::expected<AssembledPacket, exception_t> waiting_pkt = this->make_empty_assembled_packet(base_segment_arr[i].segment_sz,
+                                                                                                                    base_segment_arr[i].mm_integrity_value,
+                                                                                                                    base_segment_arr[i].has_mm_integrity_value);
 
                         if (!waiting_pkt.has_value()){
                             assembled_arr[i] = std::unexpected(waiting_pkt.error());
@@ -2000,14 +2007,21 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         auto [emplace_ptr, status]          = this->packet_map.try_emplace(base_segment_arr[i].id, std::move(waiting_pkt.value()));
                         dg::network_exception_handler::dg_assert(status);
                         map_ptr                             = emplace_ptr;
-                        this->global_packet_segment_counter += base_segment_arr[i].segment_sz; 
+                        this->global_packet_segment_counter += base_segment_arr[i].segment_sz;
+                        is_new_map_ptr                      = true;
                     }
 
-                    //this is fine, because it is object <dig_in> operator = (object&&), there wont be issues, yet we want to make this explicit
+                    exception_t err = this->internal_packet_segment_put(map_ptr->second, std::move(base_segment_arr[i]));
 
-                    size_t segment_idx                      = base_segment_arr[i].segment_idx;
-                    map_ptr->second.data[segment_idx]       = std::move(base_segment_arr[i]);
-                    map_ptr->second.collected_segment_sz    += 1;
+                    if (dg::network_exception::is_failed(err)){
+                        if (is_new_map_ptr){
+                            this->global_packet_segment_counter -= map_ptr->second.total_segment_sz; 
+                            this->packet_map.erase(map_ptr);
+                        }
+
+                        assembled_arr[i] = std::unexpected(err);
+                        continue;
+                    }
 
                     if (map_ptr->second.collected_segment_sz == map_ptr->second.total_segment_sz){
                         this->global_packet_segment_counter -= map_ptr->second.total_segment_sz; 
@@ -2049,9 +2063,28 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            auto make_empty_assembled_packet(size_t segment_sz) noexcept -> std::expected<AssembledPacket, exception_t>{
+            static auto internal_packet_segment_put(AssembledPacket& pkt,
+                                                    PacketSegment&& pkt_segment) noexcept -> exception_t{
 
-                auto vec            = dg::network_exception::cstyle_initialize<dg::vector<PacketSegment>>(segment_sz);
+                if (pkt_segment.segment_idx >= pkt.data.size()){
+                    return dg::network_exception::INDEX_OUT_OF_RANGE;
+                }
+
+                // if (pkt.data[idx].has_value()){
+                //     return dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET;
+                // }
+
+                pkt.data[pkt_segment.segment_idx]   = std::move(pkt_segment.buf);
+                pkt.collected_segment_sz            += 1u;
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto make_empty_assembled_packet(size_t segment_sz,
+                                             uint64_t mm_integrity_value,
+                                             bool has_mm_integrity_value) noexcept -> std::expected<AssembledPacket, exception_t>{
+
+                auto vec            = dg::network_exception::cstyle_initialize<dg::vector<std::optional<dg::string>>>(segment_sz);
 
                 if (!vec.has_value()){
                     return std::unexpected(vec.error());
@@ -2060,7 +2093,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 size_t collected    = 0u;
                 size_t total        = segment_sz;
 
-                return AssembledPacket{std::move(vec.value()), collected, total};
+                return AssembledPacket{.data                    = std::move(vec.value()),
+                                       .collected_segment_sz    = collected,
+                                       .total_segment_sz        = total,
+                                       .mm_integrity_value      = mm_integrity_value,
+                                       .has_mm_integrity_value  = has_mm_integrity_value};
             }
     };
 
