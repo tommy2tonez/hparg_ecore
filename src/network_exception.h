@@ -108,7 +108,8 @@ namespace dg::network_exception{
     static inline constexpr exception_t SOCKET_BAD_BUFFER_LENGTH            = 61u;
     static inline constexpr exception_t SOCKET_MAX_RETRANSMISSION_REACHED   = 62u;
     static inline constexpr exception_t SOCKET_QUEUE_FULL                   = 63u;
-    static inline constexpr exception_t SOCKET_STREAM_BAD_SEGMENT           = 64u; 
+    static inline constexpr exception_t SOCKET_STREAM_BAD_SEGMENT           = 64u;
+    static inline constexpr exception_t SOCKET_STREAM_DUPLICATE_SEGMENT     = 00u; 
     static inline constexpr exception_t SOCKET_STREAM_TIMEOUT               = 65u;
     static inline constexpr exception_t SOCKET_STREAM_MIGHT_BE_BLACKLISTED  = 66u;
     static inline constexpr exception_t SOCKET_STREAM_BAD_BUFFER_LENGTH     = 67u;

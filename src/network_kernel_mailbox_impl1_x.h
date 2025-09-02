@@ -550,7 +550,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     static auto internal_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
 
         if (pkt.total_segment_sz != pkt.collected_segment_sz){
-            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+            return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET);
         }
 
         if (pkt.total_segment_sz != pkt.data.size()){
@@ -562,7 +562,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         if (pkt.total_segment_sz == 1u){
-            return std::expected<dg::string, exception_t>(std::move(pkt.data.front()));
+            if (!pkt.data.front().has_value()){
+                return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET);
+            }
+
+            return std::expected<dg::string, exception_t>(std::move(pkt.data.front().value()));
         }
 
         size_t total_bsz = 0u;
@@ -578,7 +582,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         std::expected<dg::string, exception_t> rs = dg::network_exception::cstyle_initialize<dg::string>(total_bsz, 0);
 
         if (!rs.has_value()){
-            return rs;
+            return std::unexpected(rs.error());
         }
 
         char * out_it = rs.value().data(); 
@@ -598,7 +602,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         std::expected<dg::string, exception_t> rs   = internal_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(pkt));
 
         if (!rs.has_value()){
-            return rs;
+            return std::unexpected(rs.error());
         }
 
         if (has_mm_integrity_value){
@@ -2070,9 +2074,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     return dg::network_exception::INDEX_OUT_OF_RANGE;
                 }
 
-                // if (pkt.data[idx].has_value()){
-                //     return dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET;
-                // }
+                if (pkt.data[pkt_segment.segment_idx].has_value()){
+                    return dg::network_exception::SOCKET_STREAM_DUPLICATE_SEGMENT;
+                }
 
                 pkt.data[pkt_segment.segment_idx]   = std::move(pkt_segment.buf);
                 pkt.collected_segment_sz            += 1u;
