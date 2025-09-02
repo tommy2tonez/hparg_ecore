@@ -50,11 +50,11 @@ namespace dg::network_compact_trivial_serializer{
     }
 
     template <class Stream, class T, std::enable_if_t<is_byte_stream_container_v<Stream>, bool> = true>
-    constexpr auto serialize(const T& obj) -> Stream{
+    constexpr auto serialize(const T& obj, uint32_t secret = 0u) -> Stream{
 
         Stream stream{};
         stream.resize(dg::network_compact_trivial_serializer::size(obj));
-        dg::network_compact_trivial_serializer::serialize_into(stream.data(), obj);
+        dg::network_compact_trivial_serializer::serialize_into(stream.data(), obj, secret);
 
         return stream;
     }

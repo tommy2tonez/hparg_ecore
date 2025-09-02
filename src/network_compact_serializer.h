@@ -1172,7 +1172,9 @@ namespace dg::network_compact_serializer::archive{
             using base_type = types_space::base_type_t<T>;
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
-            static_assert(VARIANT_COUNT <= static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u);
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;  
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             types::variant_index_type variant_idx;
             this->put(buf, variant_idx);
@@ -1326,6 +1328,9 @@ namespace dg::network_compact_serializer::archive{
             this->put(buf, buf_sz, variant_idx);
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;   
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;  
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             if (variant_idx >= VARIANT_COUNT){
                 throw dg::network_compact_serializer::exception_space::corrupted_format();
@@ -1895,6 +1900,9 @@ namespace dg::network_compact_serializer::archive{
             this->put(buf, buf_sz, variant_idx);
 
             constexpr size_t VARIANT_COUNT = std::variant_size_v<base_type>;
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;  
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             if (variant_idx >= VARIANT_COUNT){
                 throw dg::network_compact_serializer::exception_space::corrupted_format();

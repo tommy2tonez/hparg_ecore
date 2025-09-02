@@ -428,16 +428,20 @@ namespace dg::network_trivial_serializer::archive{
 
             using btype = types_space::base_type_t<T>;
             static constexpr size_t VARIANT_COUNT = std::variant_size_v<btype>;
+            constexpr size_t MAX_CONTAINABLE_VARIANT = static_cast<size_t>(std::numeric_limits<types::variant_index_type>::max()) + 1u;
+
+            static_assert(VARIANT_COUNT <= MAX_CONTAINABLE_VARIANT);
 
             types::variant_index_type variant_idx;
             const char * tmp = buf;
             Self().put(tmp, variant_idx);
 
-            if constexpr(DEBUG_MODE_FLAG){
-                if (variant_idx >= VARIANT_COUNT){
-                    std::abort();
-                }
-            }
+            //we have this line just to make sure that this is no-except compatible in case of etc.
+            //such that the deserialized struct is in a "safe" state in the sense of operatable range as long as it has the specified static layout size
+
+            variant_idx = std::clamp(static_cast<size_t>(variant_idx),
+                                     size_t{0u},
+                                     static_cast<size_t>(VARIANT_COUNT - 1u));
 
             [&]<size_t ...IDX>(const std::index_sequence<IDX...>){
                 (

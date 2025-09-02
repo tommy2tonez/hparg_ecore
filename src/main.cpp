@@ -23,6 +23,7 @@
 #include <iostream>
 #include "assert.h"
 #include "network_kernel_mailbox_impl1_x.h"
+#include "network_compact_trivial_serializer.h"
 
 template <class Task>
 auto timeit(Task task) -> size_t{
@@ -40,12 +41,12 @@ struct Foo{
     std::variant<int, float> z;
 
     template <class Reflector>
-    void dg_reflect(const Reflector& reflector) const{
+    constexpr void dg_reflect(const Reflector& reflector) const noexcept{
         reflector(x, y, z);
     }
 
     template <class Reflector>
-    void dg_reflect(const Reflector& reflector){
+    constexpr void dg_reflect(const Reflector& reflector) noexcept{
         reflector(x, y, z);
     }
 
@@ -92,6 +93,49 @@ struct Bar{
 
 int main(){
 
-    auto sock = dg::network_kernel_mailbox_impl1_flash_streamx::spawn({});
-    auto sock2 = dg::network_kernel_mailbox_impl1::spawn({});
+    // auto sock = dg::network_kernel_mailbox_impl1_flash_streamx::spawn({});
+    // auto sock2 = dg::network_kernel_mailbox_impl1::spawn({});
+
+    Bar bar{{{1, std::nullopt, int{1}}, {2, 2, float{2}}, {3, std::nullopt, int{3}}},
+            {{1, 2}, {2, 1}, {3, 3}, {4, 2}},
+            {1, 2},
+            {2, 3},
+            std::make_unique<Foo>(Foo{1, std::nullopt, {}}),
+            1.2f,
+            1.0f};
+
+    std::array<Foo, 4> foo_arr{Foo{1, std::nullopt,int{1}},
+                               Foo{1, uint64_t{1}, float{1}},
+                               Foo{2, std::nullopt, float{2}},
+                               Foo{3, uint64_t{3}, int{3}}};
+    
+    {
+        std::string serialized = dg::network_compact_serializer::dgstd_serialize<std::string>(bar);
+        Bar deserialized = dg::network_compact_serializer::dgstd_deserialize<Bar>(serialized);
+        std::string serialized2 = dg::network_compact_serializer::dgstd_serialize<std::string>(deserialized);
+
+        assert(serialized == serialized2);
+    }
+    {
+        std::string serialized = dg::network_compact_serializer::serialize<std::string>(bar);
+        Bar deserialized = dg::network_compact_serializer::deserialize<Bar>(serialized);
+        std::string serialized2 = dg::network_compact_serializer::serialize<std::string>(deserialized);
+
+        assert(serialized == serialized2);
+    }
+    {
+        std::string serialized = dg::network_compact_serializer::integrity_serialize<std::string>(bar);
+        Bar deserialized = dg::network_compact_serializer::integrity_deserialize<Bar>(serialized);
+        std::string serialized2 = dg::network_compact_serializer::integrity_serialize<std::string>(deserialized);
+
+        assert(serialized == serialized2);
+    }
+
+    {
+        std::string serialized = dg::network_compact_trivial_serializer::serialize<std::string>(foo_arr);
+        auto deserialized = dg::network_compact_trivial_serializer::deserialize<decltype(foo_arr)>(serialized);
+
+        assert(foo_arr == deserialized);
+
+    }
 }
