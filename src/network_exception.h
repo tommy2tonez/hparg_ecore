@@ -101,6 +101,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t BAD_POLYMORPHIC_ACCESS              = 55u;
     static inline constexpr exception_t SOCKET_CORRUPTED_PACKET             = 56u;
     static inline constexpr exception_t SOCKET_MALFORMED_PACKET             = 57u;
+    static inline constexpr exception_t SOCKET_ADD_ACKED_PACKET             = 00u;
     static inline constexpr exception_t SOCKET_BAD_RECEIPIENT               = 58u;
     static inline constexpr exception_t SOCKET_BAD_TRAFFIC                  = 59u;
     static inline constexpr exception_t SOCKET_BAD_IP_RULE                  = 60u;

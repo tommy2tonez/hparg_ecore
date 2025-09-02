@@ -51,6 +51,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "network_hash.h"
+#include "network_chrono.h"
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -393,6 +394,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             virtual ~PacketIntegrityValidatorInterface() noexcept = default;
             virtual auto is_valid(const Packet&) noexcept -> exception_t = 0;
+    };
+
+    class RetransmissionDelayNegotiatorInterface{
+
+        public:
+
+            virtual ~RetransmissionDelayNegotiatorInterface() noexcept = default;
+            virtual auto get(const Address& to_addr) noexcept -> std::expected<std::chrono::nanoseconds, exception_t> = 0;
     };
 
     class UpdatableInterface{
@@ -2419,38 +2428,139 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    class StaticRetransmissionDelayNegotiator: public virtual RetransmissionDelayNegotiatorInterface{
+
+        private:
+
+            std::chrono::nanoseconds delay_interval;
+        
+        public:
+
+            StaticRetransmissionDelayNegotiator(std::chrono::nanoseconds delay_interval) noexcept: delay_interval(delay_interval){}
+
+            auto get(const Address& to_addr) noexcept -> std::expected<std::chrono::nanoseconds, exception_t>{
+
+                return this->delay_interval;
+            }
+    };
+
     class MemoryEfficientRetransmissionController: public virtual RetransmissionControllerInterface{
 
         private:
 
             data_structure::temporal_ordered_packet_map pkt_map;
-            std::chrono::nanoseconds transmission_delay_time;
+            data_structure::temporal_finite_unordered_set<global_packet_id_t> acked_id_hashset;
+            std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator;
+            size_t ticking_clock_resolution;
             size_t max_retransmission_sz;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
-        
+
         public:
 
             MemoryEfficientRetransmissionController(data_structure::temporal_ordered_packet_map pkt_map,
-                                                    std::chrono::nanoseconds transmission_delay_time,
+                                                    data_structure::temporal_finite_unordered_set<global_packet_id_t> acked_id_hashset,
+                                                    std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator,
+                                                    size_t ticking_clock_resolution,
                                                     size_t max_retransmission_sz,
                                                     std::unique_ptr<std::mutex> mtx,
                                                     size_t consume_sz_per_load): pkt_map(std::move(pkt_map)),
-                                                                                 transmission_delay_time(transmission_delay_time),
+                                                                                 acked_id_hashset(std::move(acked_id_hashset)),
+                                                                                 delay_negotiator(std::move(delay_negotiator)),
+                                                                                 ticking_clock_resolution(ticking_clock_resolution),
                                                                                  max_retransmission_sz(max_retransmission_sz),
                                                                                  mtx(std::move(mtx)),
                                                                                  consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
 
-            void add_retriables(std::move_iterator<Packet *>, size_t, exception_t *) noexcept{
+            void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                Packet * base_pkt_arr   = pkt_arr.base(); 
+                auto clock              = dg::ticking_clock<std::chrono::utc_clock>(this->ticking_clock_resolution);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    if (base_pkt_arr[i].retransmission_count >= this->max_retransmission_sz){
+                        exception_arr[i] = dg::network_exception::SOCKET_MAX_RETRANSMISSION_REACHED;
+                        continue;
+                    }
+
+                    if (this->acked_id_hashset.contains(base_pkt_arr[i].id)){
+                        exception_arr[i] = dg::network_exception::SOCKET_ADD_ACKED_PACKET;
+                        continue;
+                    }
+
+                    std::expected<std::chrono::nanoseconds, exception_t> delay = this->delay_negotiator->get(base_pkt_arr[i].to_addr);
+
+                    if (!delay.has_value()){
+                        exception_arr[i] = delay.error();
+                        continue;
+                    }
+
+                    if (this->pkt_map.size() == this->pkt_map.capacity()){
+                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
+                        continue;
+                    }
+
+                    base_pkt_arr[i].retransmission_count += 1;
+                    exception_t err                     = this->pkt_map.add(std::move(base_pkt_arr[i]), clock.get() + delay.value());
+
+                    if (dg::network_exception::is_failed(err)){
+                        base_pkt_arr[i].retransmission_count    -= 1;
+                        exception_arr[i]                        = err;
+
+                        continue;
+                    }
+
+                    exception_arr[i] = dg::network_exception::SUCCESS;
+                }
             }
 
-            void ack(global_packet_id_t *, size_t, exception_t *) noexcept{
+            void ack(global_packet_id_t * id_arr, size_t id_arr_sz, exception_t * exception_arr) noexcept{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (id_arr_sz > this->max_consume_size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                for (size_t i = 0u; i < id_arr_sz; ++i){
+                    this->pkt_map.erase(id_arr[i]);
+                    this->acked_id_hashset.insert(id_arr[i]);
+
+                    exception_arr[i] = dg::network_exception::SUCCESS;
+                }
             }
 
-            void get_retriables(Packet *, size_t&, size_t) noexcept{
+            void get_retriables(Packet * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept{
 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                output_arr_sz = 0u;
+
+                while (true){
+                    if (output_arr_sz == output_arr_cap){
+                        return;
+                    }
+
+                    std::optional<Packet> nxt = this->pkt_map.get_expired_packet(std::chrono::nanoseconds(0));
+
+                    if (!nxt.has_value()){
+                        return;
+                    }
+
+                    output_arr[output_arr_sz++] = std::move(nxt.value());
+                }
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -4950,6 +5060,69 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<KernelRescuePost>(arg);
         } 
 
+        static auto get_static_retransmission_delay_negotiator(std::chrono::nanoseconds interval) -> std::unique_ptr<RetransmissionDelayNegotiatorInterface>{
+
+            using namespace std::chrono_literals;
+
+            const std::chrono::nanoseconds MIN_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(1ns);
+            const std::chrono::nanoseconds MAX_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(1min);
+
+            if (std::clamp(interval, MIN_INTERVAL, MAX_INTERVAL) != interval){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<StaticRetransmissionDelayNegotiator>(interval);
+        } 
+
+        static auto get_memory_efficient_retransmission_controller(size_t pkt_map_capacity,
+                                                                   size_t acked_set_capacity,
+                                                                   std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator,
+                                                                   size_t ticking_clock_resolution,
+                                                                   size_t max_retransmission_sz,
+                                                                   size_t consume_factor = 4u) -> std::unique_ptr<RetransmissionControllerInterface>{
+        
+            const size_t MIN_PKT_MAP_CAPACITY           = 1u;
+            const size_t MAX_PKT_MAP_CAPACITY           = size_t{1} << 25;
+            const size_t MIN_ACKED_SET_CAPACITY         = 1u;
+            const size_t MAX_ACKED_SET_CAPACITY         = size_t{1} << 25;
+            const size_t MIN_TICKING_CLOCK_RESOLUTION   = 1u;
+            const size_t MAX_TICKING_CLOCK_RESOLUTION   = size_t{1} << 30;
+            const size_t MIN_MAX_RETRANSMISSION_SZ      = 0u;
+            const size_t MAX_MAX_RETRANSMISSION_SZ      = 256u;
+            
+            if (std::clamp(pkt_map_capacity, MIN_PKT_MAP_CAPACITY, MAX_PKT_MAP_CAPACITY) != pkt_map_capacity){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(acked_set_capacity, MIN_ACKED_SET_CAPACITY, MAX_ACKED_SET_CAPACITY) != acked_set_capacity){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (delay_negotiator == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(ticking_clock_resolution, MIN_TICKING_CLOCK_RESOLUTION, MAX_TICKING_CLOCK_RESOLUTION)){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(max_retransmission_sz, MIN_MAX_RETRANSMISSION_SZ, MAX_MAX_RETRANSMISSION_SZ) != max_retransmission_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t tentative_pkt_map_consume_sz     = pkt_map_capacity >> consume_factor;
+            size_t tentative_acked_set_consume_sz   = acked_set_capacity >> consume_factor;
+            size_t consume_sz                       = std::max(std::min(tentative_pkt_map_consume_sz, tentative_acked_set_consume_sz), size_t{1u});
+
+            return std::make_unique<MemoryEfficientRetransmissionController>(data_structure::temporal_ordered_packet_map(pkt_map_capacity),
+                                                                             data_structure::temporal_finite_unordered_set<global_packet_id_t>(acked_set_capacity),
+                                                                             std::move(delay_negotiator),
+                                                                             ticking_clock_resolution,
+                                                                             max_retransmission_sz,
+                                                                             std::make_unique<std::mutex>(),
+                                                                             consume_sz);
+        }
+
         static auto get_retransmission_controller(std::chrono::nanoseconds transmission_delay, 
                                                   size_t max_retransmission_sz, 
                                                   size_t idhashset_cap, 
@@ -4958,8 +5131,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             using namespace std::chrono_literals; 
 
-            const std::chrono::nanoseconds MIN_DELAY    = std::chrono::duration_cast<std::chrono::nanoseconds>(1us);
-            const std::chrono::nanoseconds MAX_DELAY    = std::chrono::duration_cast<std::chrono::nanoseconds>(60s);
+            const std::chrono::nanoseconds MIN_DELAY    = std::chrono::duration_cast<std::chrono::nanoseconds>(1ns);
+            const std::chrono::nanoseconds MAX_DELAY    = std::chrono::duration_cast<std::chrono::nanoseconds>(1min);
             const size_t MIN_MAX_RETRANSMISSION         = 0u;
             const size_t MAX_MAX_RETRANSMISSION         = 256u;
             const size_t MIN_IDHASHSET_CAP              = 1u;
