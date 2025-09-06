@@ -475,7 +475,7 @@ namespace dg::network_allocation{
     //we'll be adding compile-time measurements, it's been hard because we broke practices for performance
     //we are proud fellas, it's actually hard to write this, I have to admit, it took me months
 
-    template <class BlkSizeOperatableType, size_t HEAP_LEAF_UNIT_ALLOCATION_SZ, size_t POW2_PUNCTUAL_CHECK_INTERVAL_SIZE, size_t MINIMUM_ALLOCATION_BLK_SZ, size_t MAXIMUM_SMALLBIN_BLK_SZ, size_t SMALLBIN_PROBE_SZ>
+    template <class BlkSizeOperatableType, size_t HEAP_LEAF_UNIT_ALLOCATION_SZ, size_t LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ, size_t POW2_PUNCTUAL_CHECK_INTERVAL_SIZE, size_t MINIMUM_ALLOCATION_BLK_SZ, size_t MAXIMUM_SMALLBIN_BLK_SZ, size_t SMALLBIN_PROBE_SZ>
     class DGStdAllocatorMetadata{
 
         public:
@@ -493,6 +493,11 @@ namespace dg::network_allocation{
             static consteval auto get_heap_leaf_unit_allocation_size() noexcept -> size_t{
 
                 return HEAP_LEAF_UNIT_ALLOCATION_SZ;
+            }
+
+            static consteval auto get_largemalloc_heap_leaf_unit_allocation_size() noexcept -> size_t{
+
+                return LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ;
             }
 
             static consteval auto get_minimum_allocation_blk_size() noexcept -> size_t{
@@ -541,31 +546,11 @@ namespace dg::network_allocation{
                 return sz;
             }
     };
+    
+    //we'd have to use two different allocators for two different sizes
+    //yet we'd have to keep everything in one component, leverage the micro optimization that we have for header to avoid extra dispatch overhead, the otherwise std way would be implementing two components, another component to write the header and dispatch accordingly
 
-    //This morning when I was proving the algorithm by using induction, there was a cyclic of no base resolution
-    //free() -> free_bin, fast_bin + exact_bin which guarantee the "will be deallocated"
-    //the malloc() tries to continue the "will be deallocated" by returning the pointer to the user which will call free()
-    //so we have a cyclic logic of "will be deallocated" and free()
-
-    //So we have to find another way, it's called a lifetime tracking of a pointer from being spawn to life by bump_allocator, until it is being free() by calling the upper allocator
-    //we need to do path analysis of the pointer lifetime
-
-    //from malloc -> user -> free -> (3 possible queues) being the fastbin, the freebin and the exact bin
-
-    //to freebin (OK)
-    //exactbin -> fastbin -> freebin (OK)
-    //exactbin -> user -> free() -> ... 
-    //exactbin -> fastbin -> user -> free() -> ...
-
-    //fastbin -> freebin (OK)
-    //fastbin -> user -> free() -> ...
-
-    //the ... will continue the loop of being queued again etc.
-    //we actually have found the method to do generic square matrix multiplication, we need to have a super driver to do backward propagation (we dont have the driver yet, we'll probably need 2-3 years to find the driver) 
-    //I still think that we should have a dedicated allocator for large pow2 buffers
-    //because chances are combining those guys would be proned to fragmentation, even though we have already guarantted that would not happen ...
-    //I think that we'd just fatten the leaf to 1024 bytes (or even 8K) for large buffers + direct allocator, just to make sure the atomicity of memory (we could reduce fragmentation this way) 
-    //the problem has always been the units ... because it is, it's very important that we keep every allocation < 16KB in our application, make sure that everything runs smooth and nice
+    //fattening the leaf unit would decrease the fragmentation for large size allocations
 
     template <class Metadata>
     class DGStdAllocator{
@@ -603,6 +588,9 @@ namespace dg::network_allocation{
             size_t allocation_sz_counter;
             size_t allocation_sz_counter_flush_threshold; 
 
+            std::shared_ptr<char[]> large_malloc_buf;
+            std::shared_ptr<HeapAllocatorInterface> large_malloc_heap_allocator;
+
         public:
 
             using self                  = DGStdAllocator;
@@ -610,15 +598,16 @@ namespace dg::network_allocation{
             using vrs_ctrl_header_t     = typename Metadata::vrs_ctrl_header_t;
             using largebin_sz_header_t  = typename Metadata::largebin_sz_header_t;
 
-            static inline constexpr size_t HEAP_LEAF_UNIT_ALLOCATION_SZ     = Metadata::get_heap_leaf_unit_allocation_size();
-            static inline constexpr size_t ALLOCATION_HEADER_SZ             = Metadata::get_allocation_header_size();  
-            static inline constexpr size_t LARGEBIN_ALLOCATION_HEADER_SZ    = Metadata::get_largebin_allocation_header_size();  //we need to make sure that the LARGEBIN_ALLOCATION_HEADER_SZ is 8 bytes aligned, this is to achieve the all user_ptrs are at least 8-bytes aligned (we trick this by offseting the buf) 
-            static inline constexpr size_t SMALLBIN_PROBE_SZ                = Metadata::get_smallbin_probe_size();
-            static inline constexpr size_t MINIMUM_ALLOCATION_BLK_SZ        = Metadata::get_minimum_allocation_blk_size();
-            static inline constexpr size_t MAXIMUM_SMALLBIN_BLK_SZ          = Metadata::get_maximum_smallbin_blk_size();
-            static inline constexpr size_t PUNCTUAL_CHECK_INTERVAL_SZ       = Metadata::get_pow2_punctual_check_interval_size();
-            static inline constexpr size_t LARGEBIN_SMALLBIN_SZ             = Metadata::get_largebin_smallbin_size();
-            static inline constexpr size_t ALIGNMENT_SZ                     = Metadata::get_alignment_size();
+            static inline constexpr size_t HEAP_LEAF_UNIT_ALLOCATION_SZ             = Metadata::get_heap_leaf_unit_allocation_size();
+            static inline constexpr size_t LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ = Metadata::get_largemalloc_heap_leaf_unit_allocation_size();
+            static inline constexpr size_t ALLOCATION_HEADER_SZ                     = Metadata::get_allocation_header_size();  
+            static inline constexpr size_t LARGEBIN_ALLOCATION_HEADER_SZ            = Metadata::get_largebin_allocation_header_size();  //we need to make sure that the LARGEBIN_ALLOCATION_HEADER_SZ is 8 bytes aligned, this is to achieve the all user_ptrs are at least 8-bytes aligned (we trick this by offseting the buf) 
+            static inline constexpr size_t SMALLBIN_PROBE_SZ                        = Metadata::get_smallbin_probe_size();
+            static inline constexpr size_t MINIMUM_ALLOCATION_BLK_SZ                = Metadata::get_minimum_allocation_blk_size();
+            static inline constexpr size_t MAXIMUM_SMALLBIN_BLK_SZ                  = Metadata::get_maximum_smallbin_blk_size();
+            static inline constexpr size_t PUNCTUAL_CHECK_INTERVAL_SZ               = Metadata::get_pow2_punctual_check_interval_size();
+            static inline constexpr size_t LARGEBIN_SMALLBIN_SZ                     = Metadata::get_largebin_smallbin_size();
+            static inline constexpr size_t ALIGNMENT_SZ                             = Metadata::get_alignment_size();
 
             DGStdAllocator(std::shared_ptr<char[]> buf,
                            size_t malloc_chk_interval_counter,
@@ -642,29 +631,35 @@ namespace dg::network_allocation{
                            std::chrono::time_point<std::chrono::high_resolution_clock> last_flush,
                            std::chrono::nanoseconds flush_interval,
                            size_t allocation_sz_counter,
-                           size_t allocation_sz_counter_flush_threshold) noexcept: buf(std::move(buf)),
-                                                                                   malloc_chk_interval_counter(malloc_chk_interval_counter),
-                                                                                   smallbin_avail_bitset(smallbin_avail_bitset),
-                                                                                   smallbin_reuse_table(std::move(smallbin_reuse_table)),
+                           size_t allocation_sz_counter_flush_threshold,
+                        
+                           std::shared_ptr<char[]> large_malloc_buf,
+                           std::shared_ptr<HeapAllocatorInterface> large_malloc_heap_allocator) noexcept: buf(std::move(buf)),
+                                                                                                          malloc_chk_interval_counter(malloc_chk_interval_counter),
+                                                                                                          smallbin_avail_bitset(smallbin_avail_bitset),
+                                                                                                          smallbin_reuse_table(std::move(smallbin_reuse_table)),
 
-                                                                                   bump_allocator(bump_allocator),
-                                                                                   bump_allocator_refill_sz_vec(std::move(bump_allocator_refill_sz_vec)),
-                                                                                   bump_allocator_version_control(bump_allocator_version_control),
+                                                                                                          bump_allocator(bump_allocator),
+                                                                                                          bump_allocator_refill_sz_vec(std::move(bump_allocator_refill_sz_vec)),
+                                                                                                          bump_allocator_version_control(bump_allocator_version_control),
 
-                                                                                   freebin_vec(std::move(freebin_vec)),
-                                                                                   freebin_vec_cap(freebin_vec_cap),
+                                                                                                          freebin_vec(std::move(freebin_vec)),
+                                                                                                          freebin_vec_cap(freebin_vec_cap),
 
-                                                                                   exact_allocation_map(std::move(exact_allocation_map)),
-                                                                                   exact_allocation_queue_allocation_vec(std::move(exact_allocation_queue_allocation_vec)),
-                                                                                   exact_allocation_map_cap(exact_allocation_map_cap),
+                                                                                                          exact_allocation_map(std::move(exact_allocation_map)),
+                                                                                                          exact_allocation_queue_allocation_vec(std::move(exact_allocation_queue_allocation_vec)),
+                                                                                                          exact_allocation_map_cap(exact_allocation_map_cap),
 
-                                                                                   heap_allocator(std::move(heap_allocator)),
-                                                                                   defer_deallocation_offloader(std::move(defer_deallocation_offloader)),
+                                                                                                          heap_allocator(std::move(heap_allocator)),
+                                                                                                          defer_deallocation_offloader(std::move(defer_deallocation_offloader)),
 
-                                                                                   last_flush(last_flush),
-                                                                                   flush_interval(flush_interval),
-                                                                                   allocation_sz_counter(allocation_sz_counter),
-                                                                                   allocation_sz_counter_flush_threshold(allocation_sz_counter_flush_threshold){}
+                                                                                                          last_flush(last_flush),
+                                                                                                          flush_interval(flush_interval),
+                                                                                                          allocation_sz_counter(allocation_sz_counter),
+                                                                                                          allocation_sz_counter_flush_threshold(allocation_sz_counter_flush_threshold),
+
+                                                                                                          large_malloc_buf(std::move(large_malloc_buf)),
+                                                                                                          large_malloc_heap_allocator(std::move(large_malloc_heap_allocator)){}
 
             ~DGStdAllocator() noexcept{
 
@@ -753,22 +748,9 @@ namespace dg::network_allocation{
                 } else [[likely]]{ 
                     vrs_ctrl_header_t current_truncated_version_control = self::internal_get_truncated_version_control(this->bump_allocator_version_control);
 
-                    //we are trying to extract the memory allocation patterns by using exact allocations, a snapshot of memory allocation at a heavily used loop
-                    //if the "top of the memory pattern" is reached, we'd bounce that to the bin queue for promoted reuse + etc.
-                    //we are very concerned about the binary search lowerbound, for being impractical (first is that it does not solve the problem of allocation time, second is that it might "over-swing" the allocation, which we would want to fallback to the normal allocation)
-
-                    //we'll be engineering the branchness + landing pad for this like how we did for the delvrsrv_kv
-                    //essentially, we'd want to steer the branchability to land to the exact allocation map 99% of the time, or else etc.
-                    //that'd squeeze probably 2x - 3x perf, depending on how good the code actually is
-                    //because this is a performance critical loop, we dont want to unnecessary fetch instruction or access unnecessary buckets, which would heavily pollute our L1 or L2 cache which is very bad 
-                    //we can prove that this section of 100 lines of 50 lines of code can actually handle pretty much all the allocation patterns from fixed size allocations, or dynamic size allocations with fixed windows to etc.
-                    //given a busy enough loop, an "eat-through-the-recycle-bin" would be sitting pretty in our fast_bin buckets
-                    //we'll be circling back to this problem at a later time
-
                     if (current_truncated_version_control == user_ptr_truncated_version_control){
                         auto map_ptr = this->exact_allocation_map.find(user_ptr_sz);
 
-                        //trying to resolve the map_ptr == empty
                         if (map_ptr == this->exact_allocation_map.end()){
                             if (this->exact_allocation_map.size() == this->exact_allocation_map_cap){
                                 this->internal_clear_exact_allocation_map();
@@ -780,7 +762,6 @@ namespace dg::network_allocation{
                             dg::network_exception_handler::dg_assert(status);
                         }
 
-                        //trying to fill the pattern bucket
                         if (map_ptr->second.size() != map_ptr->second.capacity()){
                             map_ptr->second.push_back(user_ptr);
                             return; 
@@ -790,25 +771,16 @@ namespace dg::network_allocation{
                     size_t floor_smallbin_table_idx = stdx::ulog2(user_ptr_sz);
                     auto& smallbin_vec              = this->smallbin_reuse_table[floor_smallbin_table_idx];
 
-                    //we break practices because smallbin_vec is pow2, < capacity, == shift + 0 cmp, remember 0 cmp is everything, we just hint the compiler to do optimization, we are not allowed to do optimization
-
-                    if (smallbin_vec.size() < smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control) [[likely]]{ //cmp is better if low_resolution, compiler is better than us to decide what instruction to be used
-                        //meets the cond of fast free
+                    if (smallbin_vec.size() < smallbin_vec.capacity() && current_truncated_version_control == user_ptr_truncated_version_control) [[likely]]{
                         dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
                         this->smallbin_avail_bitset |= uint64_t{1} << floor_smallbin_table_idx; //membership registration
                     } else{
-                        //does not meet the cond of fast free, either because smallbin_vec.size() == smallbin_vec.capacity() or current_truncated_version_control != user_ptr_truncated_version_control
-                        //either way, we have to put at least one allocation -> freebin_vec
-
                         if (this->freebin_vec.size() == this->freebin_vec_cap) [[unlikely]]{
                             this->internal_dump_freebin_vec();
                         }
 
-                        //freebin_vec room is clear
-                        //this implies smallbin_vec.size() == smallbin_vec.capacity(), true | false = true
                         if (current_truncated_version_control == user_ptr_truncated_version_control){
-                            //this is still qualified for reusability
-                            this->freebin_vec.push_back(smallbin_vec.front()); //make room for smallbin_vec back()
+                            this->freebin_vec.push_back(smallbin_vec.front());
                             smallbin_vec.pop_front();
                             dg::network_exception::dg_noexcept(smallbin_vec.push_back(Allocation{user_ptr, user_ptr_sz}));
                         } else{
@@ -835,12 +807,32 @@ namespace dg::network_allocation{
                 return std::make_pair(static_cast<void *>(std::next(this->buf.get(), buf_offset)), buf_sz);
             }
 
+            constexpr auto internal_largemalloc_interval_to_buf(const interval_type& interval) const noexcept -> std::pair<void *, size_t>{
+
+                const std::pair<heap_sz_type, heap_sz_type>& semantic_representation = interval;
+
+                size_t buf_offset   = static_cast<size_t>(semantic_representation.first) * LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ;
+                size_t buf_sz       = (static_cast<size_t>(semantic_representation.second) + 1u) * LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ;
+
+                return std::make_pair(static_cast<void *>(std::next(this->large_malloc_buf.get(), buf_offset)), buf_sz);
+            }
+
             constexpr auto internal_aligned_buf_to_interval(const std::pair<void *, size_t>& arg) const noexcept -> interval_type{
 
                 size_t buf_offset   = std::distance(this->buf.get(), static_cast<char *>(arg.first));
                 size_t buf_sz       = arg.second;
                 size_t heap_offset  = buf_offset / HEAP_LEAF_UNIT_ALLOCATION_SZ;
                 size_t heap_excl_sz = (buf_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ) - 1u;
+
+                return std::make_pair(heap_offset, heap_excl_sz);
+            }
+
+            constexpr auto internal_aligned_largemalloc_buf_to_interval(const std::pair<void *, size_t>& arg) const noexcept -> interval_type{
+
+                size_t buf_offset   = std::distance(this->buf.get(), static_cast<char *>(arg.first));
+                size_t buf_sz       = arg.second;
+                size_t heap_offset  = buf_offset / LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ;
+                size_t heap_excl_sz = (buf_sz / LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ) - 1u;
 
                 return std::make_pair(heap_offset, heap_excl_sz);
             }
@@ -1201,22 +1193,20 @@ namespace dg::network_allocation{
                 this->internal_check_for_reset();
 
                 size_t pad_blk_sz                           = user_blk_sz + LARGEBIN_ALLOCATION_HEADER_SZ;
-                size_t ceil_blk_sz                          = (((pad_blk_sz - 1u) / HEAP_LEAF_UNIT_ALLOCATION_SZ) + 1u) * HEAP_LEAF_UNIT_ALLOCATION_SZ;
+                size_t ceil_blk_sz                          = (((pad_blk_sz - 1u) / LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ) + 1u) * LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ;
                 size_t user_usable_blk_sz                   = ceil_blk_sz - LARGEBIN_ALLOCATION_HEADER_SZ;
-                size_t allocating_heap_node_sz              = ceil_blk_sz / HEAP_LEAF_UNIT_ALLOCATION_SZ; 
+                size_t allocating_heap_node_sz              = ceil_blk_sz / LARGEMALLOC_HEAP_LEAF_UNIT_ALLOCATION_SZ; 
                 std::optional<interval_type> allocated_intv = {};
 
-                this->heap_allocator->alloc(&allocating_heap_node_sz, 1u, &allocated_intv);
+                this->large_malloc_heap_allocator->alloc(&allocating_heap_node_sz, 1u, &allocated_intv);
 
                 if (!allocated_intv.has_value()){
                     return nullptr;
                 }
 
-                std::pair<void *, size_t> requesting_buf    = this->internal_interval_to_buf(allocated_intv.value());
+                std::pair<void *, size_t> requesting_buf    = this->internal_largemalloc_interval_to_buf(allocated_intv.value());
                 void * internal_ptr                         = requesting_buf.first;
                 void * user_ptr                             = this->internal_write_largebin_allocation_header(internal_ptr, user_usable_blk_sz); //writing maximum_smallbin_blk_sz + 1u for free dispatch code, vrs_ctrl is irrelevant, can be of any values
-
-                this->internal_update_allocation_sensor(ceil_blk_sz);
 
                 return user_ptr;
             }
@@ -1227,9 +1217,9 @@ namespace dg::network_allocation{
 
                 void * internal_ptr     = this->internal_get_largebin_internal_ptr_head(user_ptr);
                 size_t internal_ptr_sz  = this->internal_read_largebin_user_ptr_size(user_ptr) + LARGEBIN_ALLOCATION_HEADER_SZ; 
-                interval_type intv      = this->internal_aligned_buf_to_interval({internal_ptr, internal_ptr_sz});
+                interval_type intv      = this->internal_aligned_largemalloc_buf_to_interval({internal_ptr, internal_ptr_sz});
 
-                this->heap_allocator->free(&intv, 1u);
+                this->large_malloc_heap_allocator->free(&intv, 1u);
             }
 
             //as far as we concerned, this could be one of the public APIs, this function is external sufficient by itself (there are no internal assumptions or asserts)
@@ -1303,7 +1293,7 @@ namespace dg::network_allocation{
             }
     };
 
-    using concurrent_dg_std_allocator_t = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<uint32_t, 8u, 256u, 16u, 63u, 4u>>; //there is a history to aligned cmp, var >> sth != 0u is very fast, 0 cmp is 0 cost, this is due to nullptr + sz optimizations
+    using concurrent_dg_std_allocator_t = ConcurrentDGStdAllocator<DGStdAllocatorMetadata<uint32_t, 8u, 128u, 256u, 16u, 63u, 4u>>; //there is a history to aligned cmp, var >> sth != 0u is very fast, 0 cmp is 0 cost, this is due to nullptr + sz optimizations
 
     class FreeDispatcherWorker: public virtual dg::network_concurrency::WorkerInterface{
 

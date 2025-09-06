@@ -374,11 +374,48 @@ namespace dg::network_kernel_mailbox_impl1::external_interface{
             virtual void get_outbound_friend_addr(Address *, size_t off, size_t& sz, size_t cap) noexcept = 0;
             virtual auto get_outbound_friend_addr_iteration_size() noexcept -> size_t = 0;
     };
+
+    class NetworkBusyStatusRetrieverInterface{
+
+        public:
+
+            using busy_level_t = uint8_t;
+
+            static inline constexpr busy_level_t BUSY_0  = 0u;
+            static inline constexpr busy_level_t BUSY_1  = 1u;
+            static inline constexpr busy_level_t BUSY_2  = 2u; 
+
+            virtual ~NetworkBusyStatusRetrieverInterface() noexcept = default;
+            virtual auto get() noexcept -> std::expected<busy_level_t, exception_t> = 0;
+    };
 }
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
+
+    class NetworkBusyObserverInterface{
+
+        public:
+
+            using busy_level_t = uint8_t;
+
+            static inline constexpr busy_level_t BUSY_0  = 0u;
+            static inline constexpr busy_level_t BUSY_1  = 1u;
+            static inline constexpr busy_level_t BUSY_2  = 2u; 
+
+            virtual ~NetworkBusyObserverInterface() noexcept = default;
+            virtual void notify(busy_level_t) noexcept = 0;
+    };
+
+    class ContainerBusyAdapterInterface{
+
+        public:
+
+            virtual ~ContainerBusyAdapterInterface() noexcept = default;
+            virtual auto set_busy() noexcept -> exception_t = 0;
+            virtual auto set_ease() noexcept -> exception_t = 0; 
+    };
 
     class SchedulerInterface{
 
@@ -1966,6 +2003,73 @@ namespace dg::network_kernel_mailbox_impl1::semaphore_impl{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
+    class BusyObserver: public virtual packet_controller::NetworkBusyObserverInterface{
+
+        private:
+
+            dg::vector<std::shared_ptr<packet_controller::ContainerBusyAdapterInterface>> busy_adapter_vec;
+
+            using interface_t = packet_controller::NetworkBusyObserverInterface;
+
+        public:
+
+            using busy_level_t = interface_t::busy_level_t; 
+
+            BusyObserver(dg::vector<std::shared_ptr<packet_controller::ContainerBusyAdapterInterface>> busy_adapter_vec): busy_adapter_vec(std::move(busy_adapter_vec)){}
+
+            void notify(busy_level_t busy_level) noexcept{
+
+                switch (busy_level)
+                {
+                    case interface_t::BUSY_0:
+                    {
+                        for (const auto& busy_adapter: this->busy_adapter_vec){
+                            exception_t err = busy_adapter->set_ease();
+
+                            if (dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::error(dg::network_exception::verbose(err));
+                            }
+                        }
+
+                        break;
+                    }
+                    case interface_t::BUSY_1:
+                    {
+                        for (const auto& busy_adapter: this->busy_adapter_vec){
+                            exception_t err = busy_adapter->set_busy();
+
+                            if (dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::error(dg::network_exception::verbose(err));
+                            }
+                        }
+
+                        break;
+                    }
+                    case interface_t::BUSY_2:
+                    {
+                        for (const auto& busy_adapter: this->busy_adapter_vec){
+                            exception_t err = busy_adapter->set_busy();
+
+                            if (dg::network_exception::is_failed(err)){
+                                dg::network_log_stackdump::error(dg::network_exception::verbose(err));
+                            }
+                        }
+
+                        break;
+                    }
+                    default:
+                    {
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                }
+            }
+    };
+
     class ComplexReactor{
 
         private:
@@ -3155,21 +3259,28 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     };
 
     //OK
-    class ReactingBufferContainer: public virtual BufferContainerInterface{
+    class ReactingBufferContainer: public virtual BufferContainerInterface,
+                                   public virtual ContainerBusyAdapterInterface{
 
         private:
 
             std::unique_ptr<BufferContainerInterface> base;
             std::unique_ptr<ComplexReactor> reactor;
             std::chrono::nanoseconds max_wait_time;
+            const size_t busy_threshold;
+            const size_t ease_threshold; 
 
         public:
 
             ReactingBufferContainer(std::unique_ptr<BufferContainerInterface> base,
                                     std::unique_ptr<ComplexReactor> reactor,
-                                    std::chrono::nanoseconds max_wait_time) noexcept: base(std::move(base)),
-                                                                                      reactor(std::move(reactor)),
-                                                                                      max_wait_time(max_wait_time){}
+                                    std::chrono::nanoseconds max_wait_time,
+                                    size_t busy_threshold,
+                                    size_t ease_threshold) noexcept: base(std::move(base)),
+                                                                     reactor(std::move(reactor)),
+                                                                     max_wait_time(max_wait_time),
+                                                                     busy_threshold(busy_threshold),
+                                                                     ease_threshold(ease_threshold){}
 
             void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
@@ -3190,6 +3301,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             auto max_consume_size() noexcept -> size_t{
 
                 return this->base->max_consume_size();
+            }
+
+            auto set_busy() noexcept -> exception_t{
+
+                this->reactor->set_wakeup_threshold(this->busy_threshold);
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto set_ease() noexcept -> exception_t{
+
+                this->reactor->set_wakeup_threshold(this->ease_threshold);
+                return dg::network_exception::SUCCESS;
             }
     };
 
@@ -3977,21 +4100,28 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
     };
 
     //OK
-    class ReactingPacketContainer: public virtual PacketContainerInterface{
+    class ReactingPacketContainer: public virtual PacketContainerInterface,
+                                   public virtual ContainerBusyAdapterInterface{
 
         private:
 
             std::unique_ptr<PacketContainerInterface> base;
             std::unique_ptr<ComplexReactor> reactor;
             std::chrono::nanoseconds max_wait_time;
+            const size_t busy_threshold;
+            const size_t ease_threshold;
         
         public:
 
             ReactingPacketContainer(std::unique_ptr<PacketContainerInterface> base,
                                     std::unique_ptr<ComplexReactor> reactor,
-                                    std::chrono::nanoseconds max_wait_time) noexcept: base(std::move(base)),
-                                                                                      reactor(std::move(reactor)),
-                                                                                      max_wait_time(max_wait_time){}
+                                    std::chrono::nanoseconds max_wait_time,
+                                    size_t busy_threshold,
+                                    size_t ease_threshold) noexcept: base(std::move(base)),
+                                                                     reactor(std::move(reactor)),
+                                                                     max_wait_time(max_wait_time),
+                                                                     busy_threshold(busy_threshold),
+                                                                     ease_threshold(ease_threshold){}
 
             void push(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
@@ -4012,6 +4142,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             auto max_consume_size() noexcept -> size_t{
 
                 return this->base->max_consume_size();
+            }
+
+            auto set_busy() noexcept -> exception_t{
+
+                this->reactor->set_wakeup_threshold(this->busy_threshold);
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto set_ease() noexcept -> exception_t{
+
+                this->reactor->set_wakeup_threshold(this->ease_threshold);
+                return dg::network_exception::SUCCESS;
             }
     };
 
@@ -4992,6 +5134,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<BatchUpdater>(to_dg_vector(std::move(updatable_vec)));
         }
 
+        static auto get_busy_observer(std::vector<std::shared_ptr<ContainerBusyAdapterInterface>> busy_adapter_vec) -> std::unique_ptr<NetworkBusyObserverInterface>{
+            
+            if (busy_adapter_vec.empty()){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            for (const auto& busy_adapter: busy_adapter_vec){
+                if (busy_adapter == nullptr){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+            }
+            
+            return std::make_unique<BusyObserver>(to_dg_vector(std::move(busy_adapter_vec)));
+        }
+
         static auto get_asap_scheduler() -> std::unique_ptr<SchedulerInterface>{
 
             return std::make_unique<ASAPScheduler>();
@@ -5300,12 +5457,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         static auto get_reacting_buffer_container(std::unique_ptr<BufferContainerInterface> base,
                                                   size_t reacting_threshold,
                                                   size_t concurrent_subscriber_cap,
-                                                  std::chrono::nanoseconds wait_time) -> std::unique_ptr<BufferContainerInterface>{
+                                                  std::chrono::nanoseconds wait_time,
+                                                  size_t reactor_ease_threshold = 1u,
+                                                  size_t reactor_busy_threshold = 1024u) -> std::unique_ptr<BufferContainerInterface>{
 
             const size_t MIN_REACTING_THRESHOLD             = size_t{1};
             const size_t MAX_REACTING_THRESHOLD             = size_t{1} << 30;
             const std::chrono::nanoseconds MIN_WAIT_TIME    = std::chrono::nanoseconds{1}; 
             const std::chrono::nanoseconds MAX_WAIT_TIME    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes{1});
+            const size_t MIN_REACTOR_EASE_THRESHOLD         = size_t{1};
+            const size_t MAX_REACTOR_EASE_THRESHOLD         = size_t{1} << 30;
+            const size_t MIN_REACTOR_BUSY_THRESHOLD         = size_t{1};
+            const size_t MAX_REACTOR_BUSY_THRESHOLD         = size_t{1} << 30; 
 
             if (base == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -5318,10 +5481,20 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             if (std::clamp(wait_time, MIN_WAIT_TIME, MAX_WAIT_TIME) != wait_time){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
+            
+            if (std::clamp(reactor_ease_threshold, MIN_REACTOR_EASE_THRESHOLD, MAX_REACTOR_EASE_THRESHOLD) != reactor_ease_threshold){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(reactor_busy_threshold, MIN_REACTOR_BUSY_THRESHOLD, MAX_REACTOR_BUSY_THRESHOLD) != reactor_busy_threshold){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             return std::make_unique<ReactingBufferContainer>(std::move(base),
                                                              get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
-                                                             wait_time);
+                                                             wait_time,
+                                                             reactor_ease_threshold,
+                                                             reactor_busy_threshold);
 
         }
 
@@ -5566,12 +5739,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         static auto get_reacting_packet_container(std::unique_ptr<PacketContainerInterface> base,
                                                   size_t reacting_threshold,
                                                   size_t concurrent_subscriber_cap,
-                                                  std::chrono::nanoseconds wait_time) -> std::unique_ptr<PacketContainerInterface>{
+                                                  std::chrono::nanoseconds wait_time,
+                                                  size_t reactor_ease_threshold = 1u,
+                                                  size_t reactor_busy_threshold = 1024u) -> std::unique_ptr<PacketContainerInterface>{
 
             const size_t MIN_REACTING_THRESHOLD             = size_t{1};
             const size_t MAX_REACTING_THRESHOLD             = size_t{1} << 30;
             const std::chrono::nanoseconds MIN_WAIT_TIME    = std::chrono::nanoseconds{1}; 
             const std::chrono::nanoseconds MAX_WAIT_TIME    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::minutes{1});
+            const size_t MIN_REACTOR_EASE_THRESHOLD         = size_t{1};
+            const size_t MAX_REACTOR_EASE_THRESHOLD         = size_t{1} << 30;
+            const size_t MIN_REACTOR_BUSY_THRESHOLD         = size_t{1};
+            const size_t MAX_REACTOR_BUSY_THRESHOLD         = size_t{1} << 30; 
 
             if (base == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -5585,9 +5764,19 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(reactor_ease_threshold, MIN_REACTOR_EASE_THRESHOLD, MAX_REACTOR_EASE_THRESHOLD) != reactor_ease_threshold){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(reactor_busy_threshold, MIN_REACTOR_BUSY_THRESHOLD, MAX_REACTOR_BUSY_THRESHOLD) != reactor_busy_threshold){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             return std::make_unique<ReactingPacketContainer>(std::move(base),
                                                              get_complex_reactor(reacting_threshold, concurrent_subscriber_cap),
-                                                             wait_time);
+                                                             wait_time,
+                                                             reactor_ease_threshold,
+                                                             reactor_busy_threshold);
         }
 
         static auto get_randomhash_distributed_packet_container(std::vector<std::unique_ptr<PacketContainerInterface>> base_vec) -> std::unique_ptr<HashDistributedPacketContainer>{
@@ -5877,6 +6066,65 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
     //it's very super complicated that we have come up with this idea, we'd want uninterruptable recv because it'd avoid RAM BUS for the intermediate containers
     //we'd want to receive batches of datas to avoid context switch + keep the subscriber queue hot (so we could pull data from the kernel as soon as possible) 
+
+    class NetworkStatusMonitorWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<external_interface::NetworkBusyStatusRetrieverInterface> netstat_retriever;
+            std::shared_ptr<packet_controller::NetworkBusyObserverInterface> busy_observer;
+            std::chrono::nanoseconds break_time; 
+
+        public:
+
+            NetworkStatusMonitorWorker(std::shared_ptr<external_interface::NetworkBusyStatusRetrieverInterface> netstat_retriever,
+                                       std::shared_ptr<packet_controller::NetworkBusyObserverInterface> busy_observer,
+                                       std::chrono::nanoseconds break_time) noexcept: netstat_retriever(std::move(netstat_retriever)),
+                                                                                      busy_observer(std::move(busy_observer)),
+                                                                                      break_time(break_time){}
+            
+            bool run_one_epoch() noexcept{
+
+                using netstat_interface_t = external_interface::NetworkBusyStatusRetrieverInterface;
+                using observer_interface_t = packet_controller::NetworkBusyObserverInterface;
+
+                std::expected<netstat_interface_t::busy_level_t, exception_t> busy_level = this->netstat_retriever->get();
+
+                if (busy_level.has_value()){
+                    switch (busy_level.value()){
+                        case netstat_interface_t::BUSY_0:
+                        {
+                            this->busy_observer->notify(observer_interface_t::BUSY_0);
+                            break;
+                        }
+                        case netstat_interface_t::BUSY_1:
+                        {
+                            this->busy_observer->notify(observer_interface_t::BUSY_1);
+                            break;
+                        }
+                        case netstat_interface_t::BUSY_2:
+                        {
+                            this->busy_observer->notify(observer_interface_t::BUSY_2);
+                            break;
+                        }
+                        default:
+                        {
+                            if constexpr(DEBUG_MODE_FLAG){
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            } else{
+                                std::unreachable();
+                            }
+                        }
+                    }
+                } else{
+                    dg::network_log_stackdump::error(dg::network_exception::verbose(busy_level.error()));
+                }
+
+                std::this_thread::sleep_for(this->break_time);
+                return true;
+            }
+    };
 
     class BufferContainerRedistributorWorker: public virtual dg::network_concurrency::WorkerInterface{
 
@@ -6759,6 +7007,31 @@ namespace dg::network_kernel_mailbox_impl1::worker{
     };
 
     struct ComponentFactory{
+        
+        static auto get_netstat_monitor_worker(std::shared_ptr<external_interface::NetworkBusyStatusRetrieverInterface> netstat_retriever,
+                                               std::shared_ptr<packet_controller::NetworkBusyObserverInterface> busy_observer,
+                                               std::chrono::nanoseconds break_time){
+            using namespace std::literals::chrono_literals;
+
+            const std::chrono::nanoseconds MIN_BREAK_TIME = std::chrono::duration_cast<std::chrono::nanoseconds>(0ns);
+            const std::chrono::nanoseconds MAX_BREAK_TIME = std::chrono::duration_cast<std::chrono::nanoseconds>(1h);
+
+            if (netstat_retriever == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (busy_observer == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(break_time, MIN_BREAK_TIME, MAX_BREAK_TIME) != break_time){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<NetworkStatusMonitorWorker>(std::move(netstat_retriever),
+                                                                std::move(busy_observer),
+                                                                break_time);
+        } 
 
         static auto get_buffer_redistributor_worker(std::shared_ptr<packet_controller::BufferContainerInterface> fr_warehouse,
                                                     std::shared_ptr<packet_controller::BufferContainerInterface> to_warehouse,
@@ -7648,6 +7921,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t outbound_tc_side_cap;
 
         std::shared_ptr<external_interface::NATIPControllerInterface> natip_controller;
+        std::shared_ptr<external_interface::NetworkBusyStatusRetrieverInterface> busy_retriever;
         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> retry_device;
     };
 
