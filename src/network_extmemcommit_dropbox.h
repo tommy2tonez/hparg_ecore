@@ -50,6 +50,7 @@ namespace dg::network_extmemcommit_dropbox{
         public:
 
             virtual ~SynchronizableInterface() noexcept = default;
+            virtual auto is_synchronization_ready() noexcept -> bool = 0;
             virtual void sync() noexcept = 0;
     };
 
@@ -69,6 +70,7 @@ namespace dg::network_extmemcommit_dropbox{
             virtual ~SynchronizableWareHouseInterface() noexcept = default;
             virtual auto push(std::unique_ptr<SynchronizableInterface>&&, std::chrono::nanoseconds sync_duration) noexcept -> exception_t = 0;
             virtual auto pop() noexcept -> std::unique_ptr<SynchronizableInterface> = 0;
+            virtual auto reevaluate() noexcept = 0;
     };
 
     class TokenCacheControllerInterface{
@@ -213,6 +215,7 @@ namespace dg::network_extmemcommit_dropbox{
 
             dg::vector<SynchronizableTemporalEntry> priority_queue;
             dg::pow2_cyclic_queue<std::pair<std::unique_ptr<SynchronizableInterface> *, std::binary_semaphore *>> waiting_queue;
+            dg::pow2_cyclic_queue<std::unique_ptr<SynchronizableInterface>> ready_queue;
             size_t priority_queue_cap;
             std::unique_ptr<std::mutex> mtx;
             stdx::hdi_container<std::chrono::nanoseconds> max_sync_duration;
@@ -225,10 +228,12 @@ namespace dg::network_extmemcommit_dropbox{
 
             SynchronizableWareHouse(dg::vector<SynchronizableTemporalEntry> priority_queue,
                                     dg::pow2_cyclic_queue<std::pair<std::unique_ptr<SynchronizableInterface> *, std::binary_semaphore *>> waiting_queue,
+                                    dg::pow2_cyclic_queue<std::unique_ptr<SynchronizableInterface>> ready_queue,
                                     size_t priority_queue_cap,
                                     std::unique_ptr<std::mutex> mtx,
                                     std::chrono::nanoseconds max_sync_duration) noexcept: priority_queue(std::move(priority_queue)),
                                                                                           waiting_queue(std::move(waiting_queue)),
+                                                                                          ready_queue(std::move(ready_queue)),
                                                                                           priority_queue_cap(priority_queue_cap),
                                                                                           mtx(std::move(mtx)),
                                                                                           max_sync_duration(stdx::hdi_container<std::chrono::nanoseconds>{max_sync_duration}){}
@@ -285,6 +290,13 @@ namespace dg::network_extmemcommit_dropbox{
                 {
                     stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
+                    if (!this->ready_queue.empty()){
+                        auto rs = std::move(this->ready_queue.front());
+                        this->ready_queue.pop_front();
+
+                        return rs;
+                    }
+
                     if (!this->priority_queue.empty()){
                         std::pop_heap(this->priority_queue.begin(), this->priority_queue.end(), greater_cmp);
                         auto rs = std::move(this->priority_queue.back());
@@ -305,6 +317,13 @@ namespace dg::network_extmemcommit_dropbox{
 
                 smp.acquire();
                 return syncable;
+            }
+
+            void reevaluate() noexcept{
+
+                //we'd bring the guarantee time to max_wait_one (timeout) + monitor_invoke + padding, all of that in probably 100ms, which is reasonable, probably 
+
+                (void) this->priority_queue;
             }
     };
 
@@ -1359,6 +1378,28 @@ namespace dg::network_extmemcommit_dropbox{
                     }
                 }
             };
+    };
+
+    class ReevaluatorWorker: public virtual dg::network_concurrency::WorkerInterface{
+
+        private:
+
+            std::shared_ptr<SynchronizableWareHouseInterface> warehouse;
+            std::chrono::nanoseconds break_dur;
+
+        public:
+
+            ReevaluatorWorker(std::shared_ptr<SynchronizableWareHouseInterface> warehouse,
+                              std::chrono::nanoseconds break_dur) noexcept: warehouse(std::move(warehouse)),
+                                                                            break_dur(break_dur){}
+
+            bool run_one_epoch() noexcept{
+
+                this->warehouse->reevaluate();
+                std::this_thread::sleep_for(this->break_dur);
+
+                return true;
+            }
     };
 
     class SynchronizerWorker: public virtual dg::network_concurrency::WorkerInterface{

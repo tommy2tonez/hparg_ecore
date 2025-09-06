@@ -244,11 +244,13 @@ namespace dg::network_rest_frame::client{
 
     struct BatchResponseInterface{
         virtual ~BatchResponseInterface() noexcept = default;
+        virtual auto is_response_ready() noexcept -> bool = 0;
         virtual auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t> = 0;
     };
 
     struct ResponseInterface{
         virtual ~ResponseInterface() noexcept = default;
+        virtual auto is_response_ready() noexcept -> bool = 0;
         virtual auto response() noexcept -> std::expected<Response, exception_t> = 0; 
     };
 
@@ -2402,6 +2404,11 @@ namespace dg::network_rest_frame::client_impl1{
                                             resp(std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
                                             is_response_invoked(std::in_place_t{}, false){}
 
+            auto is_response_ready() noexcept -> bool{
+
+                return this->smp.value.test(std::memory_order_relaxed) == true;
+            } 
+
             void update(std::expected<Response, exception_t> response_arg) noexcept{
 
                 this->resp  = std::move(response_arg);
@@ -2488,6 +2495,11 @@ namespace dg::network_rest_frame::client_impl1{
             BatchRequestResponseBase(size_t resp_sz): atomic_smp(std::in_place_t{}, -static_cast<intmax_t>(stdx::zero_throw(resp_sz)) + 1),
                                                       resp_vec(stdx::zero_throw(resp_sz), std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
                                                       is_response_invoked(std::in_place_t{}, false){}
+
+            auto is_response_ready() noexcept -> bool{
+
+                return this->atomic_smp.value.load(std::memory_order_relaxed) == 1u;
+            }
 
             void update(size_t idx, std::expected<Response, exception_t> response) noexcept{
 
@@ -2646,6 +2658,11 @@ namespace dg::network_rest_frame::client_impl1{
                 this->wait_response();
             }
 
+            auto is_response_ready() noexcept -> bool{
+
+                return this->base.is_response_ready();
+            }
+
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
                 auto rs = this->base.response();
@@ -2747,9 +2764,14 @@ namespace dg::network_rest_frame::client_impl1{
                 this->wait_response();
             }
 
+            auto is_response_ready() noexcept -> bool{
+
+                return this->base.is_response_ready();
+            }
+
             auto response() noexcept -> std::expected<Response, exception_t>{
 
-                auto rs = this->base->response();
+                auto rs = this->base.response();
                 this->release_response_wait_responsibility();
                 return rs;
             }
@@ -2769,7 +2791,7 @@ namespace dg::network_rest_frame::client_impl1{
                 bool wait_responsibility = std::exchange(this->response_wait_responsibility_flag, false);
 
                 if (wait_responsibility){
-                    stdx::empty_noipa(this->base->response(), this->observer);
+                    stdx::empty_noipa(this->base.response(), this->observer);
                 }
             }
     };
@@ -4155,6 +4177,11 @@ namespace dg::network_rest_frame::client_impl1{
                         this->release_ticket();
                     }
 
+                    auto is_response_ready() noexcept -> bool{
+
+                        return this->base->is_response_ready();
+                    }
+
                     auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
                         auto rs = this->base->response();
@@ -4209,6 +4236,11 @@ namespace dg::network_rest_frame::client_impl1{
                 public:
 
                     InternalSingleResponse(std::unique_ptr<BatchResponseInterface> base) noexcept: base(std::move(base)){}
+
+                    auto is_response_ready() noexcept -> bool{
+
+                        return this->base->is_response_ready();
+                    }
 
                     auto response() noexcept -> std::expected<Response, exception_t>{
 
