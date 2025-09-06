@@ -257,12 +257,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(ack_vec);
+            reflector(dg::network_compact_serializer::wrap_container<uint16_t>(ack_vec));
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(ack_vec);
+            reflector(dg::network_compact_serializer::wrap_container<uint16_t>(ack_vec));
         }
     };
 
@@ -1820,7 +1820,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static auto deserialize_ack_packet(dg::string bstream) noexcept -> std::expected<AckPacket, exception_t>{
 
-        return dg::network_compact_serializer::dgstd_deserialize<AckPacket>(bstream, ACK_PACKET_SERIALIZATION_SECRET);
+        return dg::network_compact_serializer::dgstd_deserialize<AckPacket>(bstream, ACK_PACKET_SERIALIZATION_SECRET); //
     }
 
     static auto deserialize_krescue_packet(dg::string bstream) noexcept -> std::expected<KRescuePacket, exception_t>{

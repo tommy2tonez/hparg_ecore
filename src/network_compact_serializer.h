@@ -549,6 +549,9 @@ namespace dg::network_compact_serializer::types_space{
     static inline constexpr bool is_nonlinear_container_v                               = std::disjunction_v<is_unordered_map<T>, is_map<T>, is_unordered_set<T>, is_set<T>>;
 
     template <class T>
+    static inline constexpr bool is_container_v                                         = is_cpyable_linear_container_v<T> || is_noncpyable_linear_container_v<T> || is_nonlinear_container_v<T>;
+
+    template <class T>
     static inline constexpr bool is_tuple_v                                             = is_tuple<T>::value; 
 
     template <class T>
@@ -593,6 +596,42 @@ namespace dg::network_compact_serializer::types_space{
 
     template <class T>
     using base_type_t = typename base_type<T>::type;
+
+    template <class T, class CastedSize>
+    struct ContainerWrapper{
+        static_assert(is_container_v<base_type_t<T>>);
+        static_assert(std::is_unsigned_v<CastedSize>);
+        static_assert(sizeof(CastedSize) <= sizeof(size_t));
+
+        using containee_type = T&&;
+        using size_type = CastedSize;
+
+        T&& reference;
+
+        ContainerWrapper(T&& reference) noexcept: reference(std::forward<T>(reference)){}
+
+        auto get() noexcept -> T&&{
+           return static_cast<T&&>(this->reference); 
+        }
+    };
+
+    template <class T>
+    struct is_container_wrapper: std::false_type{};
+
+    template <class ...Args>
+    struct is_container_wrapper<ContainerWrapper<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_container_wrapper_v = is_container_wrapper<T>::value; 
+
+    template <class T>
+    struct is_container_wrapper_argument: std::false_type{};
+
+    template <class ...Args>
+    struct is_container_wrapper_argument<ContainerWrapper<Args...>&&>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_container_wrapper_argument_v = is_container_wrapper_argument<T>::value;
 }
 
 namespace dg::network_compact_serializer::utility{
@@ -1520,6 +1559,8 @@ namespace dg::network_compact_serializer::archive{
             return 230u;
         } else if constexpr(types_space::is_utc_timepoint_v<T>){
             return 231u;
+        } else if constexpr(types_space::is_container_wrapper_v<T>){
+            return 232u;
         } else{
             static_assert(FALSE_VAL<>);
         }
@@ -1648,6 +1689,28 @@ namespace dg::network_compact_serializer::archive{
             };
 
             data.dg_reflect(archiver);
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_container_wrapper_argument_v<T&&>, bool> = true>
+        constexpr auto count(T&& data) const -> size_t{
+
+            using base_type             = types_space::base_type_t<T>;
+            using container_type        = typename base_type::containee_type;
+            using container_size_type   = typename base_type::size_type;
+
+            container_type container    = data.get();
+
+            if (!network_compact_serializer::utility::is_safe_integer_castable<container_size_type>(container.size())){
+                throw exception_space::bad_format();
+            }
+
+            size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(container_size_type{});
+
+            for (const auto& e: container){
+                rs += this->count(e);
+            }
 
             return rs;
         }
@@ -1787,6 +1850,27 @@ namespace dg::network_compact_serializer::archive{
 
             std::memcpy(dst, src, cpy_sz);
             std::advance(buf, cpy_sz);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_container_wrapper_argument_v<T&&>, bool> = true>
+        constexpr void put(char *& buf, T&& data) const{
+
+            using base_type             = types_space::base_type_t<T>;
+            using container_type        = typename base_type::containee_type;
+            using container_size_type   = typename base_type::size_type;
+
+            container_type container    = data.get();
+
+            if (!network_compact_serializer::utility::is_safe_integer_castable<container_size_type>(container.size())){
+                throw exception_space::bad_format();
+            }
+
+            this->put(buf, get_dgstd_serialization_header<base_type>());
+            this->put(buf, dg::network_compact_serializer::utility::safe_integer_cast<container_size_type>(container.size()));
+
+            for (const auto& e: container){
+                this->put(buf, e);
+            }
         }
 
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
@@ -2034,6 +2118,43 @@ namespace dg::network_compact_serializer::archive{
             buf_sz -= cpy_sz;
         }
 
+        template <class T, std::enable_if_t<types_space::is_container_wrapper_argument_v<T&&>, bool> = true>
+        constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type             = types_space::base_type_t<T>;
+            using container_type        = typename base_type::containee_type;
+            using container_size_type   = typename base_type::size_type;
+            using container_base_type   = types_space::base_type_t<container_type>;
+            using containee_type        = types_space::containee_t<container_base_type>; 
+            using elem_type             = containee_type;
+
+            container_type container    = data.get();
+
+            types::dgstd_unsigned_serialization_header_t expected_container_header  = {};
+            this->put(buf, buf_sz, expected_container_header);
+            types::dgstd_unsigned_serialization_header_t container_header           = get_dgstd_serialization_header<base_type>();
+
+            if (container_header != expected_container_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            auto sz     = container_size_type{};
+            auto isrter = network_compact_serializer::utility::get_inserter<container_base_type>();
+            this->put(buf, buf_sz, sz);
+
+            if constexpr(dg::network_compact_serializer::constants::DESERIALIZATION_HAS_CLEAR_CONTAINER_RIGHT){
+                container.clear();
+            }
+
+            dg::network_compact_serializer::utility::reserve_if_possible(container, sz);
+
+            for (size_t i = 0u; i < static_cast<size_t>(sz); ++i){
+                elem_type e;
+                this->put(buf, buf_sz, e);
+                isrter(container, std::move(e));
+            }
+        }
+
         template <class T, std::enable_if_t<types_space::is_reflectible_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
 
@@ -2057,6 +2178,12 @@ namespace dg::network_compact_serializer::archive{
 }
 
 namespace dg::network_compact_serializer{
+
+    template <class SizeType, class T>
+    constexpr auto wrap_container(T&& container) noexcept -> dg::network_compact_serializer::types_space::ContainerWrapper<T, SizeType>{
+
+        return dg::network_compact_serializer::types_space::ContainerWrapper<T, SizeType>(std::forward<T>(container));
+    }
 
     template <class T>
     constexpr auto size(const T& obj) -> size_t{
