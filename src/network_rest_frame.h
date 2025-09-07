@@ -2546,7 +2546,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             stdx::inplace_hdi_container<std::atomic<intmax_t>> atomic_smp;
             dg::vector<std::expected<Response, exception_t>> resp_vec; //alright, there are hardware destructive interference issues, we dont want to talk about that yet
-            stdx::inplace_hdi_container<bool> is_response_invoked;
+            stdx::inplace_hdi_container<std::atomic_flag> is_response_invoked;
             UniqueConcurrentSubscriberContainer subscriber_container;
             stdx::inplace_hdi_container<std::atomic_flag> is_done_updated;
             stdx::inplace_hdi_container<std::atomic_flag> is_done_updated_cleanup;
@@ -2654,7 +2654,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
-                bool was_invoked = std::exchange(this->is_response_invoked.value, true);
+                bool was_invoked = this->is_response_invoked.value.test_and_set(std::memory_order_relaxed);
 
                 if (was_invoked){
                     return std::unexpected(dg::network_exception::REST_RESPONSE_DOUBLE_INVOKE);
@@ -2731,7 +2731,7 @@ namespace dg::network_rest_frame::client_impl1{
                     }
 
                     if (old == 0){
-                        self_obj->atomic_smp.value.notify_one():
+                        self_obj->atomic_smp.value.notify_one();
                         std::atomic_signal_fence(std::memory_order_seq_cst);
                         self_obj->subscriber_container.notify();
                         std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -2784,11 +2784,11 @@ namespace dg::network_rest_frame::client_impl1{
 
             dg::vector<BatchRequestResponseBaseDesignatedObserver> observer_arr; 
             BatchRequestResponseBase base;
-            bool response_wait_responsibility_flag;
+            stdx::inplace_hdi_container<std::atomic<bool>> response_wait_responsibility_flag;
 
             BatchRequestResponse(size_t resp_sz): observer_arr(resp_sz),
                                                   base(resp_sz),
-                                                  response_wait_responsibility_flag(true){
+                                                  response_wait_responsibility_flag(std::in_place_t{}, true){
 
                 for (size_t i = 0u; i < resp_sz; ++i){
                     this->observer_arr[i] = BatchRequestResponseBaseDesignatedObserver(&this->base, i);
@@ -2821,11 +2821,16 @@ namespace dg::network_rest_frame::client_impl1{
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
-                auto rs = this->base.response();
-                this->base.close_response();
-                this->release_response_wait_responsibility();
+                bool wait_responsibility = this->response_wait_responsibility_flag.value.exchange(false, std::memory_order_relaxed);
 
-                return rs;
+                if (wait_responsibility){
+                    auto rs = dg::network_exception::nothrow_log(this->base.response());
+                    this->base.close_response();
+
+                    return rs;
+                }
+
+                return std::unexpected(dg::network_exception::REST_RESPONSE_DOUBLE_INVOKE);
             }
 
             auto response_size() const noexcept -> size_t{
@@ -2844,17 +2849,12 @@ namespace dg::network_rest_frame::client_impl1{
 
             void release_response_wait_responsibility() noexcept{
 
-                this->response_wait_responsibility_flag = false;
+                this->response_wait_responsibility_flag.value.exchange(false, std::memory_order_relaxed);
             }
 
             void wait_response() noexcept{
 
-                bool wait_responsibility = std::exchange(this->response_wait_responsibility_flag, false); 
-
-                if (wait_responsibility){
-                    stdx::empty_noipa(this->base.response(), this->observer_arr);
-                    stdx::empty_noipa(this->base.close_response(), this->observer_arr);
-                }
+                stdx::empty_noipa(this->response(), this->observer_arr, this->base);
             }
     };
 
