@@ -235,6 +235,17 @@ namespace dg::network_rest_frame::client{
         virtual auto get(size_t, RequestID *) noexcept -> exception_t = 0;
     };
 
+    struct ResponseOnReadyObserverInterface{
+        virtual ~ResponseOnReadyObserverInterface() = default;
+        virtual void notify() noexcept = 0;
+    };
+
+    struct ResponseOnReadyNotifierInterface{
+        virtual ~ResponseOnReadyNotifierInterface() = default;
+        virtual auto test_or_subscribe(ResponseOnReadyObserverInterface *) noexcept -> std::expected<bool, exception_t> = 0;
+        virtual auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface>) noexcept -> std::expected<bool, exception_t> = 0;
+    };
+
     struct ResponseObserverInterface{
         virtual ~ResponseObserverInterface() noexcept = default;
         virtual void update(std::expected<Response, exception_t>) noexcept = 0;
@@ -242,15 +253,14 @@ namespace dg::network_rest_frame::client{
         virtual void deferred_memory_ordering_fetch_close() noexcept = 0;
     };
 
-    struct BatchResponseInterface{
+    struct BatchResponseInterface: virtual ResponseOnReadyNotifierInterface{
         virtual ~BatchResponseInterface() noexcept = default;
-        virtual auto is_response_ready() noexcept -> bool = 0;
         virtual auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t> = 0;
+        virtual auto response_size() const noexcept -> size_t = 0;
     };
 
-    struct ResponseInterface{
+    struct ResponseInterface: virtual ResponseOnReadyNotifierInterface{
         virtual ~ResponseInterface() noexcept = default;
-        virtual auto is_response_ready() noexcept -> bool = 0;
         virtual auto response() noexcept -> std::expected<Response, exception_t> = 0; 
     };
 
@@ -2389,6 +2399,126 @@ namespace dg::network_rest_frame::client_impl1{
         return rs;
     }
 
+    class SubscriberContainer{
+
+        private:
+
+            using observer_0_t = ResponseOnReadyObserverInterface *;
+            using observer_1_t = std::shared_ptr<ResponseOnReadyObserverInterface>; 
+
+            std::variant<std::monostate, observer_0_t, observer_1_t> observer;
+
+        public:
+
+            SubscriberContainer(): observer(std::monostate{}){}
+
+            auto subscribe(ResponseOnReadyObserver * observer) noexcept -> exception_t{
+
+                if (observer == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                this->observer = observer;
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> exception_t{
+
+                if (observer == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                this->observer = std::move(observer);
+                return dg::network_exception::SUCCESS;
+            }
+
+            void notify() noexcept{
+
+                if (std::holds_alternative<std::monostate>(this->observer)){
+                    return;
+                } else if (std::holds_alternative<ResponseOnReadyObserver *>(this->observer)){
+                    std::get<ResponseOnReadyObserver *>(this->observer)->notify();
+                } else if (std::holds_alternative<std::shared_ptr<ResponseOnReadyObserverInterface>>(this->observer)){
+                    std::get<std::shared_ptr<ResponseOnReadyObserverInterface>>(this->observer)->notify();
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+            }
+    };
+
+    class UniqueConcurrentSubscriberContainer{
+
+        private:
+
+            SubscriberContainer base;
+
+            std::atomic_flag was_set;
+            std::atomic_flag was_notifed; 
+
+        public:
+
+            UniqueConcurrentSubscriberContainer(): base(),
+                                                   was_set(false),
+                                                   was_notified(false){}
+
+            auto subscribe(ResponseOnReadyObserver * observer) noexcept -> exception_t{
+
+                if (observer == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                bool has_set_right = this->was_set.test_and_set(std::memory_order_relaxed) == false;
+
+                if (!has_set_right){
+                    return dg::network_exception::REST_OBSERVER_SECOND_SET;
+                }
+                
+                stdx::memtransaction_guard tx_grd;
+                return this->base.subscribe(observer);
+            }
+
+            auto subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> exception_t{
+
+                if (observer == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                bool has_set_right = this->was_set.test_and_set(std::memory_order_relaxed) == false;
+
+                if (!has_set_right){
+                    return dg::network_exception::REST_OBSERVER_SECOND_SET;
+                }
+
+                stdx::memtransaction_guard tx_grd;
+                return this->base.subscribe(std::move(observer));
+            }
+
+            auto notify() noexcept -> exception_t{
+
+                bool precond_1  = this->was_set.test(std::memory_order_relaxed) == true; 
+
+                if (!precond_1){
+                    return dg::network_exception::REST_OBSERVER_BAD_NOTIFY;
+                }
+
+                bool precond_2  = this->was_notifed.test_and_set(std::memory_order_relaxed);
+
+                if (!precond_2){
+                    return dg::network_exception::REST_OBSERVER_SECOND_NOTIFY;
+                }
+
+                stdx::memtransaction_guard tx_grd;
+                base.notify(); //recursive if re-invoke, which will not happen because of was_notified_value
+
+                return dg::network_exception::SUCCESS;
+            }
+    };
+
     //clear
     class RequestResponseBase{
 
@@ -2397,17 +2527,50 @@ namespace dg::network_rest_frame::client_impl1{
             stdx::inplace_hdi_container<std::atomic_flag> smp; //I'm allergic to shared_ptr<>, it costs a memory_order_seq_cst to deallocate the object, we'll do things this way to allow us leeways to do relaxed operations to unlock batches of requests later, thing is that timed_semaphore is not a magic, it requires an entry registration in the operating system, we'll work around things by reinventing the wheel
             std::expected<Response, exception_t> resp;
             stdx::inplace_hdi_container<bool> is_response_invoked;
+            UniqueConcurrentSubscriberContainer subscriber_container;
 
         public:
 
             RequestResponseBase() noexcept: smp(std::in_place_t{}, false),
                                             resp(std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
-                                            is_response_invoked(std::in_place_t{}, false){}
+                                            is_response_invoked(std::in_place_t{}, false),
+                                            subscriber_container(){}
 
-            auto is_response_ready() noexcept -> bool{
+            auto test_or_subscribe(ResponseOnReadyObserver * observer) noexcept -> std::expected<bool, exception_t>{
 
-                return this->smp.value.test(std::memory_order_relaxed) == true;
-            } 
+                exception_t err = this->subscriber_container.subscribe(observer);
+                
+                if (dg::network_exception::is_failed(err)){
+                    return std::unexpected(err);
+                }
+                
+                //if already fences the memory ordering, just to make sure that we are super correct
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                if (this->smp.value.test(std::memory_order_relaxed)){
+                    return true;
+                }
+
+                return false;
+            }
+
+            auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserver> observer) noexcept -> std::expected<bool, exception_t>{
+
+                exception_t err = this->subsriber_container.subscribe_sp(std::move(observer));
+
+                if (dg::network_exception::is_failed(err)){
+                    return std::unexpected(err);
+                }
+
+                //if already fences the memory ordering, just to make sure that we are super correct 
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                if (this->smp.value.test(std::memory_order_relaxed)){
+                    return true;
+                }
+
+                return false;
+            }
 
             void update(std::expected<Response, exception_t> response_arg) noexcept{
 
@@ -2420,6 +2583,10 @@ namespace dg::network_rest_frame::client_impl1{
                         std::abort();
                     }
                 }
+
+                this->smp.value.notify_one();
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                this->subscriber_container.notify();
             }
 
             void deferred_memory_ordering_fetch(std::expected<Response, exception_t> response_arg) noexcept{
@@ -2459,6 +2626,10 @@ namespace dg::network_rest_frame::client_impl1{
                             std::abort();
                         }
                     }
+
+                    self_obj->smp.value.notify_one();
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    this->subscriber_container.notify();
                 };
 
                 stdx::noipa_do_task(task, this, dirty_memory);
@@ -2473,6 +2644,7 @@ namespace dg::network_rest_frame::client_impl1{
             stdx::inplace_hdi_container<std::atomic<intmax_t>> atomic_smp;
             dg::vector<std::expected<Response, exception_t>> resp_vec; //alright, there are hardware destructive interference issues, we dont want to talk about that yet
             stdx::inplace_hdi_container<bool> is_response_invoked;
+            UniqueConcurrentSubscriberContainer subscriber_container;
 
             static void assert_all_expected_initialized(dg::vector<std::expected<Response, exception_t>>& arg) noexcept{
 
@@ -2494,11 +2666,41 @@ namespace dg::network_rest_frame::client_impl1{
 
             BatchRequestResponseBase(size_t resp_sz): atomic_smp(std::in_place_t{}, -static_cast<intmax_t>(stdx::zero_throw(resp_sz)) + 1),
                                                       resp_vec(stdx::zero_throw(resp_sz), std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
-                                                      is_response_invoked(std::in_place_t{}, false){}
+                                                      is_response_invoked(std::in_place_t{}, false),
+                                                      subscriber_container(){}
 
-            auto is_response_ready() noexcept -> bool{
+            auto test_or_subscribe(ResponseOnReadyObserver * observer) noexcept -> std::expected<bool, exception_t>{
 
-                return this->atomic_smp.value.load(std::memory_order_relaxed) == 1u;
+                exception_t err = this->subscriber_container.subscribe(observer); 
+
+                if (dg::network_exception::is_failed(err)){
+                    return std::unexpected(err);
+                }
+
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                if (this->smp.value.test(std::memory_order_relaxed)){
+                    return true;
+                }
+
+                return false;
+            }
+
+            auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserver> observer) noexcept -> std::expected<bool, exception_t>{
+
+                exception_t err = this->subscriber_container.subscribe_sp(std::move(observer));
+
+                if (dg::network_exception::is_failed(err)){
+                    return std::unexpected(err);
+                }
+
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                if (this->smp.value.test(std::memory_order_relaxed)){
+                    return true;
+                }
+
+                return false;
             }
 
             void update(size_t idx, std::expected<Response, exception_t> response) noexcept{
@@ -2517,6 +2719,12 @@ namespace dg::network_rest_frame::client_impl1{
 
                 this->resp_vec[idx] = std::move(response);
                 intmax_t old        = this->atomic_smp.value.fetch_add(1u, std::memory_order_release);
+
+                if (old == 0){
+                    this->atomic_smp.value.notify_one();
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    this->subscriber_container.notify();
+                }
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (old > 0){
@@ -2581,6 +2789,8 @@ namespace dg::network_rest_frame::client_impl1{
 
                     if (old == 0){
                         self_obj->atomic_smp.value.notify_one():
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        self_obj->subscriber_container.notify();
                     }
 
                     if constexpr(DEBUG_MODE_FLAG){
@@ -2658,9 +2868,14 @@ namespace dg::network_rest_frame::client_impl1{
                 this->wait_response();
             }
 
-            auto is_response_ready() noexcept -> bool{
+            auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
 
-                return this->base.is_response_ready();
+                return this->base.test_or_subscribe(observer);
+            }
+
+            auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
+
+                return this->base.test_or_subscribe(std::move(observer));
             }
 
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
@@ -2764,9 +2979,14 @@ namespace dg::network_rest_frame::client_impl1{
                 this->wait_response();
             }
 
-            auto is_response_ready() noexcept -> bool{
+            auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
 
-                return this->base.is_response_ready();
+                return this->base.test_or_subscribe(observer);
+            }
+
+            auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
+
+                return this->base.test_or_subscribe_sp(std::move(observer));
             }
 
             auto response() noexcept -> std::expected<Response, exception_t>{
@@ -4177,9 +4397,14 @@ namespace dg::network_rest_frame::client_impl1{
                         this->release_ticket();
                     }
 
-                    auto is_response_ready() noexcept -> bool{
+                    auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
 
-                        return this->base->is_response_ready();
+                        return this->base->test_or_subscribe(observer);
+                    }
+
+                    auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
+
+                        return this->base->test_or_subscribe_sp(std::move(observer));
                     }
 
                     auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
@@ -4237,9 +4462,14 @@ namespace dg::network_rest_frame::client_impl1{
 
                     InternalSingleResponse(std::unique_ptr<BatchResponseInterface> base) noexcept: base(std::move(base)){}
 
-                    auto is_response_ready() noexcept -> bool{
+                    auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
 
-                        return this->base->is_response_ready();
+                        return this->base->test_or_subscribe(observer);
+                    }
+
+                    auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
+
+                        return this->base->test_or_subscribe_sp(std::move(observer));
                     }
 
                     auto response() noexcept -> std::expected<Response, exception_t>{
