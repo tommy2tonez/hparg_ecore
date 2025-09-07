@@ -2548,7 +2548,8 @@ namespace dg::network_rest_frame::client_impl1{
             dg::vector<std::expected<Response, exception_t>> resp_vec; //alright, there are hardware destructive interference issues, we dont want to talk about that yet
             stdx::inplace_hdi_container<bool> is_response_invoked;
             UniqueConcurrentSubscriberContainer subscriber_container;
-            stdx::inplace_hdi_container<bool> is_done_updated;
+            stdx::inplace_hdi_container<std::atomic_flag> is_done_updated;
+            stdx::inplace_hdi_container<std::atomic_flag> is_done_updated_cleanup;
 
             static void assert_all_expected_initialized(dg::vector<std::expected<Response, exception_t>>& arg) noexcept{
 
@@ -2572,9 +2573,14 @@ namespace dg::network_rest_frame::client_impl1{
                                                       resp_vec(stdx::zero_throw(resp_sz), std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
                                                       is_response_invoked(std::in_place_t{}, false),
                                                       subscriber_container(),
-                                                      is_done_updated(std::in_place_t{}, false){}
+                                                      is_done_updated(std::in_place_t{}, false),
+                                                      is_done_updated_cleanup(std::in_place_t{}, false){}
 
             auto test_or_subscribe(ResponseOnReadyObserver * observer) noexcept -> std::expected<bool, exception_t>{
+
+                if (this->atomic_smp.value.load(std::memory_order_relaxed) == 1){
+                    return true;
+                }
 
                 exception_t err = this->subscriber_container.subscribe(observer); 
 
@@ -2592,6 +2598,10 @@ namespace dg::network_rest_frame::client_impl1{
             }
 
             auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserver> observer) noexcept -> std::expected<bool, exception_t>{
+
+                if (this->atomic_smp.value.load(std::memory_order_relaxed) == 1){
+                    return true;
+                }
 
                 exception_t err = this->subscriber_container.subscribe_sp(std::move(observer));
 
@@ -2657,9 +2667,11 @@ namespace dg::network_rest_frame::client_impl1{
             }
 
             void close_response() noexcept{
-                
+
+                this->is_done_updated.value.wait(false, std::memory_order_relaxed);
+
                 auto task = [&]() noexcept{
-                    return this->is_done_updated.test(std::memory_order_relaxed) == true;
+                    return this->is_done_updated_cleanup.test(std::memory_order_relaxed) == true;
                 };
 
                 stdx::eventloop_cyclic_expbackoff_spin(task);
@@ -2697,6 +2709,9 @@ namespace dg::network_rest_frame::client_impl1{
                     self_obj->subscriber_container.notify();
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     self_obj->is_done_updated.value.test_and_set(std::memory_order_relaxed);
+                    self_obj->is_done_updated.value.notify_one();
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    self_obj->is_done_updated_cleanup.value.test_and_set(std::memory_order_relaxed);
                 }
             }
 
@@ -2721,6 +2736,9 @@ namespace dg::network_rest_frame::client_impl1{
                         self_obj->subscriber_container.notify();
                         std::atomic_signal_fence(std::memory_order_seq_cst);
                         self_obj->is_done_updated.value.test_and_set(std::memory_order_relaxed);
+                        self_obj->is_done_updated.value.notify_one();
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        self_obj->is_done_updated_cleanup.value.test_and_set(std::memory_order_relaxed);
                     }
                 };
 
@@ -2835,6 +2853,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 if (wait_responsibility){
                     stdx::empty_noipa(this->base.response(), this->observer_arr);
+                    stdx::empty_noipa(this->base.close_response(), this->observer_arr);
                 }
             }
     };
