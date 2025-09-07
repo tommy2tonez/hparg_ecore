@@ -2540,123 +2540,6 @@ namespace dg::network_rest_frame::client_impl1{
     };
 
     //clear
-    class RequestResponseBase{
-
-        private:
-
-            stdx::inplace_hdi_container<std::atomic_flag> smp; //I'm allergic to shared_ptr<>, it costs a memory_order_seq_cst to deallocate the object, we'll do things this way to allow us leeways to do relaxed operations to unlock batches of requests later, thing is that timed_semaphore is not a magic, it requires an entry registration in the operating system, we'll work around things by reinventing the wheel
-            std::expected<Response, exception_t> resp;
-            stdx::inplace_hdi_container<bool> is_response_invoked;
-            UniqueConcurrentSubscriberContainer subscriber_container;
-
-        public:
-
-            RequestResponseBase() noexcept: smp(std::in_place_t{}, false),
-                                            resp(std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
-                                            is_response_invoked(std::in_place_t{}, false),
-                                            subscriber_container(){}
-
-            auto test_or_subscribe(ResponseOnReadyObserver * observer) noexcept -> std::expected<bool, exception_t>{
-
-                exception_t err = this->subscriber_container.subscribe(observer);
-                
-                if (dg::network_exception::is_failed(err)){
-                    return std::unexpected(err);
-                }
-                
-                //if already fences the memory ordering, just to make sure that we are super correct
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                if (this->smp.value.test(std::memory_order_relaxed)){
-                    return true; //the punchline is that this is to make sure that after this statement, the subscribe will be definely invoked (in the case of false), it does not guarantee no invoke on successful test
-                }
-
-                return false;
-            }
-
-            auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserver> observer) noexcept -> std::expected<bool, exception_t>{
-
-                exception_t err = this->subsriber_container.subscribe_sp(std::move(observer));
-
-                if (dg::network_exception::is_failed(err)){
-                    return std::unexpected(err);
-                }
-
-                //if already fences the memory ordering, just to make sure that we are super correct 
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-
-                if (this->smp.value.test(std::memory_order_relaxed)){
-                    return true;
-                }
-
-                return false;
-            }
-
-            void update(std::expected<Response, exception_t> response_arg) noexcept{
-
-                this->resp  = std::move(response_arg);
-                bool old    = this->smp.value.test_and_set(std::memory_order_release);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (old != false){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                this->smp.value.notify_one();
-                std::atomic_signal_fence(std::memory_order_seq_cst);
-                this->subscriber_container.notify();
-            }
-
-            void deferred_memory_ordering_fetch(std::expected<Response, exception_t> response_arg) noexcept{
-
-                this->resp = std::move(response_arg);
-            }
-
-            void deferred_memory_ordering_fetch_close() noexcept{
-
-                this->internal_deferred_memory_ordering_fetch_close(static_cast<void *>(&this->resp)); //not necessary, I'd love to have noipa, I dont know what to do otherwise
-            }
-
-            auto response() noexcept -> std::expected<Response, exception_t>{
-
-                bool was_invoked = std::exchange(this->is_response_invoked.value, true);
-
-                if (was_invoked){
-                    return std::unexpected(dg::network_exception::REST_RESPONSE_DOUBLE_INVOKE);
-                }
-
-                this->smp.value.wait(false, std::memory_order_acquire);
-
-                return std::expected<Response, exception_t>(std::move(this->resp));
-            }
-
-        private:
-
-            void internal_deferred_memory_ordering_fetch_close(void * dirty_memory) noexcept{
-
-                auto task = [](RequestResponseBase * self_obj, void * dirty_memory_arg) noexcept{
-                    (void) dirty_memory_arg;
-                    bool rs = self_obj->smp.value.test_and_set(std::memory_order_relaxed);
-
-                    if constexpr(DEBUG_MODE_FLAG){
-                        if (rs != false){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                        }
-                    }
-
-                    self_obj->smp.value.notify_one();
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
-                    this->subscriber_container.notify();
-                };
-
-                stdx::noipa_do_task(task, this, dirty_memory);
-            }
-    };
-
-    //clear
     class BatchRequestResponseBase{
 
         private:
@@ -2665,6 +2548,7 @@ namespace dg::network_rest_frame::client_impl1{
             dg::vector<std::expected<Response, exception_t>> resp_vec; //alright, there are hardware destructive interference issues, we dont want to talk about that yet
             stdx::inplace_hdi_container<bool> is_response_invoked;
             UniqueConcurrentSubscriberContainer subscriber_container;
+            stdx::inplace_hdi_container<bool> is_done_updated;
 
             static void assert_all_expected_initialized(dg::vector<std::expected<Response, exception_t>>& arg) noexcept{
 
@@ -2687,7 +2571,8 @@ namespace dg::network_rest_frame::client_impl1{
             BatchRequestResponseBase(size_t resp_sz): atomic_smp(std::in_place_t{}, -static_cast<intmax_t>(stdx::zero_throw(resp_sz)) + 1),
                                                       resp_vec(stdx::zero_throw(resp_sz), std::unexpected(dg::network_exception::EXPECTED_NOT_INITIALIZED)),
                                                       is_response_invoked(std::in_place_t{}, false),
-                                                      subscriber_container(){}
+                                                      subscriber_container(),
+                                                      is_done_updated(std::in_place_t{}, false){}
 
             auto test_or_subscribe(ResponseOnReadyObserver * observer) noexcept -> std::expected<bool, exception_t>{
 
@@ -2725,33 +2610,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             void update(size_t idx, std::expected<Response, exception_t> response) noexcept{
 
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->resp_vec.size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-
-                    if (!response.has_value() && response.error() == dg::network_exception::EXPECTED_NOT_INITIALIZED){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                this->resp_vec[idx] = std::move(response);
-                intmax_t old        = this->atomic_smp.value.fetch_add(1u, std::memory_order_release);
-
-                if (old == 0){
-                    this->atomic_smp.value.notify_one();
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
-                    this->subscriber_container.notify();
-                }
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (old > 0){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
+                this->internal_update(this, idx, std::move(response));
             }
 
             void deferred_memory_ordering_fetch(size_t idx, std::expected<Response, exception_t> response) noexcept{
@@ -2797,7 +2656,49 @@ namespace dg::network_rest_frame::client_impl1{
                 return dg::vector<std::expected<Response, exception_t>>(std::move(this->resp_vec));
             }
 
+            void close_response() noexcept{
+                
+                auto task = [&]() noexcept{
+                    return this->is_done_updated.test(std::memory_order_relaxed) == true;
+                };
+
+                stdx::eventloop_cyclic_expbackoff_spin(task);
+            }
+
         private:
+
+            __attribute__((noipa)) static void internal_update(self * self_obj, size_t idx, std::expected<Response, exception_t> response) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= self_obj->resp_vec.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+
+                    if (!response.has_value() && response.error() == dg::network_exception::EXPECTED_NOT_INITIALIZED){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                self_obj->resp_vec[idx] = std::move(response);
+                intmax_t old            = self_obj->atomic_smp.value.fetch_add(1u, std::memory_order_release);
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (old > 0){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                if (old == 0){
+                    self_obj->atomic_smp.value.notify_one();
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    self_obj->subscriber_container.notify();
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    self_obj->is_done_updated.value.test_and_set(std::memory_order_relaxed);
+                }
+            }
 
             void internal_deferred_memory_ordering_fetch_close(size_t idx, void * dirty_memory) noexcept{
 
@@ -2807,18 +2708,20 @@ namespace dg::network_rest_frame::client_impl1{
 
                     intmax_t old = self_obj->atomic_smp.value.fetch_add(1, std::memory_order_relaxed);
 
-                    if (old == 0){
-                        self_obj->atomic_smp.value.notify_one():
-                        std::atomic_signal_fence(std::memory_order_seq_cst);
-                        self_obj->subscriber_container.notify();
-                    }
-
                     if constexpr(DEBUG_MODE_FLAG){
                         if (old > 0){
                             dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                             std::abort();
                         }
-                    }  
+                    }
+
+                    if (old == 0){
+                        self_obj->atomic_smp.value.notify_one():
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        self_obj->subscriber_container.notify();
+                        std::atomic_signal_fence(std::memory_order_seq_cst);
+                        self_obj->is_done_updated.value.test_and_set(std::memory_order_relaxed);
+                    }
                 };
 
                 stdx::noipa_do_task(task, this, idx, dirty_memory);
@@ -2901,6 +2804,7 @@ namespace dg::network_rest_frame::client_impl1{
             auto response() noexcept -> std::expected<dg::vector<std::expected<Response, exception_t>>, exception_t>{
 
                 auto rs = this->base.response();
+                this->base.close_response();
                 this->release_response_wait_responsibility();
 
                 return rs;
@@ -2942,106 +2846,6 @@ namespace dg::network_rest_frame::client_impl1{
         // return dg::network_allocation::cstyle_make_unique<BatchRequestResponse>(resp_sz);
     }
 
-    //clear
-    class RequestResponse: public virtual ResponseInterface{
-
-        private:
-
-            class RequestResponseBaseObserver: public virtual ResponseObserverInterface{
-
-                private:
-
-                    RequestResponseBase * base;
-
-                public:
-
-                    RequestResponseBaseObserver() = default;
-
-                    RequestResponseBaseObserver(RequestResponseBase * base) noexcept: base(base){}
-
-                    void update(std::expected<Response, exception_t> resp) noexcept{
-
-                        this->base->update(std::move(resp));
-                    }
-
-                    void deferred_memory_ordering_fetch(std::expected<Response, exception_t> resp) noexcept{
-
-                        this->base->deferred_memory_ordering_fetch(std::move(resp));
-                    }
-
-                    void deferred_memory_ordering_fetch_close() noexcept{
-
-                        this->base->deferred_memory_ordering_fetch_close();
-                    }
-            };
-
-            RequestResponseBase base;
-            RequestResponseBaseObserver observer;
-            bool response_wait_responsibility_flag;
-
-            RequestResponse(): base(),
-                               response_wait_responsibility_flag(true){
-
-                this->observer = RequestResponseBaseObserver(&this->base);
-            }
-
-            friend auto make_request_response() noexcept -> std::expected<std::unique_ptr<RequestResponse>, exception_t>;
-
-        public:
-
-            RequestResponse(const RequestResponse&) = delete;
-            RequestResponse(RequestResponse&&) = delete;
-            RequestResponse& operator =(const RequestResponse&) = delete;
-            RequestResponse& operator =(RequestResponse&&) = delete;
-
-            ~RequestResponse() noexcept{
-
-                this->wait_response();
-            }
-
-            auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
-
-                return this->base.test_or_subscribe(observer);
-            }
-
-            auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
-
-                return this->base.test_or_subscribe_sp(std::move(observer));
-            }
-
-            auto response() noexcept -> std::expected<Response, exception_t>{
-
-                auto rs = this->base.response();
-                this->release_response_wait_responsibility();
-                return rs;
-            }
-
-            auto get_observer() noexcept -> ResponseObserverInterface *{ //response observer is a unique_resource, such is an acquisition of this pointer must involve accurate acquire + release mechanisms like every other dg::string or dg::vector, etc.
-
-                return static_cast<ResponseObserverInterface *>(&this->observer);
-            }
-
-            void release_response_wait_responsibility() noexcept{
-
-                this->response_wait_responsibility_flag = false;
-            }
-
-            void wait_response() noexcept{
-
-                bool wait_responsibility = std::exchange(this->response_wait_responsibility_flag, false);
-
-                if (wait_responsibility){
-                    stdx::empty_noipa(this->base.response(), this->observer);
-                }
-            }
-    };
-
-    //
-    auto make_request_response() noexcept -> std::expected<std::unique_ptr<RequestResponse>, exception_t>{
-
-        return {};
-        // return dg::network_allocation::cstyle_make_unique<RequestResponse>();
-    }
 
     //clear
     class RequestContainer: public virtual RequestContainerInterface{
