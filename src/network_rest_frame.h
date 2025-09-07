@@ -2458,12 +2458,18 @@ namespace dg::network_rest_frame::client_impl1{
             SubscriberContainer base;
 
             std::atomic_flag was_set;
+            std::atomic_flag was_done_set;
             std::atomic_flag was_notifed; 
 
         public:
 
+            //we'll leverage the special type of unique ticket to avoid circular dependency, such could be the callback function calling the subscribe function + etc.
+            //essentially there is only one order thru for subscribe, one updated flag which guarantees that the unique order is thru so notify does not have race cond while accessing the underlying datatype
+            //notify is also one time thru, so notify() does not have race cond (we dont really care about this feature, yet it is there to express the uniqueness)
+
             UniqueConcurrentSubscriberContainer(): base(),
                                                    was_set(false),
+                                                   was_done_set(false),
                                                    was_notified(false){}
 
             auto subscribe(ResponseOnReadyObserver * observer) noexcept -> exception_t{
@@ -2477,9 +2483,15 @@ namespace dg::network_rest_frame::client_impl1{
                 if (!has_set_right){
                     return dg::network_exception::REST_OBSERVER_SECOND_SET;
                 }
-                
-                stdx::memtransaction_guard tx_grd;
-                return this->base.subscribe(observer);
+
+                {
+                    stdx::memtransaction_guard tx_grd;
+                    dg::network_exception_handler::nothrow_log(this->base.subscribe(observer));
+                }
+
+                this->was_done_set.test_and_set(std::memory_order_relaxed);
+
+                return dg::network_exception::SUCCESS;
             }
 
             auto subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> exception_t{
@@ -2494,26 +2506,34 @@ namespace dg::network_rest_frame::client_impl1{
                     return dg::network_exception::REST_OBSERVER_SECOND_SET;
                 }
 
-                stdx::memtransaction_guard tx_grd;
-                return this->base.subscribe(std::move(observer));
+                {
+                    stdx::memtransaction_guard tx_grd;
+                    dg::network_exception_handler::nothrow_log(this->base.subscribe(std::move(observer)));
+                }
+
+                this->was_done_set.test_and_set(std::memory_order_relaxed);
+
+                return dg::network_exception::SUCCESS;
             }
 
             auto notify() noexcept -> exception_t{
 
-                bool precond_1  = this->was_set.test(std::memory_order_relaxed) == true; 
+                bool precond_1  = this->was_done_set.test(std::memory_order_relaxed) == true; 
 
                 if (!precond_1){
                     return dg::network_exception::REST_OBSERVER_BAD_NOTIFY;
                 }
 
-                bool precond_2  = this->was_notifed.test_and_set(std::memory_order_relaxed);
+                bool precond_2  = this->was_notifed.test_and_set(std::memory_order_relaxed) == false;
 
                 if (!precond_2){
                     return dg::network_exception::REST_OBSERVER_SECOND_NOTIFY;
                 }
 
-                stdx::memtransaction_guard tx_grd;
-                base.notify(); //recursive if re-invoke, which will not happen because of was_notified_value
+                {
+                    stdx::memtransaction_guard tx_grd;
+                    this->base.notify();
+                }
 
                 return dg::network_exception::SUCCESS;
             }
@@ -2548,7 +2568,7 @@ namespace dg::network_rest_frame::client_impl1{
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
                 if (this->smp.value.test(std::memory_order_relaxed)){
-                    return true;
+                    return true; //the punchline is that this is to make sure that after this statement, the subscribe will be definely invoked (in the case of false), it does not guarantee no invoke on successful test
                 }
 
                 return false;
@@ -2679,7 +2699,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
-                if (this->smp.value.test(std::memory_order_relaxed)){
+                if (this->atomic_smp.value.load(std::memory_order_relaxed) == 1){
                     return true;
                 }
 
@@ -2696,7 +2716,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
 
-                if (this->smp.value.test(std::memory_order_relaxed)){
+                if (this->atomic_smp.value.load(std::memory_order_relaxed) == 1){
                     return true;
                 }
 
