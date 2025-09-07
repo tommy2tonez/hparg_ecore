@@ -225,6 +225,8 @@ namespace dg::network_extmemcommit_dropbox{
             static inline constexpr greater_cmp = [](const SynchronizableTemporalEntry& lhs, const SynchronizableTemporalEntry& rhs) noexcept{
                 return lhs.abs_timeout > rhs.abs_timeout;
             };
+            
+            static inline constexpr heap_cmp = greater_cmp; 
 
             SynchronizableWareHouse(dg::vector<SynchronizableTemporalEntry> priority_queue,
                                     dg::pow2_cyclic_queue<std::pair<std::unique_ptr<SynchronizableInterface> *, std::binary_semaphore *>> waiting_queue,
@@ -302,7 +304,7 @@ namespace dg::network_extmemcommit_dropbox{
                         auto rs = std::move(this->priority_queue.back());
                         this->priority_queue.pop_back();
 
-                        return rs;
+                        return std::move(rs.synchronizable);
                     }
 
                     if constexpr(DEBUG_MODE_FLAG){
@@ -322,8 +324,122 @@ namespace dg::network_extmemcommit_dropbox{
             void reevaluate() noexcept{
 
                 //we'd bring the guarantee time to max_wait_one (timeout) + monitor_invoke + padding, all of that in probably 100ms, which is reasonable, probably 
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                size_t idx = 0u; 
 
-                (void) this->priority_queue;
+                while (idx != this->priority_queue.size()){
+                    bool offloadable_1  = this->ready_queue.size() != this->ready_queue.capacity();
+                    bool offloadable    = offloadable_1; 
+
+                    if (!offloadable){
+                        return;
+                    }
+
+                    if (this->priority_queue[idx].synchronizable->is_synchronization_ready()){
+                        std::unique_ptr<SynchronizableInterface> synchronizable;
+
+                        if (this->priority_queue.back().synchronizable->is_synchronization_ready()){
+                            synchronizable = this->pop_and_get_at(this->priority_queue.size() - 1u);
+                        } else{
+                            synchronizable = this->pop_and_get_at(idx);
+                        }
+
+                        dg::network_exception::nothrow_log(this->ready_queue.push_back(std::move(synchronizable)));
+                        continue;
+                    }
+
+                    idx += 1u;
+                }
+            }
+        
+        private:
+
+            void correct_heap_node_up_at(size_t idx) noexcept{
+                
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->priority_queue.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                if (idx == 0u){
+                    return;
+                }
+
+                size_t parent_idx = (idx - 1) >> 1;
+
+                if (!heap_cmp(this->priority_queue[parent_idx], this->priority_queue[idx])){
+                    return;
+                }
+
+                std::swap(this->priority_queue[parent_idx], this->priority_queue[idx]);
+                this->correct_heap_node_up_at(parent_idx);
+            }
+
+            void correct_heap_node_down_at(size_t idx) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->priority_queue.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t cand_idx = idx * 2 + 1;
+
+                if (cand_idx >= this->priority_queue.size()){
+                    return;
+                }
+
+                if (cand_idx + 1 < this->priority_queue.size() && heap_cmp(this->priority_queue[cand_idx], this->priority_queue[cand_idx + 1])){
+                    cand_idx += 1;
+                }
+
+                if (!heap_cmp(this->priority_queue[idx], this->priority_queue[cand_idx])){
+                    return;
+                }
+
+                std::swap(this->priority_queue[idx], this->priority_queue[cand_idx]);
+                this->correct_heap_node_down_at(cand_idx);
+            }
+
+            void correct_heap_node_at(size_t idx) noexcept{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->priority_queue.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                this->correct_heap_node_up_at(idx);
+                this->correct_heap_node_down_at(idx);
+            }
+
+            auto pop_and_get_at(size_t idx) noexcept -> std::unique_ptr<SynchronizableInterface>{
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (idx >= this->priority_queue.size()){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t back_idx = this->priority_queue.size() - 1u;
+
+                if (back_idx == idx){
+                    auto rs = std::move(this->priority_queue.back().synchronizable);
+                    this->priority_queue.pop_back();
+                    return rs;
+                }
+
+                std::swap(this->priority_queue[idx], this->priority_queue.back());
+                auto rs = std::move(this->priority_queue.back().synchronizable);
+                this->priority_queue.pop_back();
+                this->correct_heap_node_at(idx);
+
+                return rs;
             }
     };
 
