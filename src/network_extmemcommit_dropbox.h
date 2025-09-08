@@ -45,13 +45,55 @@ namespace dg::network_extmemcommit_dropbox{
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
+
+    //the problem of the hook is the DL problem
+    //this is a hard problem to solve, which we'll use another distributed controller to tackle this problem
+    //I have thought very long and hard, on whether to fatten the request and just wait or it has to be this way
+    //the answer is it has to be this way
+    //allowing subscriber subscription is very dangy in C++ because we can implicitly create circular pointers, which are solved by modern mark and sweep but not bare-metal C++
+    //we'll be very careful
+
+    class SynchronizableCallbackInterface{
+
+        public:
+
+            virtual ~SynchronizableCallbackInterface() noexcept = default;
+            virtual void notify() noexcept;
+    };
+
     class SynchronizableInterface{
 
         public:
 
             virtual ~SynchronizableInterface() noexcept = default;
-            virtual auto is_synchronization_ready() noexcept -> bool = 0;
+            virtual auto test_or_subscribe(std::shared_ptr<SynchronizableCallbackInterface>) noexcept -> std::expected<bool, exception_t> = 0;
             virtual void sync() noexcept = 0;
+    };
+
+    class SynchronizableKeyValueContainerInterface{
+
+        public:
+
+            using key_t = size_t; 
+
+            virtual ~SynchronizableKeyValueContainerInterface() noexcept = default;
+            virtual auto add(std::shared_ptr<SynchronizableInterface> synchronizable) noexcept -> std::expected<key_t, exception_t> = 0;
+            virtual auto steal(key_t key) noexcept -> std::optional<std::shared_ptr<SynchronizableInterface>> = 0;
+    };
+
+    //this is to offload the thread of calling the response() to another thread
+    //we wish that there could be another way, but the baseline of batch request is that it is a single request
+    //we could not rely on the feature to do timed delays + etc.
+
+    class CallbackOffloaderWarehouseInterface{
+
+        public:
+
+            using key_t = SynchronizableKeyValueContainerInterface::key_t; 
+
+            virtual ~CallbackOffloaderWarehouseInterface() noexcept = default;
+            virtual auto push(key_t) noexcept -> exception_t = 0;
+            virtual auto pop() noexcept -> key_t = 0;
     };
 
     class WareHouseInterface{
@@ -63,14 +105,12 @@ namespace dg::network_extmemcommit_dropbox{
             virtual auto pop() noexcept -> dg::vector<Request> = 0;
     };
 
-    class SynchronizableWareHouseInterface{
+    class SynchronizationInvokerInterface{
 
         public:
 
-            virtual ~SynchronizableWareHouseInterface() noexcept = default;
-            virtual auto push(std::unique_ptr<SynchronizableInterface>&&, std::chrono::nanoseconds sync_duration) noexcept -> exception_t = 0;
-            virtual auto pop() noexcept -> std::unique_ptr<SynchronizableInterface> = 0;
-            virtual auto reevaluate() noexcept = 0;
+            virtual ~SynchronizableInvokerInterface() noexcept = default;
+            virtual auto add(std::shared_ptr<SynchronizableInterface>) noexcept -> exception_t = 0;
     };
 
     class TokenCacheControllerInterface{
@@ -108,6 +148,68 @@ namespace dg::network_extmemcommit_dropbox{
     };
 
     //
+
+    class SynchronizationInvoker: public virtual SynchronizationInvokerInterface{
+
+        private:
+
+            std::shared_ptr<CallbackOffloaderWarehouseInterface> callback_warehouse;
+            std::shared_ptr<SynchronizableKeyValueContainerInterface> synchronizable_container;
+
+        public:
+
+            SynchronizationInvoker(std::shared_ptr<CallbackOffloaderWarehouseInterface> callback_warehouse,
+                                   std::shared_ptr<SynchronizableKeyValueContainerInterface> synchronizable_container): callback_warehouse(std::move(callback_warehouse)),
+                                                                                                                        synchronizable_container(std::move(synchronizable_container)){}
+            
+            auto add(std::shared_ptr<SynchronizableInterface> synchronizable) noexcept -> exception_t{
+
+                using key_t = SynchronizableKeyValueContainerInterface::key_t;
+
+                if (synchronizable == nullptr){
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                std::expected<key_t, exception_t> key = this->synchronizable_container->add(synchronizable);
+                
+                if (!key.has_value()){
+                    return key.error();
+                }
+
+                std::shared_ptr<SynchronizableCallbackInterface> callback_handler = std::make_shared<InternalCallbackHandler>(InternalCallbackHandler{.key = key.value(),
+                                                                                                                                                      .callback_warehouse = this->callback_warehouse});
+                
+                std::expected<bool, exception_t> test_value = synchronizable->test_or_subscribe(std::move(callback_handler));
+
+                if (!test_value.has_value() || test_value.value() == true){
+                    exception_t err = this->callback_warehouse->push(key.value());
+
+                    if (dg::network_exception::is_failed(err)){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RESOURCE_LEAK));
+                        return dg::network_exception::INTERNAL_CORRUPTION;
+                    }
+                }
+
+                return dg::network_exception::SUCCESS;
+            }
+        
+        private:
+            
+            struct InternalCallbackHandler: public virtual SynchronizableCallbackInterface{
+
+                SynchronizableKeyValueContainerInterface::key_t key;
+                std::shared_ptr<CallbackOffloaderWarehouseInterface> callback_warehouse;
+
+                void notify() noexcept{
+
+                    exception_t err = this->callback_warehouse->push(this->key);
+
+                    if (dg::network_exception::is_failed(err)){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RESOURCE_LEAK));
+                    }
+                }
+            };
+    };
 
     class WareHouse: public virtual WareHouseInterface{
 
@@ -201,245 +303,6 @@ namespace dg::network_extmemcommit_dropbox{
 
                 smp.acquire();
                 return dg::vector<Request>(std::move(request.value()));
-            }
-    };
-
-    struct SynchronizableTemporalEntry{
-        std::unique_ptr<SynchronizableInterface> synchronizable;
-        std::chrono::time_point<std::chrono::steady_clock> abs_timeout;
-    };
-
-    class SynchronizableWareHouse: public virtual SynchronizableWareHouseInterface{
-
-        private:
-
-            dg::vector<SynchronizableTemporalEntry> priority_queue;
-            dg::pow2_cyclic_queue<std::pair<std::unique_ptr<SynchronizableInterface> *, std::binary_semaphore *>> waiting_queue;
-            dg::pow2_cyclic_queue<std::unique_ptr<SynchronizableInterface>> ready_queue;
-            size_t priority_queue_cap;
-            std::unique_ptr<std::mutex> mtx;
-            stdx::hdi_container<std::chrono::nanoseconds> max_sync_duration;
-
-        public:
-
-            static inline constexpr greater_cmp = [](const SynchronizableTemporalEntry& lhs, const SynchronizableTemporalEntry& rhs) noexcept{
-                return lhs.abs_timeout > rhs.abs_timeout;
-            };
-            
-            static inline constexpr heap_cmp = greater_cmp; 
-
-            SynchronizableWareHouse(dg::vector<SynchronizableTemporalEntry> priority_queue,
-                                    dg::pow2_cyclic_queue<std::pair<std::unique_ptr<SynchronizableInterface> *, std::binary_semaphore *>> waiting_queue,
-                                    dg::pow2_cyclic_queue<std::unique_ptr<SynchronizableInterface>> ready_queue,
-                                    size_t priority_queue_cap,
-                                    std::unique_ptr<std::mutex> mtx,
-                                    std::chrono::nanoseconds max_sync_duration) noexcept: priority_queue(std::move(priority_queue)),
-                                                                                          waiting_queue(std::move(waiting_queue)),
-                                                                                          ready_queue(std::move(ready_queue)),
-                                                                                          priority_queue_cap(priority_queue_cap),
-                                                                                          mtx(std::move(mtx)),
-                                                                                          max_sync_duration(stdx::hdi_container<std::chrono::nanoseconds>{max_sync_duration}){}
-
-            auto push(std::unique_ptr<SynchronizableInterface>&& synchronizable, std::chrono::nanoseconds sync_duration) noexcept -> exception_t{
-
-                if (synchronizable == nullptr){
-                    return dg::network_exception::INVALID_ARGUMENT;
-                }
-
-                if (sync_duration > this->max_sync_duration.value){
-                    return dg::network_exception::INVALID_ARGUMENT;
-                }
-
-                std::binary_semaphore * releasing_smp = nullptr;
-
-                exception_t return_err = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                    if (!this->waiting_queue.empty()){
-                        auto [fetching_addr, smp]   = this->waiting_queue.front();
-                        this->waiting_queue.pop_front();
-                        *fetching_addr              = std::move(synchronizable);
-                        releasing_smp               = smp;
-
-                        return dg::network_exception::SUCCESS;
-                    }
-
-                    if (this->priority_queue.size() == this->priority_queue_cap){
-                        return dg::network_exception::RESOURCE_EXHAUSTION;
-                    }
-
-                    auto inserting_entry            = SynchronizableTemporalEntry{.synchronizable   = std::move(synchronizable),
-                                                                                  .abs_timeout      = std::chrono::steady_clock::now() + sync_duration};
-
-                    this->priority_queue.push_back(std::move(inserting_entry));
-                    std::push_heap(this->priority_queue.begin(), this->priority_queue.end(), greater_cmp);
-
-                    return dg::network_exception::SUCCESS;
-                }();
-
-                if (releasing_smp != nullptr){
-                    releasing_smp->release();
-                }
-
-                return return_err;
-            }
-
-            auto pop() noexcept -> std::unique_ptr<SynchronizableInterface>{
-
-                std::binary_semaphore smp(0);
-                std::unique_ptr<SynchronizableInterface> syncable; 
-
-                {
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-
-                    if (!this->ready_queue.empty()){
-                        auto rs = std::move(this->ready_queue.front());
-                        this->ready_queue.pop_front();
-
-                        return rs;
-                    }
-
-                    if (!this->priority_queue.empty()){
-                        std::pop_heap(this->priority_queue.begin(), this->priority_queue.end(), greater_cmp);
-                        auto rs = std::move(this->priority_queue.back());
-                        this->priority_queue.pop_back();
-
-                        return std::move(rs.synchronizable);
-                    }
-
-                    if constexpr(DEBUG_MODE_FLAG){
-                        if (this->waiting_queue.size() == this->waiting_queue.capacity()){
-                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                            std::abort();
-                        }
-                    }
-
-                    this->waiting_queue.push_back(std::make_pair(&syncable, &smp));
-                }
-
-                smp.acquire();
-                return syncable;
-            }
-
-            void reevaluate() noexcept{
-
-                //we'd bring the guarantee time to max_wait_one (timeout) + monitor_invoke + padding, all of that in probably 100ms, which is reasonable, probably 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
-                size_t idx = 0u; 
-
-                while (idx != this->priority_queue.size()){
-                    bool offloadable_1  = this->ready_queue.size() != this->ready_queue.capacity();
-                    bool offloadable    = offloadable_1; 
-
-                    if (!offloadable){
-                        return;
-                    }
-
-                    if (this->priority_queue[idx].synchronizable->is_synchronization_ready()){
-                        std::unique_ptr<SynchronizableInterface> synchronizable;
-
-                        if (this->priority_queue.back().synchronizable->is_synchronization_ready()){
-                            synchronizable = this->pop_and_get_at(this->priority_queue.size() - 1u);
-                        } else{
-                            synchronizable = this->pop_and_get_at(idx);
-                        }
-
-                        dg::network_exception::nothrow_log(this->ready_queue.push_back(std::move(synchronizable)));
-                        continue;
-                    }
-
-                    idx += 1u;
-                }
-            }
-        
-        private:
-
-            void correct_heap_node_up_at(size_t idx) noexcept{
-                
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->priority_queue.size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                if (idx == 0u){
-                    return;
-                }
-
-                size_t parent_idx = (idx - 1) >> 1;
-
-                if (!heap_cmp(this->priority_queue[parent_idx], this->priority_queue[idx])){
-                    return;
-                }
-
-                std::swap(this->priority_queue[parent_idx], this->priority_queue[idx]);
-                this->correct_heap_node_up_at(parent_idx);
-            }
-
-            void correct_heap_node_down_at(size_t idx) noexcept{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->priority_queue.size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t cand_idx = idx * 2 + 1;
-
-                if (cand_idx >= this->priority_queue.size()){
-                    return;
-                }
-
-                if (cand_idx + 1 < this->priority_queue.size() && heap_cmp(this->priority_queue[cand_idx], this->priority_queue[cand_idx + 1])){
-                    cand_idx += 1;
-                }
-
-                if (!heap_cmp(this->priority_queue[idx], this->priority_queue[cand_idx])){
-                    return;
-                }
-
-                std::swap(this->priority_queue[idx], this->priority_queue[cand_idx]);
-                this->correct_heap_node_down_at(cand_idx);
-            }
-
-            void correct_heap_node_at(size_t idx) noexcept{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->priority_queue.size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                this->correct_heap_node_up_at(idx);
-                this->correct_heap_node_down_at(idx);
-            }
-
-            auto pop_and_get_at(size_t idx) noexcept -> std::unique_ptr<SynchronizableInterface>{
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (idx >= this->priority_queue.size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                size_t back_idx = this->priority_queue.size() - 1u;
-
-                if (back_idx == idx){
-                    auto rs = std::move(this->priority_queue.back().synchronizable);
-                    this->priority_queue.pop_back();
-                    return rs;
-                }
-
-                std::swap(this->priority_queue[idx], this->priority_queue.back());
-                auto rs = std::move(this->priority_queue.back().synchronizable);
-                this->priority_queue.pop_back();
-                this->correct_heap_node_at(idx);
-
-                return rs;
             }
     };
 
@@ -716,16 +579,6 @@ namespace dg::network_extmemcommit_dropbox{
                 return this->consume_sz_per_load.value;
             }
     };
-
-    //alright, I got a hint from a good friend of mine, to actually "have a nice random offset before doing distributed map"
-    //this helps reducing the map collision significantly
-    //we'll implement this even though I doubt that this would be of help in terms of performance
-    //alright, because this is very important in terms of doing requests
-
-    //the token cache controller when correctly used in conjunction with keyvalue_feed_vectorization_sz would actually access the unordered map in such an order that has no lock contentions
-    //the DistributedTokenCacheController can actually "composite" the DistributedTokenCacheController, leaving a cache footprint that is optimal, we'll talk about this
-    //this is somewhat a radix sort implementation, our radix is the downstream unordered map, the last unordered_map would fit in the operating cache
-    //this is the most important implementation of heavy cache whose key value memory footprint is stack
 
     class DistributedTokenCacheController: public virtual TokenCacheControllerInterface{
 
@@ -1098,23 +951,6 @@ namespace dg::network_extmemcommit_dropbox{
                 }
             };
     };
-
-    //this component is, contrary to my beliefs, very hard to write
-    //we need to be able to do re-request, basic prioritzed re-request by using stack feeders
-    //we'd keep the number of retriable -> 3 for now, we can't do a stack guard for vector + friends, it's hard
-    //we hardly ever would want to do more than 4 requests, look at the statistical chances, 10 mailbox retry * 4 request retry == 40 transmissions
-
-    //it would take roughly 1 exabyte of data to get 1 lost packet, if we are CRONING it correctly
-
-    //every 1 MB == 1 lost packet
-    //the chance of 40 continuous failed transmissions == (1 / 1000) ** 40
-
-    //the success chance of 40 continuous transmissions == 1 - (1 / 1000) ** 40
-
-    //the success chance of 1 million packets = (1 - (1 / 1000) ** 40) ** (10 ** 6) 
-    //alright, that was a mistake, I've come to realize that a cyclic request + dedicated thread to wait the synchronizable is actually the best possible approach
-    //if we don't cap the request global memory usage, we'll be like in the rocket with no cap in The Martian
-    //this is actually hard to implement, very hard
 
     class TrinityRequestor: public virtual RequestorInterface{
 
@@ -1496,42 +1332,29 @@ namespace dg::network_extmemcommit_dropbox{
             };
     };
 
-    class ReevaluatorWorker: public virtual dg::network_concurrency::WorkerInterface{
-
-        private:
-
-            std::shared_ptr<SynchronizableWareHouseInterface> warehouse;
-            std::chrono::nanoseconds break_dur;
-
-        public:
-
-            ReevaluatorWorker(std::shared_ptr<SynchronizableWareHouseInterface> warehouse,
-                              std::chrono::nanoseconds break_dur) noexcept: warehouse(std::move(warehouse)),
-                                                                            break_dur(break_dur){}
-
-            bool run_one_epoch() noexcept{
-
-                this->warehouse->reevaluate();
-                std::this_thread::sleep_for(this->break_dur);
-
-                return true;
-            }
-    };
-
     class SynchronizerWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
 
-            std::shared_ptr<SynchronizableWareHouseInterface> warehouse;
+            std::shared_ptr<CallbackOffloaderWarehouseInterface> warehouse;
+            std::shared_ptr<SynchronizableKeyValueContainerInterface> synchronizable_container;
         
         public:
 
-            SynchronizerWorker(std::shared_ptr<SynchronizableWareHouseInterface> warehouse) noexcept: warehouse(std::move(warehouse)){}
+            SynchronizerWorker(std::shared_ptr<CallbackOffloaderWarehouseInterface> warehouse,
+                               std::shared_ptr<SynchronizableKeyValueContainerInterface> synchronizable_container) noexcept: warehouse(std::move(warehouse)),
+                                                                                                                             synchronizable_container(std::move(synchronizable_container)){}
 
             bool run_one_epoch() noexcept{
 
-                std::unique_ptr<SynchronizableInterface> syncable = this->warehouse->pop();
-                syncable->sync();
+                using key_t = CallbackOffloaderWarehouseInterface::key_t;
+
+                key_t key = this->warehouse->pop();
+                std::optional<std::shared_ptr<SynchronizableInterface>> synchronizable = this->synchronizable_container->steal(key);
+
+                if (synchronizable.has_value() && synchronizable.value() != nullptr){
+                    synchronizable.value()->sync();
+                }
 
                 return true;
             }
