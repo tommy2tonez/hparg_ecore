@@ -74,7 +74,7 @@ namespace dg::network_extmemcommit_dropbox{
 
         public:
 
-            using key_t = size_t; 
+            using key_t = uint64_t; 
 
             virtual ~SynchronizableKeyValueContainerInterface() noexcept = default;
             virtual auto add(std::shared_ptr<SynchronizableInterface> synchronizable) noexcept -> std::expected<key_t, exception_t> = 0;
@@ -94,6 +94,16 @@ namespace dg::network_extmemcommit_dropbox{
             virtual ~CallbackOffloaderWarehouseInterface() noexcept = default;
             virtual auto push(key_t) noexcept -> exception_t = 0;
             virtual auto pop() noexcept -> key_t = 0;
+    };
+
+    class CallbackOffloaderWarehouseIngestionConnectorInterface{
+
+        public:
+
+            using key_t = CallbackOffloaderWarehouseInterface::key_t;
+
+            virtual ~CallbackOffloaderWarehouseIngestionConnectorInterface() noexcept = default;
+            virtual auto push(key_t) noexcept -> exception_t = 0;
     };
 
     class WareHouseInterface{
@@ -148,17 +158,127 @@ namespace dg::network_extmemcommit_dropbox{
     };
 
     //
+    class SynchronizableKeyValueContainer: public virtual SynchronizableKeyValueContainerInterface{
+
+        private:
+
+            using key_t = SynchronizableKeyValueContainerInterface::key_t;
+ 
+            dg::unordered_unstable_map<key_t, std::shared_ptr<SynchronizableCallbackInterface>> keyvalue_container;
+            size_t keyvalue_container_capacity;
+            size_t id_counter;
+            std::unique_ptr<std::mutex> mtx;
+
+        public:
+
+            using demoted_key_t = uint32_t; 
+
+            SynchronizableKeyValueContainer(dg::unordered_unstable_map<key_t, std::shared_ptr<SynchronizableCallbackInterface>> keyvalue_container,
+                                            size_t keyvalue_container_capacity,
+                                            size_t id_counter,
+                                            std::unique_ptr<std::mutex> mtx) noexcept: keyvalue_container(std::move(keyvalue_container)),
+                                                                                       keyvalue_container_capacity(keyvalue_container_capacity),
+                                                                                       id_counter(id_counter),
+                                                                                       mtx(std::move(mtx)){}
+
+            auto add(std::shared_ptr<SynchronizableInterface> synchronizable) noexcept -> std::expected<key_t, exception_t>{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                if (synchronizable == nullptr){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+                
+                if (this->keyvalue_container.size() == this->keyvalue_container_capacity){
+                    return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                }
+
+                key_t key = (this->id_counter++) & static_cast<size_t>(std::numeric_limits<demoted_key_t>::max());
+                auto [map_ptr, status] = this->keyvalue_container.insert(std::make_pair(key, std::move(synchronizable)));
+
+                if constexpr(DEBUG_MODE_FLAG){
+                    if (status == false){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                return key;
+            }
+
+            auto steal(key_t key) noexcept -> std::optional<std::shared_ptr<SynchronizableInterface>>{
+
+                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                auto map_ptr = this->keyvalue_container.find(key);
+
+                if (map_ptr == this->keyvalue_container.end()){
+                    return std::nullopt;
+                }
+
+                std::shared_ptr<SynchronizableInterface> rs = std::move(map_ptr->second);
+                this->keyvalue_container.erase(map_ptr);
+
+                return std::optional<std::shared_ptr<SynchronizableInterface>>(std::move(rs));
+            }
+    };
+
+    class DistributedSynchronizableKeyValueContainer: public virtual SynchronizableKeyValueContainerInterface{
+
+        private:
+
+            dg::vector<std::unique_ptr<SynchronizableKeyValueContainer>> base_vec;
+            size_t pow2_base_vec_sz;
+        
+        public:
+
+            using key_t = SynchronizableKeyValueContainerInterface::key_t; 
+
+            DistributedSynchronizableKeyValueContainer(dg::vector<std::unique_ptr<SynchronizableKeyValueContainer>> base_vec,
+                                                       size_t pow2_base_vec_sz) noexcept: base_vec(std::move(base_vec)),
+                                                                                          pow2_base_vec_sz(pow2_base_vec_sz){}
+
+            auto add(std::shared_ptr<SynchronizableInterface> synchronizable) noexcept -> std::expected<key_t, exception_t>{
+
+                if (synchronizable == nullptr){
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                size_t random_value = dg::network_randomizer::randomize_int<size_t>();
+                size_t base_vec_idx = random_value & (this->pow2_base_vec_sz - 1u);
+
+                std::expected<key_t, exception_t> key = this->base_vec[base_vec_idx]->add(std::move(synchronizable));
+
+                if (!key.has_value()){
+                    return std::unexpected(key.error());
+                }
+
+                uint64_t key_as_int = stdx::safe_integer_cast<uint64_t>(key);
+                uint64_t new_key    = (key_as_int << 32) | base_vec_idx;
+
+                return stdx::safe_integer_cast<key_t>(new_key);                
+            }
+
+            auto steal(key_t key) noexcept -> std::optional<std::shared_ptr<SynchronizableInterface>>{
+
+                uint64_t key_value      = stdx::safe_integer_cast<uint64_t>(key);
+                uint32_t base_vec_idx   = stdx::low_bit<32>(key_value);
+                uint32_t base_key       = key_value >> 32;
+                
+                return this->base_vec[base_vec_idx]->steal(stdx::safe_integer_cast<key_t>(base_key));
+            }
+    };
 
     class SynchronizationInvoker: public virtual SynchronizationInvokerInterface{
 
         private:
 
-            std::shared_ptr<CallbackOffloaderWarehouseInterface> callback_warehouse;
+            std::shared_ptr<CallbackOffloaderWarehouseIngestionConnectorInterface> callback_warehouse;
             std::shared_ptr<SynchronizableKeyValueContainerInterface> synchronizable_container;
 
         public:
 
-            SynchronizationInvoker(std::shared_ptr<CallbackOffloaderWarehouseInterface> callback_warehouse,
+            SynchronizationInvoker(std::shared_ptr<CallbackOffloaderWarehouseIngestionConnectorInterface> callback_warehouse,
                                    std::shared_ptr<SynchronizableKeyValueContainerInterface> synchronizable_container): callback_warehouse(std::move(callback_warehouse)),
                                                                                                                         synchronizable_container(std::move(synchronizable_container)){}
             
@@ -185,7 +305,7 @@ namespace dg::network_extmemcommit_dropbox{
                     exception_t err = this->callback_warehouse->push(key.value());
 
                     if (dg::network_exception::is_failed(err)){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RESOURCE_LEAK));
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                         return dg::network_exception::INTERNAL_CORRUPTION;
                     }
                 }
@@ -198,14 +318,14 @@ namespace dg::network_extmemcommit_dropbox{
             struct InternalCallbackHandler: public virtual SynchronizableCallbackInterface{
 
                 SynchronizableKeyValueContainerInterface::key_t key;
-                std::shared_ptr<CallbackOffloaderWarehouseInterface> callback_warehouse;
+                std::shared_ptr<CallbackOffloaderWarehouseIngestionConnectorInterface> callback_warehouse;
 
                 void notify() noexcept{
 
                     exception_t err = this->callback_warehouse->push(this->key);
 
                     if (dg::network_exception::is_failed(err)){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::RESOURCE_LEAK));
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(err));
                     }
                 }
             };
@@ -262,7 +382,7 @@ namespace dg::network_extmemcommit_dropbox{
                         return dg::network_exception::RESOURCE_EXHAUSTION;
                     }
 
-                    this->request_vec_queue.push_back(std::move(request_vec));
+                    dg::network_exception_handler::nothrow_log(this->request_vec_queue.push_back(std::move(request_vec)));
                     this->warehouse_population_sz = new_warehouse_sz;
 
                     return dg::network_exception::SUCCESS;
@@ -272,7 +392,7 @@ namespace dg::network_extmemcommit_dropbox{
                     releasing_smp->release();
                 }
 
-                return return_err;
+                return err;
             }
 
             auto pop() noexcept -> dg::vector<Request>{
@@ -298,11 +418,122 @@ namespace dg::network_extmemcommit_dropbox{
                         }
                     }
 
-                    this->waiting_queue.push_back(std::make_pair(&request, &smp));
+                    dg::network_exception_handler::nothrow_log(this->waiting_queue.push_back(std::make_pair(&request, &smp)));
                 }
 
                 smp.acquire();
                 return dg::vector<Request>(std::move(request.value()));
+            }
+    };
+
+    class CallbackOffloaderWarehouse: public virtual CallbackOffloaderWarehouseInterface{
+
+        public:
+
+            using key_t = CallbackOffloaderWarehouseInterface::key_t;
+
+        private:
+
+            dg::pow2_cyclic_queue<key_t> key_queue;
+            dg::pow2_cyclic_queue<std::pair<key_t *, std::binary_semaphore *>> waiting_queue;
+            std::unique_ptr<std::mutex> mtx;
+        
+        public:
+
+            CallbackOffloaderWarehouse(dg::pow2_cyclic_queue<key_t> key_queue,
+                                       dg::pow2_cyclic_queue<std::pair<key_t *, std::binary_semaphore *>> waiting_queue,
+                                       std::unique_ptr<std::mutex> mtx) noexcept: key_queue(std::move(key_queue)),
+                                                                                  waiting_queue(std::move(waiting_queue)),
+                                                                                  mtx(std::move(mtx)){}
+            
+            auto push(key_t key) noexcept -> exception_t{
+
+                std::binary_semaphore * releasing_smp = nullptr;
+                exception_t err = [&]() noexcept{
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->waiting_queue.empty()){
+                        auto [fetching_addr, smp]   = this->waiting_queue.front();
+                        this->waiting_queue.pop_front();
+                        *fetching_addr              = key;
+                        releasing_smp               = smp;
+
+                        return dg::network_exception::SUCCESS;
+                    }
+
+                    if (this->key_queue.size() == this->key_queue.capacity()){
+                        return dg::network_exception::RESOURCE_EXHAUSTION;
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->key_queue.push_back(key));
+
+                    return dg::network_exception::SUCCESS;
+                }();
+
+                if (releasing_smp != nullptr){
+                    releasing_smp->release();
+                }
+
+                return err;
+            }
+
+            auto pop() noexcept -> key_t{
+
+                std::binary_semaphore smp(0);
+                key_t key{};
+
+                {
+                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+
+                    if (!this->key_queue.empty()){
+                        auto rs = this->key_queue.front();
+                        this->key_queue.pop_front();
+                        return rs;
+                    }
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (this->waiting_queue.size() == this->waiting_queue.capacity()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->waiting_queue.push_back(std::make_pair(&key, &smp)));
+                }
+
+                smp.acquire();
+                return key;
+            }
+    };
+
+    class CallbackOffloaderWarehouseIngestionConnector: public virtual CallbackOffloaderWarehouseIngestionConnectorInterface{
+
+        private:
+
+            std::shared_ptr<CallbackOffloaderWarehouseInterface> base;
+            std::shared_ptr<network_concurrency_infretry_x::ExecutorInterface> infretry_device;
+        
+        public:
+
+            using key_t = CallbackOffloaderWarehouseIngestionConnectorInterface::key_t; 
+
+            CallbackOffloaderWarehouseIngestionConnector(std::shared_ptr<CallbackOffloaderWarehouseInterface> base,
+                                                         std::shared_ptr<network_concurrency_infretry_x::ExecutorInterface> infretry_device) noexcept: base(std::move(base)),
+                                                                                                                                                       infretry_device(std::move(infretry_device)){}
+
+            auto push(key_t key) noexcept -> exception_t{
+
+                exception_t err = dg::network_exception::INTERNAL_CORRUPTION;
+
+                auto task = [&]() noexcept{
+                    err = this->base->push(key);
+                    return dg::network_exception::is_success(err);
+                };
+
+                dg::network_concurrency_infretry_x::ExecutableWrapper wrapper(task);
+                this->infretry_device->exec(wrapper);
+
+                return err;
             }
     };
 
@@ -1083,6 +1314,25 @@ namespace dg::network_extmemcommit_dropbox{
                 }
             };
 
+            struct RestPromiseWrapper: virtual dg::network_rest::PromiseObserverInterface{
+
+                private:
+
+                    std::shared_ptr<SynchronizableCallbackInterface> callback;
+                
+                public:
+
+                    RestPromiseWrapper(std::shared_ptr<SynchronizableCallbackInterface> callback) noexcept: callback(std::move(callback)){
+
+                        dg::network_exception_handler::dg_assert(this->callback != nullptr);
+                    }
+
+                    void notify(){
+
+                        this->callback->notify();
+                    }
+            };
+
             struct InternalSynchronizer: virtual SynchronizableInterface{
 
                 private:
@@ -1120,6 +1370,15 @@ namespace dg::network_extmemcommit_dropbox{
 
                         this->sync();
                     }
+
+                    auto test_or_subscribe(std::shared_ptr<SynchronizableCallbackInterface> callback) noexcept -> std::expected<bool, exception_t>{
+
+                        if (callback == nullptr){
+                            return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                        }
+
+                        return this->promise->test_or_subscribe(std::make_shared<RestPromiseWrapper>(std::move(callback)));
+                    } 
 
                     void sync() noexcept{
 
