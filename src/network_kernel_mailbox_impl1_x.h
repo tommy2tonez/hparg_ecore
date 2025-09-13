@@ -693,6 +693,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         virtual void notify(busy_level_t) noexcept = 0;
     };
 
+    //OK
     struct NetworkBusyStatusRetrieverInterface{
         using busy_level_t = uint8_t;
 
