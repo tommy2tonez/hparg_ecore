@@ -19,6 +19,7 @@
 #include <array>
 #include <variant>
 #include <chrono>
+#include <expected>
 
 //I was thinking of making the trivial serializer an internal dependency to solve the VERSION_CONTROL problems
 // 
@@ -440,10 +441,16 @@ namespace dg::network_compact_serializer::types_space{
     struct is_variant<std::variant<Args...>>: std::true_type{};
 
     template <class T>
+    struct is_expected: std::false_type{};
+
+    template <class ...Args>
+    struct is_expected<std::expected<Args...>>: std::true_type{};
+
+    template <class T>
     struct is_utc_timepoint: std::false_type{};
     
     template <>
-    struct is_utc_timepoint<std::chrono::time_point<std::chrono::utc_clock, std::chrono::nanoseconds>>: std::true_type{};
+    struct is_utc_timepoint<std::chrono::time_point<std::chrono::utc_clock, std::chrono::nanoseconds>>: std::bool_constant<std::is_same_v<typename std::chrono::utc_clock::rep, int64_t>>{};
 
     template <class T, class = void>
     struct is_reflectible: std::false_type{};
@@ -562,6 +569,9 @@ namespace dg::network_compact_serializer::types_space{
 
     template <class T>
     static inline constexpr bool is_variant_v                                           = is_variant<T>::value;
+
+    template <class T>
+    static inline constexpr bool is_expected_v                                          = is_expected<T>::value;
 
     template <class T>
     static inline constexpr bool is_utc_timepoint_v                                     = is_utc_timepoint<T>::value;
@@ -977,6 +987,22 @@ namespace dg::network_compact_serializer::archive{
             return rs;
         }
 
+        template <class T, std::enable_if_t<types_space::is_expected_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(const T& data) const -> size_t{
+
+            using base_type = types_space::base_type_t<T>;
+
+            size_t rs = this->count(bool{});
+
+            if (data.has_value()){
+                rs += this->count(data.value());
+            } else{
+                rs += this->count(data.error());
+            }
+
+            return rs;
+        }
+
         template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<T>, bool> = true>
         constexpr auto count(const T& data) const -> size_t{
 
@@ -1095,6 +1121,18 @@ namespace dg::network_compact_serializer::archive{
             std::visit(visitor, data);
         }
 
+        template <class T, std::enable_if_t<types_space::is_expected_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, const T& data) const{
+
+            this->put(buf, static_cast<bool>(data.has_value()));
+
+            if (data.has_value()){
+                this->put(buf, data.value());
+            } else{
+                this->put(buf, data.error());
+            }
+        }
+
         template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(char *& buf, const T& data) const{
 
@@ -1192,14 +1230,16 @@ namespace dg::network_compact_serializer::archive{
         template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(const char *& buf, T&& data) const{
 
-            using containee_type = typename types_space::base_type_t<T>::value_type;
+            using base_type = types_space::base_type_t<T>;
+            using containee_type = typename base_type::value_type;
+
             bool status = {};
             this->put(buf, status);
 
             if (status){
                 containee_type obj;
                 this->put(buf, obj);
-                data = std::optional<containee_type>(std::in_place_t{}, std::move(obj));
+                data = base_type(std::in_place_t{}, std::move(obj));
             } else{
                 data = std::nullopt;
             }
@@ -1229,6 +1269,27 @@ namespace dg::network_compact_serializer::archive{
                     }(), ...
                 );
             }(std::make_index_sequence<std::variant_size_v<base_type>>());
+        }
+
+        template <class T, std::enable_if_t<types_space::is_expected_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, T&& data) const{
+
+            using base_type     = types_space::base_type_t<T>;
+            using value_type    = typename base_type::value_type;
+            using error_type    = typename base_type::error_type;
+
+            bool status = {};
+            this->put(buf, status);
+
+            if (status){
+                value_type obj;
+                this->put(buf, obj);
+                data = base_type(std::in_place_t{}, std::move(obj));
+            } else{
+                error_type obj;
+                this->put(buf, obj);
+                data = base_type(std::unexpected(obj));
+            }
         }
 
         template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
@@ -1346,14 +1407,16 @@ namespace dg::network_compact_serializer::archive{
         template <class T, std::enable_if_t<types_space::is_optional_v<types_space::base_type_t<T>>, bool> = true>
         constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
 
-            using containee_type = typename types_space::base_type_t<T>::value_type;
+            using base_type         = types_space::base_type_t<T>;
+            using containee_type    = typename base_type::value_type;
+
             bool status = {};
             this->put(buf, buf_sz, status);
 
             if (status){
                 containee_type obj;
                 this->put(buf, buf_sz, obj);
-                data = std::optional<containee_type>(std::in_place_t{}, std::move(obj));
+                data = base_type(std::in_place_t{}, std::move(obj));
             } else{
                 data = std::nullopt;
             }
@@ -1386,6 +1449,27 @@ namespace dg::network_compact_serializer::archive{
                     }(), ...
                 );
             }(std::make_index_sequence<VARIANT_COUNT>());
+        }
+
+        template <class T, std::enable_if_t<types_space::is_expected_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type     = types_space::base_type_t<T>;
+            using value_type    = typename base_type::value_type;
+            using error_type    = typename base_type::error_type;
+
+            bool status = {};
+            this->put(buf, buf_sz, status);
+
+            if (status){
+                value_type obj;
+                this->put(buf, buf_sz, obj);
+                data = base_type(std::in_place_t{}, std::move(obj));
+            } else{
+                error_type obj;
+                this->put(buf, buf_sz, obj);
+                data = base_type(std::unexpected(obj));
+            }
         }
 
         template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
@@ -1561,6 +1645,8 @@ namespace dg::network_compact_serializer::archive{
             return 231u;
         } else if constexpr(types_space::is_container_wrapper_v<T>){
             return 232u;
+        } else if constexpr(types_space::is_expected_v<T>){
+            return 233u;
         } else{
             static_assert(FALSE_VAL<>);
         }
@@ -1621,6 +1707,22 @@ namespace dg::network_compact_serializer::archive{
             };
 
             std::visit(visitor, data);
+
+            return rs;
+        }
+
+        template <class T, std::enable_if_t<types_space::is_expected_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr auto count(const T& data) const -> size_t{
+
+            using base_type = types_space::base_type_t<T>;
+
+            size_t rs = this->count(types::dgstd_unsigned_serialization_header_t{}) + this->count(bool{});
+
+            if (data.has_value()){
+                rs += this->count(data.value());
+            } else{
+                rs += this->count(data.error());
+            }
 
             return rs;
         }
@@ -1784,6 +1886,21 @@ namespace dg::network_compact_serializer::archive{
             };
 
             std::visit(visitor, data);
+        }
+
+        template <class T, std::enable_if_t<types_space::is_expected_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(char *& buf, const T& data) const{
+
+            using base_type = types_space::base_type_t<T>;
+
+            this->put(buf, get_dgstd_serialization_header<base_type>());
+            this->put(buf, static_cast<bool>(data.has_value()));
+
+            if (data.has_value()){
+                this->put(buf, data.value());
+            } else{
+                this->put(buf, data.error());
+            }
         }
 
         template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>
@@ -1961,7 +2078,7 @@ namespace dg::network_compact_serializer::archive{
             if (status){
                 containee_type obj;
                 this->put(buf, buf_sz, obj);
-                data = std::optional<containee_type>(std::in_place_t{}, std::move(obj));
+                data = base_type(std::in_place_t{}, std::move(obj));
             } else{
                 data = std::nullopt;
             }
@@ -2004,6 +2121,35 @@ namespace dg::network_compact_serializer::archive{
                     }(), ...
                 );
             }(std::make_index_sequence<VARIANT_COUNT>());
+        }
+
+        template <class T, std::enable_if_t<types_space::is_expected_v<types_space::base_type_t<T>>, bool> = true>
+        constexpr void put(const char *& buf, size_t& buf_sz, T&& data) const{
+
+            using base_type     = types_space::base_type_t<T>;
+            using value_type    = typename base_type::value_type;
+            using error_type    = typename base_type::error_type;
+
+            types::dgstd_unsigned_serialization_header_t expected_header    = {};
+            this->put(buf, buf_sz, expected_header);
+            types::dgstd_unsigned_serialization_header_t header             = get_dgstd_serialization_header<base_type>();
+
+            if (header != expected_header){
+                throw dg::network_compact_serializer::exception_space::corrupted_format();
+            }
+
+            bool status = {};
+            this->put(buf, buf_sz, status);
+
+            if (status){
+                value_type obj;
+                this->put(buf, buf_sz, obj);
+                data = base_type(std::in_place_t{}, std::move(obj));
+            } else{
+                error_type obj;
+                this->put(buf, buf_sz, obj);
+                data = base_type(std::unexpected(obj));
+            }
         }
 
         template <class T, std::enable_if_t<types_space::is_utc_timepoint_v<types_space::base_type_t<T>>, bool> = true>

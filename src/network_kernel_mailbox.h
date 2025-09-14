@@ -28,11 +28,14 @@ namespace dg::network_kernel_mailbox_channel{
 
 namespace dg::network_kernel_mailbox{
 
+    using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument; 
+    using Address           = dg::network_kernel_mailbox_impl1::model::Address;
+
     struct Config{
         size_t outbound_worker_count;
         size_t inbound_worker_count;
         size_t retransmission_worker_count;
-        dg::vector<ip_t> host_ips;
+        // dg::vector<ip_t> host_ips;
         dg::vector<uint16_t> host_ports;
         std::chrono::nanoseconds retransmission_delay;
         size_t retranmission_count;
@@ -49,14 +52,14 @@ namespace dg::network_kernel_mailbox{
 
     }
 
-    void send(Address addr, dg::string msg, radix_t radix) noexcept{
+    void send(...) noexcept{
 
-        mailbox->send(std::move(addr), std::move(msg));
+        // mailbox->send(std::move(addr), std::move(msg));
     }
 
-    auto recv(radix_t radix) noexcept -> std::optional<dg::string>{ //optional string because string.empty() does not mean that it is not a packet
+    auto recv(...) noexcept -> std::optional<dg::string>{ //optional string because string.empty() does not mean that it is not a packet
         
-        return mailbox->recv();
+        // return mailbox->recv();
     }   
 }
 

@@ -127,6 +127,25 @@ namespace dg::network_exception{
     static inline constexpr exception_t BAD_OPERATION                       = 00u;
     static inline constexpr exception_t INDEX_OUT_OF_RANGE                  = 00u;
 
+    static inline constexpr exception_t REST_CACHE_MAX_RESPONSE_SIZE_REACHED    = 00u;
+    static inline constexpr exception_t REST_CACHE_POPULATION_LIMIT_REACHED     = 00u;
+    static inline constexpr exception_t REST_CLIENTSIDE_TIMEOUT                 = 00u;
+    static inline constexpr exception_t REST_SERVERSIDE_ABSTIMEOUT_TIMEOUT      = 00u;
+    static inline constexpr exception_t REST_INVALID_URI                        = 00u;
+    static inline constexpr exception_t REST_INVALID_ARGUMENT                   = 00u;
+    static inline constexpr exception_t REST_BAD_CACHE_UNIQUE_WRITE             = 00u;
+    static inline constexpr exception_t REST_INTERNAL_SERVER_ERROR              = 00u;
+    static inline constexpr exception_t REST_OBSERVER_SECOND_SET                = 00u;
+    static inline constexpr exception_t REST_OBSERVER_BAD_NOTIFY                = 00u;
+    static inline constexpr exception_t REST_OBSERVER_SECOND_NOTIFY             = 00u;
+    static inline constexpr exception_t REST_RESPONSE_DOUBLE_INVOKE             = 00u;
+    static inline constexpr exception_t REST_OTHER_ERROR                        = 00u;
+    static inline constexpr exception_t REST_TICKET_NOT_FOUND                   = 00u;
+    static inline constexpr exception_t REST_TICKET_OBSERVER_NOT_FOUND          = 00u;
+    static inline constexpr exception_t REST_BAD_RESPONSE                       = 00u;
+    static inline constexpr exception_t REST_INVALID_TIMEOUT                    = 00u;
+    static inline constexpr exception_t MAX_CONSUME_SIZE_EXCEEDED               = 00u;
+
     inline auto wrap_cuda_exception(cuda_exception_t) noexcept -> exception_t{
 
         return UNSPECIFIED_ERROR;

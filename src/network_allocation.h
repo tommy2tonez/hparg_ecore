@@ -1833,6 +1833,12 @@ namespace dg::network_allocation{
     }
 
     template <class T, class ...Args>
+    auto cstyle_make_unique(Args&& ...args) -> std::expected<decltype(dg::network_allocation::make_unique<T>(std::forward<Args>(args)...)), exception_t>{
+
+        return {};
+    } 
+
+    template <class T, class ...Args>
     auto make_shared(Args&& ...args) -> decltype(auto){
 
         return std::make_shared<T>(std::forward<Args>(args)...);

@@ -18,6 +18,8 @@
 #include <stdfloat>
 #include <immintrin.h>
 #include <utility>
+#include <exception>
+#include "assert.h"
 
 namespace stdx{
 
@@ -399,6 +401,11 @@ namespace stdx{
 
         return true;
     }
+
+    template <class Lambda>
+    inline void busy_wait(Lambda&& lambda){
+
+    } 
 
     inline __attribute__((always_inline)) bool atomic_flag_memsafe_try_lock(std::atomic_flag * volatile mtx) noexcept{
 
@@ -871,6 +878,34 @@ namespace stdx{
             return (T{1} << BIT_SIZE) - 1u;
         }
     }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    constexpr auto lowones_bitgen(size_t bit_size) noexcept -> T{
+
+        assert(bit_size <= std::numeric_limits<T>::digits);
+
+        if (bit_size == std::numeric_limits<T>::digits){
+            return std::numeric_limits<T>::max();
+        } else{
+            return (T{1} << bit_size) - 1u;
+        }
+    }
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto zero_throw(T value) -> T{
+
+        if (value == 0u){
+            throw std::range_error("unsigned non-zero value cannot be zero");
+        }
+
+        return value;
+    } 
+
+    template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true>
+    inline auto safe_unsigned_lshift(T value, size_t lshift_size) -> T{
+
+        return {};
+    } 
 
     template <class T>
     struct safe_integer_cast_wrapper{
