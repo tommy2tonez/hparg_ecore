@@ -28,6 +28,7 @@ namespace dg::network_rest_frame::model{
     using ip_storage_t          = std::variant<ipv4_storage_t, ipv6_storage_t>; 
     using native_id_storage_t   = std::array<char, 8u>; 
     using MailBoxArgument       = dg::network_kernel_mailbox::MailBoxArgument;
+    using Address               = dg::network_kernel_mailbox::Address;
 
     struct CacheID{
         ip_storage_t ip;
@@ -64,6 +65,21 @@ namespace dg::network_rest_frame::model{
 
     using request_id_t = RequestID;
 
+    struct ResourceAddress{
+        Address remote_addr;
+        dg::string resource_addr;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const{
+            reflector(remote_addr, dg::network_compact_serializer::wrap_container<uint16_t>(resource_addr));
+        }
+        
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector){
+            reflector(remote_addr, dg::network_compact_serializer::wrap_container<uint16_t>(resource_addr));
+        }
+    };
+
     struct ClientRequest{
         dg::string requestee_uri;
         dg::string requestor;
@@ -71,7 +87,6 @@ namespace dg::network_rest_frame::model{
         dg::string payload_serialization_format;
 
         std::chrono::nanoseconds client_timeout_dur;
-        std::optional<uint8_t> dual_priority;
         std::optional<std::chrono::time_point<std::chrono::utc_clock>> server_abs_timeout; //this is hard to solve, we can be stucked in a pipe and actually stay there forever, abs_timeout only works for post the transaction, which is already too late, I dont know of the way to do this correctly
         std::optional<request_id_t> designated_request_id; 
 
@@ -79,14 +94,14 @@ namespace dg::network_rest_frame::model{
         void dg_reflect(const Reflector& reflector) const{
             reflector(requestee_uri, requestor, payload, 
                       payload_serialization_format, client_timeout_dur,
-                      dual_priority, server_abs_timeout, designated_request_id);
+                      server_abs_timeout, designated_request_id);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
             reflector(requestee_uri, requestor, payload,
                       payload_serialization_format, client_timeout_dur,
-                      dual_priority, server_abs_timeout, designated_request_id);
+                      server_abs_timeout, designated_request_id);
         }
     };
 
@@ -127,20 +142,19 @@ namespace dg::network_rest_frame::model{
         Request request;
         ticket_id_t ticket_id;
 
-        std::optional<uint8_t> dual_priority;
         bool has_unique_response;
         std::optional<cache_id_t> client_request_cache_id;
         std::optional<std::chrono::time_point<std::chrono::utc_clock>> server_abs_timeout;
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector) const{
-            reflector(request, ticket_id, dual_priority, has_unique_response,
+            reflector(request, ticket_id, has_unique_response,
                       client_request_cache_id, server_abs_timeout);
         }
 
         template <class Reflector>
         void dg_reflect(const Reflector& reflector){
-            reflector(request, ticket_id, dual_priority, has_unique_response,
+            reflector(request, ticket_id, has_unique_response,
                       client_request_cache_id, server_abs_timeout);
         }
     };
@@ -164,6 +178,31 @@ namespace dg::network_rest_frame::model{
         ticket_id_t clocked_in_ticket;
         std::chrono::nanoseconds expiry_dur;
     };
+}
+
+namespace dg::network_rest_frame::utility{
+
+    using namespace dg::network_rest_frame::model;
+
+    auto serialize_address(const Address& addr) noexcept -> std::expected<dg::string, exception_t>{
+
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, Address>)(addr, 0u);
+    }
+
+    auto deserialize_address(const dg::string& addr) noexcept -> std::expected<Address, exception_t>{
+
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<Address, dg::string>)(addr, 0u);
+    }
+
+    auto serialize_resource_address(const ResourceAddress& addr) noexcept -> std::expected<dg::string, exception_t>{
+
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_serialize<dg::string, ResourceAddress>)(addr, 0u);
+    }
+
+    auto deserialize_resource_address(const dg::string& addr) noexcept -> std::expected<ResourceAddress, exception_t>{
+
+        return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<ResourceAddress, dg::string>)(addr, 0u);
+    }
 }
 
 namespace dg::network_rest_frame::server{
@@ -248,7 +287,7 @@ namespace dg::network_rest_frame::client{
 
     struct ResponseOnReadyNotifierInterface{
         virtual ~ResponseOnReadyNotifierInterface() = default;
-        virtual auto test_or_subscribe(ResponseOnReadyObserverInterface *) noexcept -> std::expected<bool, exception_t> = 0;
+        virtual auto test_or_subscribe(std::unique_ptr<ResponseOnReadyObserverInterface>) noexcept -> std::expected<bool, exception_t> = 0;
         virtual auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface>) noexcept -> std::expected<bool, exception_t> = 0;
     };
 
@@ -1656,8 +1695,7 @@ namespace dg::network_rest_frame::server_impl1{
             dg::unordered_unstable_map<dg::string, std::unique_ptr<RequestHandlerInterface>> request_handler_map;
             std::shared_ptr<InfiniteCacheControllerInterface> request_cache_controller;
             std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface> cachewrite_uex_controller;
-            std::shared_ptr<DistributedCacheUniqueWriteTrafficControllerInterface> cachewrite_traffic_controller; //we provide the users a contract, within a certain window to do dup-requests, such cannot be guaranteed if we are not attempting to do traffic control, nasty things could happen 
-            dg::network_kernel_mailbox::transmit_option_t transmit_opt;
+            std::shared_ptr<DistributedCacheUniqueWriteTrafficControllerInterface> cachewrite_traffic_controller; 
             uint32_t resolve_channel;
             size_t resolve_consume_sz;
             uint32_t response_channel;
@@ -1676,7 +1714,6 @@ namespace dg::network_rest_frame::server_impl1{
                                   std::shared_ptr<InfiniteCacheControllerInterface> request_cache_controller,
                                   std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface> cachewrite_uex_controller,
                                   std::shared_ptr<DistributedCacheUniqueWriteTrafficControllerInterface> cachewrite_traffic_controller,
-                                  dg::network_kernel_mailbox::transmit_option_t transmit_opt,
                                   uint32_t resolve_channel,
                                   size_t resolve_consume_sz,
                                   uint32_t response_channel,
@@ -1691,7 +1728,6 @@ namespace dg::network_rest_frame::server_impl1{
                                                                     request_cache_controller(std::move(request_cache_controller)),
                                                                     cachewrite_uex_controller(std::move(cachewrite_uex_controller)),
                                                                     cachewrite_traffic_controller(std::move(cachewrite_traffic_controller)),
-                                                                    transmit_opt(transmit_opt),
                                                                     resolve_channel(resolve_channel),
                                                                     resolve_consume_sz(resolve_consume_sz),
                                                                     response_channel(response_channel),
@@ -1706,26 +1742,6 @@ namespace dg::network_rest_frame::server_impl1{
 
             bool run_one_epoch() noexcept{
 
-                //I was thinking about the expressness of the mailbox_container
-                //we recv, prioritized packets are at the front, prioritized packets need to be processed as soon as possible, hinted by the request_handler_map max_consume_size
-                //yet the prioritized packet still stucks at the mailbox bouncing container
-
-                //we need to ask a more in-depth question about this problem
-                //how often do we actually stuck with and without the prioritized express line (we need to actually do a radixed mailbox container, such is 1-2-3-4-5-6-7-8 to do fast radixed priority push + pop, we can't really do a binary heap or AVL batch insert ... for the reasons being it is extremely slow for tasks like that)
-                //with the express line, the latency is guaranteed to be avg_task_time_per_load / concurrent_worker
-                //without the express line, the latency is guaranteed to be avg_task_time_per_load
-                //get_cache is another problem, we often dont actually balance the get cache because the process time is fixed, predictable
-                //so it's fine to uniformize the keys for that particular task
-                //we'll backlog this, and circle back to this later on
-                //it's an extremely complex task which we are trying our best to simplify
-
-                //we are literally tired of incoming requests of this and that
-                //really fellas, the MVP REST protocol is just this
-                //yall wanna add eligibility or security, extends the mailbox protocol, it's that simple, this is the top-secret comm between our logit density miners
-
-                //dup-request is not an optional feature, it sometimes just returns OK or FAILED or GOOD or RETRY_LATER
-                //yet it is the backbone of our detached compute tree and conditional branching machine
-
                 size_t recv_buf_cap = this->resolve_consume_sz;
                 size_t recv_buf_sz  = {};
                 dg::network_stack_allocation::NoExceptAllocation<dg::string[]> recv_buf_arr(recv_buf_cap);
@@ -1733,7 +1749,6 @@ namespace dg::network_rest_frame::server_impl1{
 
                 auto mailbox_feed_resolutor                                 = InternalResponseFeedResolutor{}; 
                 mailbox_feed_resolutor.mailbox_channel                      = this->response_channel;
-                mailbox_feed_resolutor.transmit_opt                         = this->transmit_opt;
 
                 size_t trimmed_mailbox_feed_cap                             = std::min(std::min(this->mailbox_feed_cap, dg::network_kernel_mailbox::max_consume_size()), recv_buf_sz);
                 size_t mailbox_feeder_allocation_cost                       = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailbox_feed_resolutor, trimmed_mailbox_feed_cap);
@@ -1767,16 +1782,10 @@ namespace dg::network_rest_frame::server_impl1{
                 server_fetch_feed_resolutor.mailbox_prep_feeder             = mailbox_prep_feeder.get();
                 server_fetch_feed_resolutor.cache_map_feeder                = cache_map_insert_feeder.get();
 
-                std::expected<dg::unordered_unstable_map<dg::string, size_t>, exception_t> server_native_feedcap_map = this->get_server_native_feedcap_map(std::min(this->server_fetch_feed_cap, recv_buf_sz));
-
-                if (!server_native_feedcap_map.has_value()){
-                    dg::network_log_stackdump::error(dg::network_exception::verbose(server_native_feedcap_map.error()));
-                    return false;
-                }
-
-                size_t server_feeder_allocation_cost                        = dg::network_producer_consumer::delvrsrv_kvroute_allocation_cost(&server_fetch_feed_resolutor, server_native_feedcap_map.value());
+                size_t trimmed_server_fetch_feed_cap                        = std::min(this->server_fetch_feed_cap, recv_buf_sz);
+                size_t server_feeder_allocation_cost                        = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&server_fetch_feed_resolutor, trimmed_server_fetch_feed_cap);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> server_feeder_mem(server_feeder_allocation_cost);
-                auto server_feeder                                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kvroute_open_preallocated_raiihandle(&server_fetch_feed_resolutor, server_native_feedcap_map.value(), server_feeder_mem.get()));
+                auto server_feeder                                          = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&server_fetch_feed_resolutor, trimmed_server_fetch_feed_cap, server_feeder_mem.get()));
 
                 //---
 
@@ -1811,7 +1820,7 @@ namespace dg::network_rest_frame::server_impl1{
                         continue;
                     }
 
-                    std::expected<dg::network_kernel_mailbox::Address, exception_t> requestor_addr = dg::network_uri_encoder::extract_mailbox_addr(request->request.requestor);
+                    std::expected<dg::network_kernel_mailbox::Address, exception_t> requestor_addr = dg::network_rest_frame::utility::deserialize_address(request->request.requestor);
 
                     if (!requestor_addr.has_value()){
                         dg::network_log_stackdump::error_fast(dg::network_exception::verbose(requestor_addr.error()));
@@ -1827,36 +1836,33 @@ namespace dg::network_rest_frame::server_impl1{
                                                                   .ticket_id    = request->ticket_id};
 
                         auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = requestor_addr.value(),
-                                                                          .response         = std::move(response),
-                                                                          .dual_priority    = request->dual_priority}; 
+                                                                          .response         = std::move(response)}; 
 
                         dg::network_producer_consumer::delvrsrv_deliver(mailbox_prep_feeder.get(), std::move(prep_arg));
                         continue;
                     }
 
-                    std::expected<dg::string, exception_t> resource_path = dg::network_uri_encoder::extract_local_path(request->request.requestee_uri);
+                    std::expected<ResourceAddress, exception_t> resource_path = dg::network_rest_frame::utility::deserialize_resource_address(request->request.requestee_uri);
 
                     if (!resource_path.has_value()){
                         auto response   = model::InternalResponse{.response     = std::unexpected(resource_path.error()), 
                                                                   .ticket_id    = request->ticket_id};
 
                         auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = requestor_addr.value(),
-                                                                          .response         = std::move(response),
-                                                                          .dual_priority    = request->dual_priority};
+                                                                          .response         = std::move(response)};
 
                         dg::network_producer_consumer::delvrsrv_deliver(mailbox_prep_feeder.get(), std::move(prep_arg));
                         continue;
                     }
 
-                    auto map_ptr = this->request_handler_map.find(resource_path.value());
+                    auto map_ptr = this->request_handler_map.find(resource_path.value().resource_addr);
 
                     if (map_ptr == this->request_handler_map.end()){
                         auto response   = model::InternalResponse{.response   = std::unexpected(dg::network_exception::REST_INVALID_URI), 
                                                                   .ticket_id  = request->ticket_id};
 
                         auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = requestor_addr.value(),
-                                                                          .response         = std::move(response),
-                                                                          .dual_priority    = request->dual_priority};
+                                                                          .response         = std::move(response)};
 
                         dg::network_producer_consumer::delvrsrv_deliver(mailbox_prep_feeder.get(), std::move(prep_arg));
                         continue;
@@ -1868,8 +1874,7 @@ namespace dg::network_rest_frame::server_impl1{
                                                                       .ticket_id    = request->ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = requestor_addr.value(),
-                                                                              .response         = std::move(response),
-                                                                              .dual_priority    = request->dual_priority};
+                                                                              .response         = std::move(response)};
 
                             dg::network_producer_consumer::delvrsrv_deliver(mailbox_prep_feeder.get(), std::move(prep_arg)); 
                             continue;
@@ -1877,7 +1882,6 @@ namespace dg::network_rest_frame::server_impl1{
 
                         auto arg   = InternalCacheFeedArgument{.to              = requestor_addr.value(),
                                                                .local_uri_path  = map_ptr->first,
-                                                               .dual_priority   = request->dual_priority,
                                                                .cache_id        = request->client_request_cache_id.value(),
                                                                .ticket_id       = request->ticket_id,
                                                                .request         = std::move(request->request)};
@@ -1888,12 +1892,11 @@ namespace dg::network_rest_frame::server_impl1{
 
                     auto key_arg        = dg::string(map_ptr->first);
                     auto value_arg      = InternalServerFeedResolutorArgument{.to               = requestor_addr.value(),
-                                                                              .dual_priority    = request->dual_priority,
                                                                               .cache_write_id   = std::nullopt,
                                                                               .ticket_id        = request->ticket_id,
                                                                               .request          = std::move(request->request)};
 
-                    dg::network_producer_consumer::delvrsrv_kvroute_deliver(server_feeder.get(), key_arg, std::move(value_arg));
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(server_feeder.get(), key_arg, std::move(value_arg));
                 }
 
                 return recv_buf_sz >= this->busy_consume_sz;
@@ -1909,7 +1912,6 @@ namespace dg::network_rest_frame::server_impl1{
             struct InternalResponseFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalResponseFeedArgument>{
 
                 uint32_t mailbox_channel;
-                dg::network_kernel_mailbox::transmit_option_t transmit_opt;
 
                 void push(std::move_iterator<InternalResponseFeedArgument *> data_arr, size_t sz) noexcept{
 
@@ -1924,8 +1926,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                     dg::network_kernel_mailbox::send(this->mailbox_channel,
                                                      std::make_move_iterator(mailbox_arr.get()), sz,
-                                                     exception_arr.get(),
-                                                     this->transmit_opt);
+                                                     exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         *base_data_arr[i].exception_ptr = exception_arr[i];
@@ -1936,7 +1937,6 @@ namespace dg::network_rest_frame::server_impl1{
             struct InternalMailBoxPrepFeedArgument{
                 dg::network_kernel_mailbox::Address to;
                 InternalResponse response;
-                std::optional<uint8_t> priority;
             };
 
             struct InternalMailBoxPrepFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalMailBoxPrepFeedArgument>{
@@ -1959,8 +1959,7 @@ namespace dg::network_rest_frame::server_impl1{
                         }
 
                         auto mailbox_arg        = dg::network_kernel_mailbox::MailBoxArgument{.to       = base_data_arr[i].to,
-                                                                                              .content  = std::move(serialized_response.value()),
-                                                                                              .priority = base_data_arr[i].priority};
+                                                                                              .content  = std::move(serialized_response.value())};
 
                         auto response_feed_arg  = InternalResponseFeedArgument{.mailbox_arg     = std::move(mailbox_arg),
                                                                                .exception_ptr   = std::next(exception_arr.get(), i)};
@@ -1983,8 +1982,7 @@ namespace dg::network_rest_frame::server_impl1{
                             }
 
                             auto mailbox_arg        = dg::network_kernel_mailbox::MailBoxArgument{.to       = base_data_arr[i].to,
-                                                                                                  .content  = std::move(serialized_response.value()),
-                                                                                                  .priority = base_data_arr[i].priority};
+                                                                                                  .content  = std::move(serialized_response.value())};
 
                             auto response_feed_arg  = InternalResponseFeedArgument{.mailbox_arg     = std::move(mailbox_arg),
                                                                                    .exception_ptr   = std::next(reexception_arr.get(), i)};
@@ -2047,7 +2045,6 @@ namespace dg::network_rest_frame::server_impl1{
 
             struct InternalServerFeedResolutorArgument{
                 dg::network_kernel_mailbox::Address to;
-                std::optional<uint8_t> dual_priority;
                 std::optional<cache_id_t> cache_write_id;
                 ticket_id_t ticket_id;
                 Request request;
@@ -2108,8 +2105,7 @@ namespace dg::network_rest_frame::server_impl1{
                                                                   .ticket_id  = base_data_arr[i].ticket_id}; 
 
                         auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
-                                                                          .response         = std::move(response),
-                                                                          .dual_priority    = base_data_arr[i].dual_priority};
+                                                                          .response         = std::move(response)};
 
                         dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
                     }
@@ -2119,7 +2115,6 @@ namespace dg::network_rest_frame::server_impl1{
             struct InternalCacheServerFeedArgument{
                 dg::network_kernel_mailbox::Address to;
                 dg::string local_uri_path;
-                std::optional<uint8_t> dual_priority;
                 cache_id_t cache_id;
                 ticket_id_t ticket_id;
                 Request request;
@@ -2129,7 +2124,7 @@ namespace dg::network_rest_frame::server_impl1{
 
                 InfiniteCacheUniqueWriteControllerInterface * cachewrite_uex_controller;
                 CacheUniqueWriteTrafficControllerInterface * cachewrite_tfx_controller;
-                dg::network_producer_consumer::KVRouteDeliveryHandle<InternalServerFeedResolutorArgument> * server_feeder;
+                dg::network_producer_consumer::KVDeliveryHandle<dg::string, InternalServerFeedResolutorArgument> * server_feeder;
                 dg::network_producer_consumer::DeliveryHandle<InternalMailBoxPrepFeedArgument> * mailbox_prep_feeder;
 
                 void push(std::move_iterator<InternalCacheServerFeedArgument *> data_arr, size_t sz) noexcept{
@@ -2162,8 +2157,7 @@ namespace dg::network_rest_frame::server_impl1{
                                                                     .ticket_id  = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
-                                                                              .response         = std::move(response),
-                                                                              .dual_priority    = base_data_arr[i].dual_priority};
+                                                                              .response         = std::move(response)};
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
                         }
@@ -2184,8 +2178,7 @@ namespace dg::network_rest_frame::server_impl1{
                                                                     .ticket_id  = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
-                                                                              .response         = std::move(response),
-                                                                              .dual_priority    = base_data_arr[i].dual_priority};
+                                                                              .response         = std::move(response)};
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
                             continue;
@@ -2198,8 +2191,7 @@ namespace dg::network_rest_frame::server_impl1{
                                                                       .ticket_id  = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
-                                                                              .response         = std::move(response),
-                                                                              .dual_priority    = base_data_arr[i].dual_priority};
+                                                                              .response         = std::move(response)};
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
                             continue;
@@ -2208,7 +2200,6 @@ namespace dg::network_rest_frame::server_impl1{
                         //we have the cache_write right, we'd make sure to dispatch this to the server feed resolutor to get a response and cache the response
 
                         auto arg    = InternalServerFeedResolutorArgument{.to               = base_data_arr[i].to,
-                                                                          .dual_priority    = base_data_arr[i].dual_priority,
                                                                           .cache_write_id   = base_data_arr[i].cache_id,
                                                                           .ticket_id        = base_data_arr[i].ticket_id,
                                                                           .request          = std::move(base_data_arr[i].request)};
@@ -2221,7 +2212,6 @@ namespace dg::network_rest_frame::server_impl1{
             struct InternalCacheFeedArgument{
                 dg::network_kernel_mailbox::Address to;
                 dg::string local_uri_path;
-                std::optional<uint8_t> dual_priority;
                 cache_id_t cache_id;
                 ticket_id_t ticket_id;
                 Request request;
@@ -2252,8 +2242,7 @@ namespace dg::network_rest_frame::server_impl1{
                                                                       .ticket_id    = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
-                                                                              .response         = std::move(response),
-                                                                              .dual_priority    = base_data_arr[i].dual_priority};
+                                                                              .response         = std::move(response)};
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
                             continue;
@@ -2264,8 +2253,7 @@ namespace dg::network_rest_frame::server_impl1{
                                                                     .ticket_id  = base_data_arr[i].ticket_id};
 
                             auto prep_arg   = InternalMailBoxPrepFeedArgument{.to               = base_data_arr[i].to,
-                                                                              .response         = std::move(response),
-                                                                              .dual_priority    = base_data_arr[i].dual_priority};
+                                                                              .response         = std::move(response)};
 
                             dg::network_producer_consumer::delvrsrv_deliver(this->mailbox_prep_feeder, std::move(prep_arg));
                             continue;
@@ -2273,7 +2261,6 @@ namespace dg::network_rest_frame::server_impl1{
 
                         auto feed_arg    = InternalCacheServerFeedArgument{.to               = base_data_arr[i].to,
                                                                            .local_uri_path   = base_data_arr[i].local_uri_path,
-                                                                           .dual_priority    = base_data_arr[i].dual_priority,
                                                                            .cache_id         = base_data_arr[i].cache_id,
                                                                            .ticket_id        = base_data_arr[i].ticket_id,
                                                                            .request          = std::move(base_data_arr[i].request)};
@@ -2282,27 +2269,6 @@ namespace dg::network_rest_frame::server_impl1{
                     }
                 }
             };
-
-            auto get_server_native_feedcap_map(size_t default_feed_cap) noexcept -> std::expected<dg::unordered_unstable_map<dg::string, size_t>, exception_t>{
-
-                std::expected<dg::unordered_unstable_map<dg::string, size_t>, exception_t> rs = dg::network_exception::cstyle_initialize<dg::unordered_unstable_map<dg::string, size_t>>(this->request_handler_map.size());
-
-                if (!rs.has_value()){
-                    return std::unexpected(rs.error());
-                }
-
-                for (const auto& kv_pair: this->request_handler_map){
-                    std::expected<dg::string, exception_t> cpy_key = dg::network_exception::cstyle_initialize<dg::string>(kv_pair.first);
-
-                    if (!cpy_key.has_value()){
-                        return std::unexpected(cpy_key.error());
-                    }
-
-                    rs.value().insert(std::make_pair(std::move(cpy_key.value()), std::min(default_feed_cap, kv_pair.second->max_consume_size())));
-                }
-
-                return rs;
-            }
     };
 }
 
@@ -2333,7 +2299,7 @@ namespace dg::network_rest_frame::client_impl1{
 
         private:
 
-            using observer_0_t = ResponseOnReadyObserverInterface *;
+            using observer_0_t = std::unique_ptr<ResponseOnReadyObserverInterface>;
             using observer_1_t = std::shared_ptr<ResponseOnReadyObserverInterface>; 
 
             std::variant<std::monostate, observer_0_t, observer_1_t> observer;
@@ -2342,13 +2308,13 @@ namespace dg::network_rest_frame::client_impl1{
 
             SubscriberContainer(): observer(std::monostate{}){}
 
-            auto subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> exception_t{
+            auto subscribe(std::unique_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> exception_t{
 
                 if (observer == nullptr){
                     return dg::network_exception::INVALID_ARGUMENT;
                 }
 
-                this->observer = observer;
+                this->observer = std::move(observer);
                 return dg::network_exception::SUCCESS;
             }
 
@@ -2366,8 +2332,8 @@ namespace dg::network_rest_frame::client_impl1{
 
                 if (std::holds_alternative<std::monostate>(this->observer)){
                     return;
-                } else if (std::holds_alternative<ResponseOnReadyObserverInterface *>(this->observer)){
-                    std::get<ResponseOnReadyObserverInterface *>(this->observer)->notify();
+                } else if (std::holds_alternative<std::unique_ptr<ResponseOnReadyObserverInterface>>(this->observer)){
+                    std::get<std::unique_ptr<ResponseOnReadyObserverInterface>>(this->observer)->notify();
                 } else if (std::holds_alternative<std::shared_ptr<ResponseOnReadyObserverInterface>>(this->observer)){
                     std::get<std::shared_ptr<ResponseOnReadyObserverInterface>>(this->observer)->notify();
                 } else{
@@ -2403,7 +2369,7 @@ namespace dg::network_rest_frame::client_impl1{
                                                    was_done_set(false),
                                                    was_notified(false){}
 
-            auto subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> exception_t{
+            auto subscribe(std::unique_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> exception_t{
 
                 if (observer == nullptr){
                     return dg::network_exception::INVALID_ARGUMENT;
@@ -2417,7 +2383,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 {
                     stdx::memtransaction_guard tx_grd;
-                    dg::network_exception_handler::nothrow_log(this->base.subscribe(observer));
+                    dg::network_exception_handler::nothrow_log(this->base.subscribe(std::move(observer)));
                 }
 
                 this->was_done_set.test_and_set(std::memory_order_relaxed);
@@ -2509,13 +2475,13 @@ namespace dg::network_rest_frame::client_impl1{
 
             //we'll improve the test_or_subscribe to guarantee no notify() on true later
 
-            auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
+            auto test_or_subscribe(std::unique_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
 
                 if (this->atomic_smp.value.load(std::memory_order_relaxed) == 1){
                     return true;
                 }
 
-                exception_t err = this->subscriber_container.subscribe(observer); 
+                exception_t err = this->subscriber_container.subscribe(std::move(observer)); 
 
                 if (dg::network_exception::is_failed(err)){
                     return std::unexpected(err);
@@ -2742,9 +2708,9 @@ namespace dg::network_rest_frame::client_impl1{
                 this->wait_response();
             }
 
-            auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
+            auto test_or_subscribe(std::unique_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
 
-                return this->base.test_or_subscribe(observer);
+                return this->base.test_or_subscribe(std::move(observer));
             }
 
             auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
@@ -3822,17 +3788,14 @@ namespace dg::network_rest_frame::client_impl1{
         private:
 
             std::shared_ptr<RequestContainerInterface> request_container;
-            dg::network_kernel_mailbox::transmit_option_t transmit_opt;
             uint32_t channel;
             size_t mailbox_feed_cap;
 
         public:
 
             OutBoundWorker(std::shared_ptr<RequestContainerInterface> request_container,
-                           dg::network_kernel_mailbox::transmit_option_t transmit_opt,
                            uint32_t channel,
                            size_t mailbox_feed_cap) noexcept: request_container(std::move(request_container)),
-                                                              transmit_opt(transmit_opt),
                                                               channel(channel),
                                                               mailbox_feed_cap(mailbox_feed_cap){}
 
@@ -3842,7 +3805,6 @@ namespace dg::network_rest_frame::client_impl1{
 
                 auto feed_resolutor             = InternalFeedResolutor{};
                 feed_resolutor.channel          = this->channel;
-                feed_resolutor.transmit_opt     = this->transmit_opt;
 
                 size_t trimmed_mailbox_feed_cap = std::min(std::min(this->mailbox_feed_cap, dg::network_kernel_mailbox::max_consume_size()), static_cast<size_t>(request_vec.size()));
                 size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_cap);
@@ -3850,7 +3812,7 @@ namespace dg::network_rest_frame::client_impl1{
                 auto feeder                     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&feed_resolutor, trimmed_mailbox_feed_cap, feeder_mem.get()));
 
                 for (model::InternalRequest& request: request_vec){
-                    std::expected<dg::network_kernel_mailbox::Address, exception_t> addr = dg::network_uri_encoder::extract_mailbox_addr(request.request.requestee_uri);
+                    std::expected<ResourceAddress, exception_t> addr = dg::network_rest_frame::utility::deserialize_resource_address(request.request.requestee_uri);
 
                     if (!addr.has_value()){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(addr.error()));
@@ -3864,7 +3826,7 @@ namespace dg::network_rest_frame::client_impl1{
                         continue;
                     }
 
-                    auto feed_arg       = dg::network_kernel_mailbox::MailBoxArgument{.to       = addr.value(),
+                    auto feed_arg       = dg::network_kernel_mailbox::MailBoxArgument{.to       = addr.value().remote_addr,
                                                                                       .content  = std::move(bstream.value())};
 
                     dg::network_producer_consumer::delvrsrv_deliver(feeder.get(), std::move(feed_arg));
@@ -3878,12 +3840,11 @@ namespace dg::network_rest_frame::client_impl1{
             struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<dg::network_kernel_mailbox::MailBoxArgument>{
 
                 uint32_t channel;
-                dg::network_kernel_mailbox::transmit_option_t transmit_opt;
 
                 void push(std::move_iterator<dg::network_kernel_mailbox::MailBoxArgument *> mailbox_arg, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
-                    dg::network_kernel_mailbox::send(mailbox_arg, sz, exception_arr.get(), this->transmit_opt);
+                    dg::network_kernel_mailbox::send(mailbox_arg, sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -4164,9 +4125,9 @@ namespace dg::network_rest_frame::client_impl1{
                         this->close();
                     }
 
-                    auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
+                    auto test_or_subscribe(std::unique_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
 
-                        return this->base->test_or_subscribe(observer);
+                        return this->base->test_or_subscribe(std::move(observer));
                     }
 
                     auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
@@ -4236,9 +4197,9 @@ namespace dg::network_rest_frame::client_impl1{
 
                     InternalSingleResponse(std::unique_ptr<BatchResponseInterface> base) noexcept: base(std::move(base)){}
 
-                    auto test_or_subscribe(ResponseOnReadyObserverInterface * observer) noexcept -> std::expected<bool, exception_t>{
+                    auto test_or_subscribe(std::unique_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
 
-                        return this->base->test_or_subscribe(observer);
+                        return this->base->test_or_subscribe(std::move(observer));
                     }
 
                     auto test_or_subscribe_sp(std::shared_ptr<ResponseOnReadyObserverInterface> observer) noexcept -> std::expected<bool, exception_t>{
@@ -4333,7 +4294,6 @@ namespace dg::network_rest_frame::client_impl1{
                                                                           .payload_serialization_format = std::move(base_request_arr[i].payload_serialization_format)},
 
                                                     .ticket_id                  = ticket_id_arr[i],
-                                                    .dual_priority              = base_request_arr[i].dual_priority,
                                                     .has_unique_response        = base_request_arr[i].designated_request_id.has_value(),
                                                     .client_request_cache_id    = base_request_arr[i].designated_request_id.has_value() ? std::optional<cache_id_t>(request_id_to_cache_id(base_request_arr[i].designated_request_id.value()))
                                                                                                                                         : std::optional<cache_id_t>(std::nullopt),

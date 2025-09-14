@@ -17,7 +17,7 @@
 
 namespace dg::network_kernel_mailbox_channel{
 
-    using radix_t = dg::network_kernel_mailbox_impl1_radixx::radix_t; 
+    using radix_t = uint8_t; 
 
     enum mailbox_channel: radix_t{
         CHANNEL_HEARTBEAT       = 0u,
@@ -30,6 +30,7 @@ namespace dg::network_kernel_mailbox{
 
     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument; 
     using Address           = dg::network_kernel_mailbox_impl1::model::Address;
+    using channel_t         = network_kernel_mailbox_channel::radix_t;
 
     struct Config{
         size_t outbound_worker_count;
@@ -60,7 +61,14 @@ namespace dg::network_kernel_mailbox{
     auto recv(...) noexcept -> std::optional<dg::string>{ //optional string because string.empty() does not mean that it is not a packet
         
         // return mailbox->recv();
-    }   
+
+        return {};
+    }
+
+    auto max_consume_size() noexcept -> size_t{
+
+        return {};
+    }
 }
 
 #endif
