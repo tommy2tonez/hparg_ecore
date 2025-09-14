@@ -2784,8 +2784,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         public:
 
-            NetworkStatusMonitorWorker(std::shared_ptr<external_interface::NetworkBusyStatusRetrieverInterface> netstat_retriever,
-                                       std::shared_ptr<packet_controller::NetworkBusyObserverInterface> busy_observer,
+            NetworkStatusMonitorWorker(std::shared_ptr<NetworkBusyStatusRetrieverInterface> netstat_retriever,
+                                       std::shared_ptr<NetworkBusyObserverInterface> busy_observer,
                                        std::chrono::nanoseconds break_time) noexcept: netstat_retriever(std::move(netstat_retriever)),
                                                                                       busy_observer(std::move(busy_observer)),
                                                                                       break_time(break_time){}
