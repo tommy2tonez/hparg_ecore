@@ -202,25 +202,20 @@ namespace dg::network_bytecode
     static inline constexpr uint8_t CAST_DOUBLE_TO_FLOAT_INSTRUCTION       = static_cast<uint8_t>(155);
     static inline constexpr uint8_t CAST_DOUBLE_TO_DOUBLE_INSTRUCTION      = static_cast<uint8_t>(156);
 
-    static inline constexpr uint8_t TEST_THEN_JUMP_INSTRUCTION             = static_cast<uint8_t>(157);
-    static inline constexpr uint8_t TABLE_DISPATCH_INSTRUCTION             = static_cast<uint8_t>(158);
+    static inline constexpr uint8_t CAST_BOOL_TO_BOOL_INSTRUCTION          = static_cast<uint8_t>(157);
+    static inline constexpr uint8_t CAST_BOOL_TO_UINT8_INSTRUCTION         = static_cast<uint8_t>(158);
+    static inline constexpr uint8_t CAST_BOOL_TO_UINT16_INSTRUCTION        = static_cast<uint8_t>(159);
+    static inline constexpr uint8_t CAST_BOOL_TO_UINT32_INSTRUCTION        = static_cast<uint8_t>(160);
+    static inline constexpr uint8_t CAST_BOOL_TO_UINT64_INSTRUCTION        = static_cast<uint8_t>(161);
+    static inline constexpr uint8_t CAST_BOOL_TO_INT8_INSTRUCTION          = static_cast<uint8_t>(162);
+    static inline constexpr uint8_t CAST_BOOL_TO_INT16_INSTRUCTION         = static_cast<uint8_t>(163);
+    static inline constexpr uint8_t CAST_BOOL_TO_INT32_INSTRUCTION         = static_cast<uint8_t>(164);
+    static inline constexpr uint8_t CAST_BOOL_TO_INT64_INSTRUCTION         = static_cast<uint8_t>(165);
+    static inline constexpr uint8_t CAST_BOOL_TO_FLOAT_INSTRUCTION         = static_cast<uint8_t>(166);
+    static inline constexpr uint8_t CAST_BOOL_TO_DOUBLE_INSTRUCTION        = static_cast<uint8_t>(167);
 
-    static inline constexpr uint8_t ENDIAN_ASSIGN_CONST_1_INSTRUCTION      = static_cast<uint8_t>(159);
-    static inline constexpr uint8_t ENDIAN_ASSIGN_CONST_2_INSTRUCITON      = static_cast<uint8_t>(160);
-    static inline constexpr uint8_t ENDIAN_ASSIGN_CONST_4_INSTRUCTION      = static_cast<uint8_t>(161);
-    static inline constexpr uint8_t ENDIAN_ASSIGN_CONST_8_INSTRUCTION      = static_cast<uint8_t>(162);
-
-    static inline constexpr uint8_t CAST_BOOL_TO_BOOL_INSTRUCTION          = static_cast<uint8_t>(163);
-    static inline constexpr uint8_t CAST_BOOL_TO_UINT8_INSTRUCTION         = static_cast<uint8_t>(164);
-    static inline constexpr uint8_t CAST_BOOL_TO_UINT16_INSTRUCTION        = static_cast<uint8_t>(165);
-    static inline constexpr uint8_t CAST_BOOL_TO_UINT32_INSTRUCTION        = static_cast<uint8_t>(166);
-    static inline constexpr uint8_t CAST_BOOL_TO_UINT64_INSTRUCTION        = static_cast<uint8_t>(167);
-    static inline constexpr uint8_t CAST_BOOL_TO_INT8_INSTRUCTION          = static_cast<uint8_t>(168);
-    static inline constexpr uint8_t CAST_BOOL_TO_INT16_INSTRUCTION         = static_cast<uint8_t>(169);
-    static inline constexpr uint8_t CAST_BOOL_TO_INT32_INSTRUCTION         = static_cast<uint8_t>(170);
-    static inline constexpr uint8_t CAST_BOOL_TO_INT64_INSTRUCTION         = static_cast<uint8_t>(171);
-    static inline constexpr uint8_t CAST_BOOL_TO_FLOAT_INSTRUCTION         = static_cast<uint8_t>(172);
-    static inline constexpr uint8_t CAST_BOOL_TO_DOUBLE_INSTRUCTION        = static_cast<uint8_t>(173);
+    static inline constexpr uint8_t TEST_THEN_JUMP_INSTRUCTION             = static_cast<uint8_t>(168);
+    static inline constexpr uint8_t TABLE_DISPATCH_INSTRUCTION             = static_cast<uint8_t>(169);
 
     static_assert(std::numeric_limits<float>::is_iec559);
     static_assert(std::numeric_limits<double>::is_iec559);
@@ -228,6 +223,8 @@ namespace dg::network_bytecode
 
     static inline constexpr uint64_t MIN_CONTEXT_SIZE                   = uint64_t{0u};
     static inline constexpr uint64_t MAX_CONTEXT_SIZE                   = uint64_t{1} << 30;
+
+    static inline constexpr uint64_t MAX_ASSIGN_RANGE_SIZE              = uint64_t{1} << 10;
 
     using unsigned_addr_t = uint64_t;
     using range_t = uint32_t; 
@@ -240,21 +237,20 @@ namespace dg::network_bytecode
         size_t buffer_offset;
     };
 
-    struct AllocateMemsetInstruction
+    struct AllocateRangeInstruction
     {
         range_t allocation_sz;
-        char byteset_char;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept
         {
-            reflector(allocation_sz, byteset_char);
+            reflector(allocation_sz);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept
         {
-            reflector(allocation_sz, byteset_char);
+            reflector(allocation_sz);
         }
     };
 
@@ -371,23 +367,23 @@ namespace dg::network_bytecode
     struct JumpInstruction
     {
         offset_t test_addr_var_back_offset;
-        offset_t test_true_instruction_global_offset_var_back_offset;
-        offset_t test_false_instruction_global_offset_var_back_offset;
+        offset_t test_true_instruction_global_offset_addr_var_back_offset;
+        offset_t test_false_instruction_global_offset_addr_var_back_offset;
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) const noexcept
         {
             reflector(test_addr_var_back_offset,
-                      test_true_instruction_global_offset_var_back_offset,
-                      test_false_instruction_global_offset_var_back_offset);
+                      test_true_instruction_global_offset_addr_var_back_offset,
+                      test_false_instruction_global_offset_addr_var_back_offset);
         }
 
         template <class Reflector>
         constexpr void dg_reflect(const Reflector& reflector) noexcept
         {
             reflector(test_addr_var_back_offset,
-                      test_true_instruction_global_offset_var_back_offset,
-                      test_false_instruction_global_offset_var_back_offset);
+                      test_true_instruction_global_offset_addr_var_back_offset,
+                      test_false_instruction_global_offset_addr_var_back_offset);
         }
     };
 
@@ -419,7 +415,7 @@ namespace dg::network_bytecode
     };
 
     template <class T>
-    T * safe_ptr_access(T * ptr) noexcept
+    static inline T * safe_ptr_access(T * ptr) noexcept
     {
         if (ptr == nullptr) [[unlikely]]
         {
@@ -468,8 +464,8 @@ namespace dg::network_bytecode
         delete context;
     }
 
-    bool is_sub_segment(uintptr_t sub_addr_first, uintptr_t sub_addr_last,
-                        uintptr_t addr_first, uintptr_t addr_last)
+    static inline bool is_sub_segment(uintptr_t sub_addr_first, uintptr_t sub_addr_last,
+                                      uintptr_t addr_first, uintptr_t addr_last)
     {
         if (sub_addr_first < addr_first || sub_addr_last > addr_last) [[unlikely]]
         {
@@ -481,17 +477,17 @@ namespace dg::network_bytecode
         }
     } 
 
-    char * context_get_first_addr(Context * context)
+    static inline char * context_get_first_addr(Context * context)
     {
         return safe_ptr_access(context)->buffer;
     }
 
-    char * context_get_last_addr(Context * context)
+    static inline char * context_get_last_addr(Context * context)
     {
         return std::next(safe_ptr_access(context)->buffer, context->buffer_offset);
     }
 
-    char * context_boundsafe_get_back_offset(Context * context, size_t back_offset)
+    static inline char * context_boundsafe_get_back_offset(Context * context, size_t back_offset)
     {
         if (back_offset + 1u > safe_ptr_access(context)->buffer_offset) [[unlikely]] 
         {
@@ -503,8 +499,8 @@ namespace dg::network_bytecode
         }
     }
 
-    void throw_bound(Context * context,
-                     void * addr, size_t bsz)
+    static inline void throw_bound(Context * context,
+                                   void * addr, size_t bsz)
     {
         uintptr_t ctx_first     = reinterpret_cast<uintptr_t>(context_get_first_addr(context));
         uintptr_t ctx_last      = reinterpret_cast<uintptr_t>(context_get_last_addr(context));
@@ -517,25 +513,23 @@ namespace dg::network_bytecode
         }
     }
 
-    void boundsafe_memcpy(Context * context,
-                          void * dst, void * src, size_t bsz)
+    static inline void boundsafe_memcpy(Context * context,
+                                        void * dst, void * src, size_t bsz)
     {
         throw_bound(context, dst, bsz);
-
         std::memcpy(dst, safe_ptr_access(src), bsz);
     }
 
-    void bi_boundsafe_memcpy(Context * context,
-                             void * dst, void * src, size_t bsz)
+    static inline void full_boundsafe_memcpy(Context * context,
+                                             void * dst, void * src, size_t bsz)
     {
         throw_bound(context, dst, bsz);
         throw_bound(context, src, bsz);
-
         std::memcpy(dst, src, bsz);
     }
 
     template <class T>
-    T boundsafe_load(Context * context, void * src)
+    static inline T boundsafe_load(Context * context, void * src)
     {
         static_assert(std::is_trivially_copyable_v<T>);
 
@@ -548,13 +542,13 @@ namespace dg::network_bytecode
         return rs;
     }
 
-    void exec_allocate_memset(const char * const instruction_ptr,
-                              size_t& instruction_offset,
-                              const size_t instruction_sz,
-                              Context * context)
+    static void exec_allocate_range(const char * const instruction_ptr,
+                                    size_t& instruction_offset,
+                                    const size_t instruction_sz,
+                                    Context * context)
     {
-        AllocateMemsetInstruction instruction;
-        constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(AllocateMemsetInstruction{});
+        AllocateRangeInstruction instruction;
+        constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(AllocateRangeInstruction{});
 
         if (instruction_offset + INCREMENTAL_SZ > instruction_sz) [[unlikely]]
         {
@@ -574,15 +568,14 @@ namespace dg::network_bytecode
             else [[likely]]
             {
                 context->buffer_offset += instruction.allocation_sz;
-                std::memset(write_ptr, instruction.byteset_char, instruction.allocation_sz);
             }
         }
     }
 
-    void exec_deallocate_range(const char * const instruction_ptr,
-                               size_t& instruction_offset,
-                               const size_t instruction_sz,
-                               Context * context)
+    static void exec_deallocate_range(const char * const instruction_ptr,
+                                      size_t& instruction_offset,
+                                      const size_t instruction_sz,
+                                      Context * context)
     {
         DeallocateRangeInstruction instruction;
         constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(DeallocateRangeInstruction{});
@@ -606,66 +599,9 @@ namespace dg::network_bytecode
             }
         }
     }
-
-    template <size_t SZ>
-    void exec_assign_const(const char * const instruction_ptr,
-                           size_t& instruction_offset,
-                           const size_t instruction_sz,
-                           Context * context)
-    {
-        AssignConstInstruction<SZ> instruction;
-        constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(AssignConstInstruction<SZ>{});
-
-        if (instruction_offset + INCREMENTAL_SZ > instruction_sz) [[unlikely]]
-        {
-            throw outofbound_instruction{};
-        }
-        else [[likely]]
-        {
-            dg::network_trivial_serializer::deserialize_into(instruction, std::next(safe_ptr_access(instruction_ptr), instruction_offset));
-            instruction_offset          += INCREMENTAL_SZ;
-
-            char * lhs_addr_var_addr    = context_boundsafe_get_back_offset(context, instruction.lhs_addr_var_back_offset);
-            void * lhs_addr             = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(context, lhs_addr_var_addr));
-
-            boundsafe_memcpy(context, lhs_addr, instruction.data.data(), instruction.data.size());
-        }
-    } 
-
-    void exec_assign_const_1(const char * const instruction_ptr,
-                             size_t& instruction_offset,
-                             const size_t instruction_sz,
-                             Context * context)
-    {
-        exec_assign_const<1>(instruction_ptr, instruction_offset, instruction_sz, context);
-    }
-
-    void exec_assign_const_2(const char * const instruction_ptr,
-                             size_t& instruction_offset,
-                             const size_t instruction_sz,
-                             Context * context)
-    {
-        exec_assign_const<2>(instruction_ptr, instruction_offset, instruction_sz, context);
-    }
-
-    void exec_assign_const_4(const char * const instruction_ptr,
-                             size_t& instruction_offset,
-                             const size_t instruction_sz,
-                             Context * context)
-    {
-        exec_assign_const<4>(instruction_ptr, instruction_offset, instruction_sz, context);
-    }
-
-    void exec_assign_const_8(const char * const instruction_ptr,
-                             size_t& instruction_offset,
-                             const size_t instruction_sz,
-                             Context * context)
-    {
-        exec_assign_const<8>(instruction_ptr, instruction_offset, instruction_sz, context);
-    }
     
     template <size_t SZ>
-    void exec_assign_endian_const(const char * const instruction_ptr,
+    static void exec_assign_const(const char * const instruction_ptr,
                                   size_t& instruction_offset,
                                   const size_t instruction_sz,
                                   Context * context)
@@ -694,49 +630,49 @@ namespace dg::network_bytecode
         }
     }
 
-    void exec_assign_endian_const_1(const char * const instruction_ptr,
+    static void exec_assign_const_1(const char * const instruction_ptr,
                                     size_t& instruction_offset,
                                     const size_t instruction_sz,
                                     Context * context)
     {
-        exec_assign_endian_const<1>(instruction_ptr, instruction_offset, instruction_sz, context);
+        exec_assign_const<1>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_assign_endian_const_2(const char * const instruction_ptr,
+    static void exec_assign_const_2(const char * const instruction_ptr,
                                     size_t& instruction_offset,
                                     const size_t instruction_sz,
                                     Context * context)
     {
-        exec_assign_endian_const<2>(instruction_ptr, instruction_offset, instruction_sz, context);
+        exec_assign_const<2>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_assign_endian_const_4(const char * const instruction_ptr,
+    static void exec_assign_const_4(const char * const instruction_ptr,
                                     size_t& instruction_offset,
                                     const size_t instruction_sz,
                                     Context * context)
                                     
     {
-        exec_assign_endian_const<4>(instruction_ptr, instruction_offset, instruction_sz, context);
+        exec_assign_const<4>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_assign_endian_const_8(const char * const instruction_ptr,
+    static void exec_assign_const_8(const char * const instruction_ptr,
                                     size_t& instruction_offset,
                                     const size_t instruction_sz,
                                     Context * context)
     {
-        exec_assign_endian_const<8>(instruction_ptr, instruction_offset, instruction_sz, context);
+        exec_assign_const<8>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     //we'll make sure there is no undefined behavior by intermediate aliasing, this is an advanced technique that maybe only noipa and careful implementations can avoid 
 
-    void exec_jump(const char * const instruction_ptr,
-                   size_t& instruction_offset,
-                   const size_t instruction_sz,
-                   Context * context)
+    static void exec_jump(const char * const instruction_ptr,
+                          size_t& instruction_offset,
+                          const size_t instruction_sz,
+                          Context * context)
     {
         JumpInstruction instruction;
         constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(JumpInstruction{});
-        
+
         if (instruction_offset + INCREMENTAL_SZ > instruction_sz) [[unlikely]]
         {
             throw outofbound_instruction{};
@@ -747,18 +683,20 @@ namespace dg::network_bytecode
             instruction_offset          += INCREMENTAL_SZ;
 
             char * test_addr_var_addr   = context_boundsafe_get_back_offset(context, instruction.test_addr_var_back_offset);
-            bool test_value             = boundsafe_load<bool>(context, test_addr_var_addr);
-            offset_t tmp_instruction_offset; 
+            void * test_addr            = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(context, test_addr_var_addr));
+            bool test_value             = boundsafe_load<bool>(context, test_addr);
+
+            offset_t tmp_instruction_offset;
 
             if (test_value)
             {
-                char * var_addr         = context_boundsafe_get_back_offset(context, instruction.test_true_instruction_global_offset_var_back_offset); 
+                char * var_addr         = context_boundsafe_get_back_offset(context, instruction.test_true_instruction_global_offset_addr_var_back_offset); 
                 void * offset_addr      = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(context, var_addr));
                 tmp_instruction_offset  = boundsafe_load<offset_t>(context, offset_addr); 
             }
             else
             {
-                char * var_addr         = context_boundsafe_get_back_offset(context, instruction.test_false_instruction_global_offset_var_back_offset);
+                char * var_addr         = context_boundsafe_get_back_offset(context, instruction.test_false_instruction_global_offset_addr_var_back_offset);
                 void * offset_addr      = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(context, var_addr));
                 tmp_instruction_offset  = boundsafe_load<offset_t>(context, offset_addr);
             }
@@ -774,10 +712,10 @@ namespace dg::network_bytecode
         }
     } 
 
-    void exec_assign_range(const char * const instruction_ptr,
-                           size_t& instruction_offset,
-                           const size_t instruction_sz,
-                           Context * context)
+    static void exec_assign_range(const char * const instruction_ptr,
+                                  size_t& instruction_offset,
+                                  const size_t instruction_sz,
+                                  Context * context)
     {
         AssignRangeInstruction instruction;
         constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(AssignRangeInstruction{});
@@ -799,18 +737,23 @@ namespace dg::network_bytecode
             void * rhs_addr             = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(context, rhs_addr_var_addr));
             void * sz_addr              = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(context, sz_addr_var_addr));
 
-            uint32_t sz_value           = boundsafe_load<range_t>(context, sz_addr);
+            range_t sz_value            = boundsafe_load<range_t>(context, sz_addr);
+            
+            if (sz_value > MAX_ASSIGN_RANGE_SIZE)
+            {
+                throw bad_instruction{};
+            }
 
-            bi_boundsafe_memcpy(context, lhs_addr, rhs_addr, sz_value);
+            full_boundsafe_memcpy(context, lhs_addr, rhs_addr, sz_value);
         }
     }
 
     template <class OperationResolutor>
-    void exec_pair(const char * const instruction_ptr,
-                   size_t& instruction_offset,
-                   const size_t instruction_sz,
-                   OperationResolutor&& operation_resolutor,
-                   Context * context)
+    static void exec_pair(const char * const instruction_ptr,
+                          size_t& instruction_offset,
+                          const size_t instruction_sz,
+                          OperationResolutor&& operation_resolutor,
+                          Context * context)
     {
         PairInstruction instruction;
         constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(PairInstruction{});
@@ -837,11 +780,11 @@ namespace dg::network_bytecode
     }
 
     template <class OperationResolutor>
-    void exec_mono(const char * const instruction_ptr,
-                   size_t& instruction_offset,
-                   const size_t instruction_sz,
-                   OperationResolutor&& operation_resolutor,
-                   Context * context)
+    static void exec_mono(const char * const instruction_ptr,
+                          size_t& instruction_offset,
+                          const size_t instruction_sz,
+                          OperationResolutor&& operation_resolutor,
+                          Context * context)
     {
         MonoInstruction instruction;
         constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(MonoInstruction{});
@@ -866,11 +809,11 @@ namespace dg::network_bytecode
     }
 
     template <class T, class PairwiseOperation>
-    void exec_pair_store(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         PairwiseOperation&& pairwise_operation,
-                         Context * context)
+    static void exec_pair_store(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                PairwiseOperation&& pairwise_operation,
+                                Context * context)
     {
         auto resolutor = [context, &pairwise_operation](void * dst, void * lhs, void * rhs)
         {
@@ -885,11 +828,11 @@ namespace dg::network_bytecode
     }
 
     template <class T, class MonowiseOperation>
-    void exec_mono_store(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         MonowiseOperation&& monowise_operation,
-                         Context * context)
+    static void exec_mono_store(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                MonowiseOperation&& monowise_operation,
+                                Context * context)
     {
         auto resolutor = [context, &monowise_operation](void * dst, void * src)
         {
@@ -902,10 +845,10 @@ namespace dg::network_bytecode
         exec_mono(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_getaddr(const char * const instruction_ptr,
-                      size_t& instruction_offset,
-                      const size_t instruction_sz,
-                      Context * context)
+    static void exec_getaddr(const char * const instruction_ptr,
+                             size_t& instruction_offset,
+                             const size_t instruction_sz,
+                             Context * context)
     {
         GetAddressInstruction instruction;
         constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(GetAddressInstruction{});
@@ -929,10 +872,10 @@ namespace dg::network_bytecode
     }
 
     template <class T>
-    void exec_add(const char * const instruction_ptr,
-                  size_t& instruction_offset,
-                  const size_t instruction_sz,
-                  Context * context)
+    static void exec_add(const char * const instruction_ptr,
+                         size_t& instruction_offset,
+                         const size_t instruction_sz,
+                         Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -942,43 +885,43 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_add_uint64(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_add_uint64(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         exec_add<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_add_int64(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_add_int64(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_add<int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_add_float(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_add_float(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_add<float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_add_double(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_add_double(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         exec_add<double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_sub(const char * const instruction_ptr,
-                  size_t& instruction_offset,
-                  const size_t instruction_sz,
-                  Context * context)
+    static void exec_sub(const char * const instruction_ptr,
+                         size_t& instruction_offset,
+                         const size_t instruction_sz,
+                         Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -988,43 +931,43 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_sub_uint64(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_sub_uint64(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         exec_sub<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_sub_int64(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_sub_int64(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_sub<int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_sub_float(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_sub_float(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_sub<float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_sub_double(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_sub_double(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         exec_sub<double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
     
     template <class T>
-    void exec_mul(const char * const instruction_ptr,
-                  size_t& instruction_offset,
-                  const size_t instruction_sz,
-                  Context * context)
+    static void exec_mul(const char * const instruction_ptr,
+                         size_t& instruction_offset,
+                         const size_t instruction_sz,
+                         Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1034,43 +977,43 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr,instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_mul_uint64(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_mul_uint64(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         exec_mul<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_mul_int64(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_mul_int64(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_mul<int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_mul_float(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_mul_float(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_mul<float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_mul_double(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_mul_double(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         exec_mul<double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_div(const char * const instruction_ptr,
-                  size_t& instruction_offset,
-                  const size_t instruction_sz,
-                  Context * context)
+    static void exec_div(const char * const instruction_ptr,
+                         size_t& instruction_offset,
+                         const size_t instruction_sz,
+                         Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1080,44 +1023,44 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_div_uint64(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_div_uint64(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         exec_div<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_div_int64(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_div_int64(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_div<int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_div_float(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_div_float(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_div<float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_div_double(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_div_double(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
                          
     {
         exec_div<double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_mod(const char * const instruction_ptr,
-                  size_t& instruction_offset,
-                  const size_t instruction_sz,
-                  Context * context)
+    static void exec_mod(const char * const instruction_ptr,
+                         size_t& instruction_offset,
+                         const size_t instruction_sz,
+                         Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1127,27 +1070,27 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_mod_uint64(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_mod_uint64(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         exec_mod<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_mod_int64(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_mod_int64(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         exec_mod<int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_and(const char * const instruction_ptr,
-                  size_t& instruction_offset,
-                  const size_t instruction_sz,
-                  Context * context)
+    static void exec_and(const char * const instruction_ptr,
+                         size_t& instruction_offset,
+                         const size_t instruction_sz,
+                         Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1157,19 +1100,19 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_and_bool(const char * const instruction_ptr,
-                       size_t& instruction_offset,
-                       const size_t instruction_sz,
-                       Context * context)
+    static void exec_and_bool(const char * const instruction_ptr,
+                              size_t& instruction_offset,
+                              const size_t instruction_sz,
+                              Context * context)
     {
         exec_and<bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_or(const char * const instruction_ptr,
-                 size_t& instruction_offset,
-                 const size_t instruction_sz,
-                 Context * context)
+    static void exec_or(const char * const instruction_ptr,
+                        size_t& instruction_offset,
+                        const size_t instruction_sz,
+                        Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1179,19 +1122,19 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_or_bool(const char * const instruction_ptr,
-                      size_t& instruction_offset,
-                      const size_t instruction_sz,
-                      Context * context)
+    static void exec_or_bool(const char * const instruction_ptr,
+                             size_t& instruction_offset,
+                             const size_t instruction_sz,
+                             Context * context)
     {
         exec_or<bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_not(const char * const instruction_ptr,
-                  size_t& instruction_offset,
-                  const size_t instruction_sz,
-                  Context * context)
+    static void exec_not(const char * const instruction_ptr,
+                         size_t& instruction_offset,
+                         const size_t instruction_sz,
+                         Context * context)
     {
         auto resolutor = [](T lhs)
         {
@@ -1201,19 +1144,19 @@ namespace dg::network_bytecode
         exec_mono_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_not_bool(const char * const instruction_ptr,
-                       size_t& instruction_offset,
-                       const size_t instruction_sz,
-                       Context * context)
+    static void exec_not_bool(const char * const instruction_ptr,
+                              size_t& instruction_offset,
+                              const size_t instruction_sz,
+                              Context * context)
     {
         exec_not<bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_bw_and(const char * const instruction_ptr,
-                     size_t& instruction_offset,
-                     const size_t instruction_sz,
-                     Context * context)
+    static void exec_bw_and(const char * const instruction_ptr,
+                            size_t& instruction_offset,
+                            const size_t instruction_sz,
+                            Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1223,19 +1166,19 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_bw_and_uint64(const char * const instruction_ptr,
-                            size_t& instruction_offset,
-                            const size_t instruction_sz,
-                            Context * context)
+    static void exec_bw_and_uint64(const char * const instruction_ptr,
+                                   size_t& instruction_offset,
+                                   const size_t instruction_sz,
+                                   Context * context)
     {
         exec_bw_and<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_bw_or(const char * const instruction_ptr,
-                    size_t& instruction_offset,
-                    const size_t instruction_sz,
-                    Context * context)
+    static void exec_bw_or(const char * const instruction_ptr,
+                           size_t& instruction_offset,
+                           const size_t instruction_sz,
+                           Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1245,19 +1188,19 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_bw_or_uint64(const char * const instruction_ptr,
-                           size_t& instruction_offset,
-                           const size_t instruction_sz,
-                           Context * context)
+    static void exec_bw_or_uint64(const char * const instruction_ptr,
+                                  size_t& instruction_offset,
+                                  const size_t instruction_sz,
+                                  Context * context)
     {
         exec_bw_or<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_bw_xor(const char * const instruction_ptr,
-                     size_t& instruction_offset,
-                     const size_t instruction_sz,
-                     Context * context)
+    static void exec_bw_xor(const char * const instruction_ptr,
+                            size_t& instruction_offset,
+                            const size_t instruction_sz,
+                            Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1267,19 +1210,19 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_bw_xor_uint64(const char * const instruction_ptr,
-                            size_t& instruction_offset,
-                            const size_t instruction_sz,
-                            Context * context)
+    static void exec_bw_xor_uint64(const char * const instruction_ptr,
+                                   size_t& instruction_offset,
+                                   const size_t instruction_sz,
+                                   Context * context)
     {
         exec_bw_xor<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_bw_not(const char * const instruction_ptr,
-                     size_t& instruction_offset,
-                     const size_t instruction_sz,
-                     Context * context)
+    static void exec_bw_not(const char * const instruction_ptr,
+                            size_t& instruction_offset,
+                            const size_t instruction_sz,
+                            Context * context)
     {
         auto resolutor = [](T lhs)
         {
@@ -1289,19 +1232,19 @@ namespace dg::network_bytecode
         exec_mono_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_bw_not_uint64(const char * const instruction_ptr,
-                            size_t& instruction_offset,
-                            const size_t instruction_sz,
-                            Context * context)
+    static void exec_bw_not_uint64(const char * const instruction_ptr,
+                                   size_t& instruction_offset,
+                                   const size_t instruction_sz,
+                                   Context * context)
     {
         exec_bw_not<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
-    
+
     template <class T>
-    void exec_bw_leftshift(const char * const instruction_ptr,
-                           size_t& instruction_offset,
-                           const size_t instruction_sz,
-                           Context * context)
+    static void exec_bw_leftshift(const char * const instruction_ptr,
+                                  size_t& instruction_offset,
+                                  const size_t instruction_sz,
+                                  Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1311,19 +1254,19 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_bw_leftshift_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_bw_leftshift_uint64(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_bw_leftshift<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
-    } 
+    }
 
     template <class T>
-    void exec_bw_rightshift(const char * const instruction_ptr,
-                            size_t& instruction_offset,
-                            const size_t instruction_sz,
-                            Context * context)
+    static void exec_bw_rightshift(const char * const instruction_ptr,
+                                   size_t& instruction_offset,
+                                   const size_t instruction_sz,
+                                   Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1333,19 +1276,19 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_bw_rightshift_uint64(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_bw_rightshift_uint64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_bw_rightshift<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_cmp_less(const char * const instruction_ptr,
-                       size_t& instruction_offset,
-                       const size_t instruction_sz,
-                       Context * context)
+    static void exec_cmp_less(const char * const instruction_ptr,
+                              size_t& instruction_offset,
+                              const size_t instruction_sz,
+                              Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1355,43 +1298,43 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_cmp_less_uint64(const char * const instruction_ptr,
-                              size_t& instruction_offset,
-                              const size_t instruction_sz,
-                              Context * context)
+    static void exec_cmp_less_uint64(const char * const instruction_ptr,
+                                     size_t& instruction_offset,
+                                     const size_t instruction_sz,
+                                     Context * context)
     {
         exec_cmp_less<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_less_int64(const char * const instruction_ptr,
-                             size_t& instruction_offset,
-                             const size_t instruction_sz,
-                             Context * context)
+    static void exec_cmp_less_int64(const char * const instruction_ptr,
+                                    size_t& instruction_offset,
+                                    const size_t instruction_sz,
+                                    Context * context)
     {
         exec_cmp_less<int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_less_float(const char * const instruction_ptr,
-                             size_t& instruction_offset,
-                             const size_t instruction_sz,
-                             Context * context)
+    static void exec_cmp_less_float(const char * const instruction_ptr,
+                                    size_t& instruction_offset,
+                                    const size_t instruction_sz,
+                                    Context * context)
     {
         exec_cmp_less<float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_less_double(const char * const instruction_ptr,
-                              size_t& instruction_offset,
-                              const size_t instruction_sz,
-                              Context * context)
+    static void exec_cmp_less_double(const char * const instruction_ptr,
+                                     size_t& instruction_offset,
+                                     const size_t instruction_sz,
+                                     Context * context)
     {
         exec_cmp_less<double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_cmp_greater(const char * const instruction_ptr,
-                          size_t& instruction_offset,
-                          const size_t instruction_sz,
-                          Context * context)
+    static void exec_cmp_greater(const char * const instruction_ptr,
+                                 size_t& instruction_offset,
+                                 const size_t instruction_sz,
+                                 Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1401,43 +1344,43 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_cmp_greater_uint64(const char * const instruction_ptr,
-                                 size_t& instruction_offset,
-                                 const size_t instruction_sz,
-                                 Context * context)
+    static void exec_cmp_greater_uint64(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cmp_greater<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_greater_int64(const char * const instruction_ptr,
-                                size_t& instruction_offset,
-                                const size_t instruction_sz,
-                                Context * context)
+    static void exec_cmp_greater_int64(const char * const instruction_ptr,
+                                       size_t& instruction_offset,
+                                       const size_t instruction_sz,
+                                       Context * context)
     {
         exec_cmp_greater<int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_greater_float(const char * const instruction_ptr,
-                                size_t& instruction_offset,
-                                const size_t instruction_sz,
-                                Context * context)
+    static void exec_cmp_greater_float(const char * const instruction_ptr,
+                                       size_t& instruction_offset,
+                                       const size_t instruction_sz,
+                                       Context * context)
     {
         exec_cmp_greater<float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_greater_double(const char * const instruction_ptr,
-                                 size_t& instruction_offset,
-                                 const size_t instruction_sz,
-                                 Context * context)
+    static void exec_cmp_greater_double(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cmp_greater<double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class T>
-    void exec_cmp_equal(const char * const instruction_ptr,
-                        size_t& instruction_offset,
-                        const size_t instruction_sz,
-                        Context * context)
+    static void exec_cmp_equal(const char * const instruction_ptr,
+                               size_t& instruction_offset,
+                               const size_t instruction_sz,
+                               Context * context)
     {
         auto resolutor = [](T lhs, T rhs)
         {
@@ -1447,43 +1390,43 @@ namespace dg::network_bytecode
         exec_pair_store<T>(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_cmp_equal_uint64(const char * const instruction_ptr,
-                               size_t& instruction_offset,
-                               const size_t instruction_sz,
-                               Context * context)
+    static void exec_cmp_equal_uint64(const char * const instruction_ptr,
+                                      size_t& instruction_offset,
+                                      const size_t instruction_sz,
+                                      Context * context)
     {
         exec_cmp_equal<uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_equal_int64(const char * const instruction_ptr,
-                              size_t& instruction_offset,
-                              const size_t instruction_sz,
-                              Context * context)
+    static void exec_cmp_equal_int64(const char * const instruction_ptr,
+                                     size_t& instruction_offset,
+                                     const size_t instruction_sz,
+                                     Context * context)
     {
         exec_cmp_equal<int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_equal_float(const char * const instruction_ptr,
-                              size_t& instruction_offset,
-                              const size_t instruction_sz,
-                              Context * context)
+    static void exec_cmp_equal_float(const char * const instruction_ptr,
+                                     size_t& instruction_offset,
+                                     const size_t instruction_sz,
+                                     Context * context)
     {
         exec_cmp_equal<float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cmp_equal_double(const char * const instruction_ptr,
-                               size_t& instruction_offset,
-                               const size_t instruction_sz,
-                               Context * context)
+    static void exec_cmp_equal_double(const char * const instruction_ptr,
+                                      size_t& instruction_offset,
+                                      const size_t instruction_sz,
+                                      Context * context)
     {
         exec_cmp_equal<double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
     template <class FromType, class ToType>
-    void exec_cast_store(const char * const instruction_ptr,
-                         size_t& instruction_offset,
-                         const size_t instruction_sz,
-                         Context * context)
+    static void exec_cast_store(const char * const instruction_ptr,
+                                size_t& instruction_offset,
+                                const size_t instruction_sz,
+                                Context * context)
     {
         auto resolutor = [context](void * dst, void * src)
         {
@@ -1496,970 +1439,970 @@ namespace dg::network_bytecode
         exec_mono(instruction_ptr, instruction_offset, instruction_sz, resolutor, context);
     }
 
-    void exec_cast_uint8_to_bool(const char * const instruction_ptr,
-                                 size_t& instruction_offset,
-                                 const size_t instruction_sz,
-                                 Context * context)
+    static void exec_cast_uint8_to_bool(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<uint8_t, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint8_to_uint8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint8_t, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_uint16(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint8_to_uint16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint8_t, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_uint32(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint8_to_uint32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint8_t, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_uint64(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint8_to_uint64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint8_t, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_int8(const char * const instruction_ptr,
-                                 size_t& instruction_offset,
-                                 const size_t instruction_sz,
-                                 Context * context)
+    static void exec_cast_uint8_to_int8(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<uint8_t, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint8_to_int16(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint8_t, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint8_to_int32(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint8_t, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint8_to_int64(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint8_t, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint8_to_float(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint8_t, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint8_to_double(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint8_to_double(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint8_t, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint16_to_bool(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint16_t, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_uint8(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint16_to_uint8(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint16_t, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_uint16(const char * const instruction_ptr,
-                                    size_t& instruction_offset,
-                                    const size_t instruction_sz,
-                                    Context * context)
+    static void exec_cast_uint16_to_uint16(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint16_t, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_uint32(const char * const instruction_ptr,
-                                    size_t& instruction_offset,
-                                    const size_t instruction_sz,
-                                    Context * context)
+    static void exec_cast_uint16_to_uint32(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint16_t, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_uint64(const char * const instruction_ptr,
-                                    size_t& instruction_offset,
-                                    const size_t instruction_sz,
-                                    Context * context)
+    static void exec_cast_uint16_to_uint64(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint16_t, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint16_to_int8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint16_t, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_int16(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint16_to_int16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint16_t, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_int32(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint16_to_int32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint16_t, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_int64(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint16_to_int64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint16_t, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_float(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint16_to_float(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint16_t, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint16_to_double(const char * const instruction_ptr,
-                                    size_t& instruction_offset,
-                                    const size_t instruction_sz,
-                                    Context * context)
+    static void exec_cast_uint16_to_double(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint16_t, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint32_to_bool(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint32_t, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_uint8(const char * const instruction_ptr,
-                                   size_t& instruction_offset,
-                                   const size_t instruction_sz,
-                                   Context * context)
+    static void exec_cast_uint32_to_uint8(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint32_t, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_uint16(const char * const instruction_ptr,
-                                    size_t& instruction_offset,
-                                    const size_t instruction_sz,
-                                    Context * context)
+    static void exec_cast_uint32_to_uint16(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint32_t, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_uint32(const char * const instruction_ptr,
-                                    size_t& instruction_offset,
-                                    const size_t instruction_sz,
-                                    Context * context)
+    static void exec_cast_uint32_to_uint32(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint32_t, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_uint64(const char * const instruction_ptr,
-                                    size_t& instruction_offset,
-                                    const size_t instruction_sz,
-                                    Context * context)
+    static void exec_cast_uint32_to_uint64(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint32_t, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint32_to_int8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint32_t, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint32_to_int16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint32_t, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint32_to_int32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint32_t, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint32_to_int64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint32_t, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint32_to_float(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint32_t, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint32_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint32_to_double(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint32_t, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_bool(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint64_t, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_uint8(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint64_t, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_uint16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_uint16(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint64_t, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_uint32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_uint32(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint64_t, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_uint64(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint64_t, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_int8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<uint64_t, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_int16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint64_t, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_int32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint64_t, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_int64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint64_t, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_float(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<uint64_t, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_uint64_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_uint64_to_double(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<uint64_t, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_bool(const char * const instruction_ptr,
+                                       size_t& instruction_offset,
+                                       const size_t instruction_sz,
+                                       Context * context)
     {
         exec_cast_store<int8_t, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_uint8(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int8_t, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_uint16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_uint16(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int8_t, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_uint32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_uint32(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int8_t, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_uint64(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int8_t, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_int8(const char * const instruction_ptr,
+                                       size_t& instruction_offset,
+                                       const size_t instruction_sz,
+                                       Context * context)
     {
         exec_cast_store<int8_t, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_int16(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int8_t, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_int32(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int8_t, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_int64(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int8_t, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_float(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int8_t, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int8_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int8_to_double(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int8_t, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_bool(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int16_t, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_uint8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int16_t, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_uint16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_uint16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int16_t, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_uint32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_uint32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int16_t, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_uint64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int16_t, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_int8(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int16_t, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_int16(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int16_t, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_int32(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int16_t, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_int64(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int16_t, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_float(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int16_t, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int16_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int16_to_double(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int16_t, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_bool(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int32_t, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_uint8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int32_t, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_uint16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_uint16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int32_t, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_uint32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_uint32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int32_t, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_uint64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int32_t, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_int8(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int32_t, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_int16(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int32_t, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_int32(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int32_t, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_int64(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int32_t, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_float(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int32_t, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int32_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int32_to_double(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int32_t, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_bool(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int64_t, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_uint8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int64_t, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_uint16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_uint16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int64_t, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_uint32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_uint32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int64_t, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_uint64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int64_t, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_int8(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<int64_t, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_int16(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int64_t, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_int32(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int64_t, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_int64(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int64_t, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_float(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<int64_t, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_int64_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_int64_to_double(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<int64_t, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_bool(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<float, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_uint8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<float, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_uint16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_uint16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<float, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_uint32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_uint32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<float, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_uint64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<float, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_int8(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<float, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_int16(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<float, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_int32(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<float, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_int64(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<float, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_float(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<float, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_float_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_float_to_double(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<float, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_bool(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<double, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_uint8(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<double, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_uint16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_uint16(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<double, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_uint32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_uint32(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<double, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_uint64(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<double, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_int8(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<double, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_int16(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<double, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_int32(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<double, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_int64(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<double, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_float(const char * const instruction_ptr,
+                                          size_t& instruction_offset,
+                                          const size_t instruction_sz,
+                                          Context * context)
     {
         exec_cast_store<double, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_double_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_double_to_double(const char * const instruction_ptr,
+                                           size_t& instruction_offset,
+                                           const size_t instruction_sz,
+                                           Context * context)
     {
         exec_cast_store<double, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_bool(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_bool(const char * const instruction_ptr,
+                                       size_t& instruction_offset,
+                                       const size_t instruction_sz,
+                                       Context * context)
     {
         exec_cast_store<bool, bool>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_uint8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_uint8(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<bool, uint8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_uint16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_uint16(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<bool, uint16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_uint32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_uint32(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<bool, uint32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_uint64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_uint64(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<bool, uint64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_int8(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_int8(const char * const instruction_ptr,
+                                       size_t& instruction_offset,
+                                       const size_t instruction_sz,
+                                       Context * context)
     {
         exec_cast_store<bool, int8_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_int16(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_int16(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<bool, int16_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_int32(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_int32(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<bool, int32_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_int64(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_int64(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<bool, int64_t>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_float(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_float(const char * const instruction_ptr,
+                                        size_t& instruction_offset,
+                                        const size_t instruction_sz,
+                                        Context * context)
     {
         exec_cast_store<bool, float>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
 
-    void exec_cast_bool_to_double(const char * const instruction_ptr,
-                                  size_t& instruction_offset,
-                                  const size_t instruction_sz,
-                                  Context * context)
+    static void exec_cast_bool_to_double(const char * const instruction_ptr,
+                                         size_t& instruction_offset,
+                                         const size_t instruction_sz,
+                                         Context * context)
     {
         exec_cast_store<bool, double>(instruction_ptr, instruction_offset, instruction_sz, context);
     }
@@ -2498,7 +2441,7 @@ namespace dg::network_bytecode
             {
                 case ALLOCATE_MEMSET_INSTRUCTION:
                 {
-                    exec_allocate_memset(bytecode, bytecode_offset, bytecode_sz, context);
+                    exec_allocate_range(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case DEALLOCATE_RANGE_INSTRUCTION:
@@ -2524,26 +2467,6 @@ namespace dg::network_bytecode
                 case ASSIGN_CONST_8_INSTRUCTION:
                 {
                     exec_assign_const_8(bytecode, bytecode_offset, bytecode_sz, context);
-                    break;
-                }
-                case ENDIAN_ASSIGN_CONST_1_INSTRUCTION:
-                {
-                    exec_assign_endian_const_1(bytecode, bytecode_offset, bytecode_sz, context);
-                    break;
-                }
-                case ENDIAN_ASSIGN_CONST_2_INSTRUCITON:
-                {
-                    exec_assign_endian_const_2(bytecode, bytecode_offset, bytecode_sz, context);
-                    break;
-                }
-                case ENDIAN_ASSIGN_CONST_4_INSTRUCTION:
-                {
-                    exec_assign_endian_const_4(bytecode, bytecode_offset, bytecode_sz, context);
-                    break;
-                }
-                case ENDIAN_ASSIGN_CONST_8_INSTRUCTION:
-                {
-                    exec_assign_endian_const_8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case ASSIGN_RANGE_INSTRUCTION:
@@ -3354,6 +3277,11 @@ namespace dg::network_bytecode
                 case CAST_DOUBLE_TO_DOUBLE_INSTRUCTION:
                 {
                     exec_cast_double_to_double(bytecode, bytecode_offset, bytecode_sz, context);
+                    break;
+                }
+                case TEST_THEN_JUMP_INSTRUCTION:
+                {
+                    exec_jump(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 default:
