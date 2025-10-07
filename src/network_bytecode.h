@@ -7,6 +7,7 @@
 #include <memory>
 #include <array>
 #include "network_trivial_serializer.h"
+#include "network_exception.h"
 
 namespace dg::network_bytecode
 {
@@ -16,210 +17,210 @@ namespace dg::network_bytecode
     struct context_allocation_overflow : std::exception{}; 
     struct context_allocation_underflow : std::exception{};
 
-    static inline constexpr char ALLOCATE_MEMSET_INSTRUCTION            = std::bit_cast<char>(static_cast<uint8_t>(0u));
-    static inline constexpr char DEALLOCATE_RANGE_INSTRUCTION           = std::bit_cast<char>(static_cast<uint8_t>(1));
+    static inline constexpr uint8_t ALLOCATE_MEMSET_INSTRUCTION            = static_cast<uint8_t>(0u);
+    static inline constexpr uint8_t DEALLOCATE_RANGE_INSTRUCTION           = static_cast<uint8_t>(1);
 
-    static inline constexpr char ASSIGN_CONST_1_INSTRUCTION             = std::bit_cast<char>(static_cast<uint8_t>(2));
-    static inline constexpr char ASSIGN_CONST_2_INSTRUCTION             = std::bit_cast<char>(static_cast<uint8_t>(3));
-    static inline constexpr char ASSIGN_CONST_4_INSTRUCTION             = std::bit_cast<char>(static_cast<uint8_t>(4));
-    static inline constexpr char ASSIGN_CONST_8_INSTRUCTION             = std::bit_cast<char>(static_cast<uint8_t>(5));
-    static inline constexpr char ASSIGN_RANGE_INSTRUCTION               = std::bit_cast<char>(static_cast<uint8_t>(6));
+    static inline constexpr uint8_t ASSIGN_CONST_1_INSTRUCTION             = static_cast<uint8_t>(2);
+    static inline constexpr uint8_t ASSIGN_CONST_2_INSTRUCTION             = static_cast<uint8_t>(3);
+    static inline constexpr uint8_t ASSIGN_CONST_4_INSTRUCTION             = static_cast<uint8_t>(4);
+    static inline constexpr uint8_t ASSIGN_CONST_8_INSTRUCTION             = static_cast<uint8_t>(5);
+    static inline constexpr uint8_t ASSIGN_RANGE_INSTRUCTION               = static_cast<uint8_t>(6);
 
-    static inline constexpr char GET_ADDR_INSTRUCTION                   = std::bit_cast<char>(static_cast<uint8_t>(7));
+    static inline constexpr uint8_t GET_ADDR_INSTRUCTION                   = static_cast<uint8_t>(7);
 
-    static inline constexpr char ADD_UINT64_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(8));
-    static inline constexpr char ADD_INT64_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(9));
+    static inline constexpr uint8_t ADD_UINT64_INSTRUCTION                 = static_cast<uint8_t>(8);
+    static inline constexpr uint8_t ADD_INT64_INSTRUCTION                  = static_cast<uint8_t>(9);
     
-    static inline constexpr char ADD_FLOAT_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(10));
-    static inline constexpr char ADD_DOUBLE_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(11));
+    static inline constexpr uint8_t ADD_FLOAT_INSTRUCTION                  = static_cast<uint8_t>(10);
+    static inline constexpr uint8_t ADD_DOUBLE_INSTRUCTION                 = static_cast<uint8_t>(11);
 
-    static inline constexpr char SUB_UINT64_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(12));
-    static inline constexpr char SUB_INT64_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(13));
+    static inline constexpr uint8_t SUB_UINT64_INSTRUCTION                 = static_cast<uint8_t>(12);
+    static inline constexpr uint8_t SUB_INT64_INSTRUCTION                  = static_cast<uint8_t>(13);
 
-    static inline constexpr char SUB_FLOAT_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(14));
-    static inline constexpr char SUB_DOUBLE_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(15));
+    static inline constexpr uint8_t SUB_FLOAT_INSTRUCTION                  = static_cast<uint8_t>(14);
+    static inline constexpr uint8_t SUB_DOUBLE_INSTRUCTION                 = static_cast<uint8_t>(15);
 
-    static inline constexpr char MUL_UINT64_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(16));
-    static inline constexpr char MUL_INT64_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(17));
+    static inline constexpr uint8_t MUL_UINT64_INSTRUCTION                 = static_cast<uint8_t>(16);
+    static inline constexpr uint8_t MUL_INT64_INSTRUCTION                  = static_cast<uint8_t>(17);
 
-    static inline constexpr char MUL_FLOAT_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(18));
-    static inline constexpr char MUL_DOUBLE_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(19));
+    static inline constexpr uint8_t MUL_FLOAT_INSTRUCTION                  = static_cast<uint8_t>(18);
+    static inline constexpr uint8_t MUL_DOUBLE_INSTRUCTION                 = static_cast<uint8_t>(19);
 
-    static inline constexpr char DIV_UINT64_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(20));
-    static inline constexpr char DIV_INT64_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(21));
+    static inline constexpr uint8_t DIV_UINT64_INSTRUCTION                 = static_cast<uint8_t>(20);
+    static inline constexpr uint8_t DIV_INT64_INSTRUCTION                  = static_cast<uint8_t>(21);
     
-    static inline constexpr char DIV_FLOAT_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(22));
-    static inline constexpr char DIV_DOUBLE_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(23));
+    static inline constexpr uint8_t DIV_FLOAT_INSTRUCTION                  = static_cast<uint8_t>(22);
+    static inline constexpr uint8_t DIV_DOUBLE_INSTRUCTION                 = static_cast<uint8_t>(23);
 
-    static inline constexpr char MOD_UINT64_INSTRUCTION                 = std::bit_cast<char>(static_cast<uint8_t>(24));
-    static inline constexpr char MOD_INT64_INSTRUCTION                  = std::bit_cast<char>(static_cast<uint8_t>(25));
+    static inline constexpr uint8_t MOD_UINT64_INSTRUCTION                 = static_cast<uint8_t>(24);
+    static inline constexpr uint8_t MOD_INT64_INSTRUCTION                  = static_cast<uint8_t>(25);
 
-    static inline constexpr char AND_BOOL_INSTRUCTION                   = std::bit_cast<char>(static_cast<uint8_t>(26));
-    static inline constexpr char OR_BOOL_INSTRUCTION                    = std::bit_cast<char>(static_cast<uint8_t>(27));
-    static inline constexpr char NOT_BOOL_INSTRUCTION                   = std::bit_cast<char>(static_cast<uint8_t>(28));
+    static inline constexpr uint8_t AND_BOOL_INSTRUCTION                   = static_cast<uint8_t>(26);
+    static inline constexpr uint8_t OR_BOOL_INSTRUCTION                    = static_cast<uint8_t>(27);
+    static inline constexpr uint8_t NOT_BOOL_INSTRUCTION                   = static_cast<uint8_t>(28);
 
-    static inline constexpr char BW_AND_UINT64_INSTRUCTION              = std::bit_cast<char>(static_cast<uint8_t>(29));
-    static inline constexpr char BW_OR_UINT64_INSTRUCTION               = std::bit_cast<char>(static_cast<uint8_t>(30));
-    static inline constexpr char BW_XOR_UINT64_INSTRUCTION              = std::bit_cast<char>(static_cast<uint8_t>(31));
-    static inline constexpr char BW_NOT_UINT64_INSTRUCTION              = std::bit_cast<char>(static_cast<uint8_t>(32));
+    static inline constexpr uint8_t BW_AND_UINT64_INSTRUCTION              = static_cast<uint8_t>(29);
+    static inline constexpr uint8_t BW_OR_UINT64_INSTRUCTION               = static_cast<uint8_t>(30);
+    static inline constexpr uint8_t BW_XOR_UINT64_INSTRUCTION              = static_cast<uint8_t>(31);
+    static inline constexpr uint8_t BW_NOT_UINT64_INSTRUCTION              = static_cast<uint8_t>(32);
 
-    static inline constexpr char BW_LEFTSHIFT_UINT64_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(33));
-    static inline constexpr char BW_RIGHTSHIFT_UINT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(34));
+    static inline constexpr uint8_t BW_LEFTSHIFT_UINT64_INSTRUCTION        = static_cast<uint8_t>(33);
+    static inline constexpr uint8_t BW_RIGHTSHIFT_UINT64_INSTRUCTION       = static_cast<uint8_t>(34);
 
-    static inline constexpr char CMP_LESS_UINT64_INSTRUCTION            = std::bit_cast<char>(static_cast<uint8_t>(35));
-    static inline constexpr char CMP_LESS_INT64_INSTRUCTION             = std::bit_cast<char>(static_cast<uint8_t>(36));
-    static inline constexpr char CMP_LESS_FLOAT_INSTRUCTION             = std::bit_cast<char>(static_cast<uint8_t>(37));
-    static inline constexpr char CMP_LESS_DOUBLE_INSTRUCTION            = std::bit_cast<char>(static_cast<uint8_t>(38));
+    static inline constexpr uint8_t CMP_LESS_UINT64_INSTRUCTION            = static_cast<uint8_t>(35);
+    static inline constexpr uint8_t CMP_LESS_INT64_INSTRUCTION             = static_cast<uint8_t>(36);
+    static inline constexpr uint8_t CMP_LESS_FLOAT_INSTRUCTION             = static_cast<uint8_t>(37);
+    static inline constexpr uint8_t CMP_LESS_DOUBLE_INSTRUCTION            = static_cast<uint8_t>(38);
 
-    static inline constexpr char CMP_GREATER_UINT64_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(39));
-    static inline constexpr char CMP_GREATER_INT64_INSTRUCTION          = std::bit_cast<char>(static_cast<uint8_t>(40));
-    static inline constexpr char CMP_GREATER_FLOAT_INSTRUCTION          = std::bit_cast<char>(static_cast<uint8_t>(41));
-    static inline constexpr char CMP_GREATER_DOUBLE_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(42));
+    static inline constexpr uint8_t CMP_GREATER_UINT64_INSTRUCTION         = static_cast<uint8_t>(39);
+    static inline constexpr uint8_t CMP_GREATER_INT64_INSTRUCTION          = static_cast<uint8_t>(40);
+    static inline constexpr uint8_t CMP_GREATER_FLOAT_INSTRUCTION          = static_cast<uint8_t>(41);
+    static inline constexpr uint8_t CMP_GREATER_DOUBLE_INSTRUCTION         = static_cast<uint8_t>(42);
 
-    static inline constexpr char CMP_EQUAL_UINT64_INSTRUCTION           = std::bit_cast<char>(static_cast<uint8_t>(43));
-    static inline constexpr char CMP_EQUAL_INT64_INSTRUCTION            = std::bit_cast<char>(static_cast<uint8_t>(44));
-    static inline constexpr char CMP_EQUAL_FLOAT_INSTRUCTION            = std::bit_cast<char>(static_cast<uint8_t>(45));
-    static inline constexpr char CMP_EQUAL_DOUBLE_INSTRUCTION           = std::bit_cast<char>(static_cast<uint8_t>(46));
+    static inline constexpr uint8_t CMP_EQUAL_UINT64_INSTRUCTION           = static_cast<uint8_t>(43);
+    static inline constexpr uint8_t CMP_EQUAL_INT64_INSTRUCTION            = static_cast<uint8_t>(44);
+    static inline constexpr uint8_t CMP_EQUAL_FLOAT_INSTRUCTION            = static_cast<uint8_t>(45);
+    static inline constexpr uint8_t CMP_EQUAL_DOUBLE_INSTRUCTION           = static_cast<uint8_t>(46);
    
-    static inline constexpr char CAST_UINT8_TO_BOOL_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(47));
-    static inline constexpr char CAST_UINT8_TO_UINT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(48));
-    static inline constexpr char CAST_UINT8_TO_UINT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(49));
-    static inline constexpr char CAST_UINT8_TO_UINT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(50));
-    static inline constexpr char CAST_UINT8_TO_UINT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(51));
-    static inline constexpr char CAST_UINT8_TO_INT8_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(52));
-    static inline constexpr char CAST_UINT8_TO_INT16_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(53));
-    static inline constexpr char CAST_UINT8_TO_INT32_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(54));
-    static inline constexpr char CAST_UINT8_TO_INT64_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(55));
-    static inline constexpr char CAST_UINT8_TO_FLOAT_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(56));
-    static inline constexpr char CAST_UINT8_TO_DOUBLE_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(57));
+    static inline constexpr uint8_t CAST_UINT8_TO_BOOL_INSTRUCTION         = static_cast<uint8_t>(47);
+    static inline constexpr uint8_t CAST_UINT8_TO_UINT8_INSTRUCTION        = static_cast<uint8_t>(48);
+    static inline constexpr uint8_t CAST_UINT8_TO_UINT16_INSTRUCTION       = static_cast<uint8_t>(49);
+    static inline constexpr uint8_t CAST_UINT8_TO_UINT32_INSTRUCTION       = static_cast<uint8_t>(50);
+    static inline constexpr uint8_t CAST_UINT8_TO_UINT64_INSTRUCTION       = static_cast<uint8_t>(51);
+    static inline constexpr uint8_t CAST_UINT8_TO_INT8_INSTRUCTION         = static_cast<uint8_t>(52);
+    static inline constexpr uint8_t CAST_UINT8_TO_INT16_INSTRUCTION        = static_cast<uint8_t>(53);
+    static inline constexpr uint8_t CAST_UINT8_TO_INT32_INSTRUCTION        = static_cast<uint8_t>(54);
+    static inline constexpr uint8_t CAST_UINT8_TO_INT64_INSTRUCTION        = static_cast<uint8_t>(55);
+    static inline constexpr uint8_t CAST_UINT8_TO_FLOAT_INSTRUCTION        = static_cast<uint8_t>(56);
+    static inline constexpr uint8_t CAST_UINT8_TO_DOUBLE_INSTRUCTION       = static_cast<uint8_t>(57);
 
-    static inline constexpr char CAST_UINT16_TO_BOOL_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(58));
-    static inline constexpr char CAST_UINT16_TO_UINT8_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(59));
-    static inline constexpr char CAST_UINT16_TO_UINT16_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(60));
-    static inline constexpr char CAST_UINT16_TO_UINT32_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(61));
-    static inline constexpr char CAST_UINT16_TO_UINT64_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(62));
-    static inline constexpr char CAST_UINT16_TO_INT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(63));
-    static inline constexpr char CAST_UINT16_TO_INT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(64));
-    static inline constexpr char CAST_UINT16_TO_INT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(65));
-    static inline constexpr char CAST_UINT16_TO_INT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(66));
-    static inline constexpr char CAST_UINT16_TO_FLOAT_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(67));
-    static inline constexpr char CAST_UINT16_TO_DOUBLE_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(68));
+    static inline constexpr uint8_t CAST_UINT16_TO_BOOL_INSTRUCTION        = static_cast<uint8_t>(58);
+    static inline constexpr uint8_t CAST_UINT16_TO_UINT8_INSTRUCTION       = static_cast<uint8_t>(59);
+    static inline constexpr uint8_t CAST_UINT16_TO_UINT16_INSTRUCTION      = static_cast<uint8_t>(60);
+    static inline constexpr uint8_t CAST_UINT16_TO_UINT32_INSTRUCTION      = static_cast<uint8_t>(61);
+    static inline constexpr uint8_t CAST_UINT16_TO_UINT64_INSTRUCTION      = static_cast<uint8_t>(62);
+    static inline constexpr uint8_t CAST_UINT16_TO_INT8_INSTRUCTION        = static_cast<uint8_t>(63);
+    static inline constexpr uint8_t CAST_UINT16_TO_INT16_INSTRUCTION       = static_cast<uint8_t>(64);
+    static inline constexpr uint8_t CAST_UINT16_TO_INT32_INSTRUCTION       = static_cast<uint8_t>(65);
+    static inline constexpr uint8_t CAST_UINT16_TO_INT64_INSTRUCTION       = static_cast<uint8_t>(66);
+    static inline constexpr uint8_t CAST_UINT16_TO_FLOAT_INSTRUCTION       = static_cast<uint8_t>(67);
+    static inline constexpr uint8_t CAST_UINT16_TO_DOUBLE_INSTRUCTION      = static_cast<uint8_t>(68);
 
-    static inline constexpr char CAST_UINT32_TO_BOOL_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(69));
-    static inline constexpr char CAST_UINT32_TO_UINT8_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(70));
-    static inline constexpr char CAST_UINT32_TO_UINT16_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(71));
-    static inline constexpr char CAST_UINT32_TO_UINT32_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(72));
-    static inline constexpr char CAST_UINT32_TO_UINT64_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(73));
-    static inline constexpr char CAST_UINT32_TO_INT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(74));
-    static inline constexpr char CAST_UINT32_TO_INT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(75));
-    static inline constexpr char CAST_UINT32_TO_INT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(76));
-    static inline constexpr char CAST_UINT32_TO_INT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(77));
-    static inline constexpr char CAST_UINT32_TO_FLOAT_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(78));
-    static inline constexpr char CAST_UINT32_TO_DOUBLE_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(79));
+    static inline constexpr uint8_t CAST_UINT32_TO_BOOL_INSTRUCTION        = static_cast<uint8_t>(69);
+    static inline constexpr uint8_t CAST_UINT32_TO_UINT8_INSTRUCTION       = static_cast<uint8_t>(70);
+    static inline constexpr uint8_t CAST_UINT32_TO_UINT16_INSTRUCTION      = static_cast<uint8_t>(71);
+    static inline constexpr uint8_t CAST_UINT32_TO_UINT32_INSTRUCTION      = static_cast<uint8_t>(72);
+    static inline constexpr uint8_t CAST_UINT32_TO_UINT64_INSTRUCTION      = static_cast<uint8_t>(73);
+    static inline constexpr uint8_t CAST_UINT32_TO_INT8_INSTRUCTION        = static_cast<uint8_t>(74);
+    static inline constexpr uint8_t CAST_UINT32_TO_INT16_INSTRUCTION       = static_cast<uint8_t>(75);
+    static inline constexpr uint8_t CAST_UINT32_TO_INT32_INSTRUCTION       = static_cast<uint8_t>(76);
+    static inline constexpr uint8_t CAST_UINT32_TO_INT64_INSTRUCTION       = static_cast<uint8_t>(77);
+    static inline constexpr uint8_t CAST_UINT32_TO_FLOAT_INSTRUCTION       = static_cast<uint8_t>(78);
+    static inline constexpr uint8_t CAST_UINT32_TO_DOUBLE_INSTRUCTION      = static_cast<uint8_t>(79);
 
-    static inline constexpr char CAST_UINT64_TO_BOOL_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(80));
-    static inline constexpr char CAST_UINT64_TO_UINT8_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(81));
-    static inline constexpr char CAST_UINT64_TO_UINT16_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(82));
-    static inline constexpr char CAST_UINT64_TO_UINT32_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(83));
-    static inline constexpr char CAST_UINT64_TO_UINT64_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(84));
-    static inline constexpr char CAST_UINT64_TO_INT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(85));
-    static inline constexpr char CAST_UINT64_TO_INT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(86));
-    static inline constexpr char CAST_UINT64_TO_INT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(87));
-    static inline constexpr char CAST_UINT64_TO_INT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(88));
-    static inline constexpr char CAST_UINT64_TO_FLOAT_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(89));
-    static inline constexpr char CAST_UINT64_TO_DOUBLE_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(90));
+    static inline constexpr uint8_t CAST_UINT64_TO_BOOL_INSTRUCTION        = static_cast<uint8_t>(80);
+    static inline constexpr uint8_t CAST_UINT64_TO_UINT8_INSTRUCTION       = static_cast<uint8_t>(81);
+    static inline constexpr uint8_t CAST_UINT64_TO_UINT16_INSTRUCTION      = static_cast<uint8_t>(82);
+    static inline constexpr uint8_t CAST_UINT64_TO_UINT32_INSTRUCTION      = static_cast<uint8_t>(83);
+    static inline constexpr uint8_t CAST_UINT64_TO_UINT64_INSTRUCTION      = static_cast<uint8_t>(84);
+    static inline constexpr uint8_t CAST_UINT64_TO_INT8_INSTRUCTION        = static_cast<uint8_t>(85);
+    static inline constexpr uint8_t CAST_UINT64_TO_INT16_INSTRUCTION       = static_cast<uint8_t>(86);
+    static inline constexpr uint8_t CAST_UINT64_TO_INT32_INSTRUCTION       = static_cast<uint8_t>(87);
+    static inline constexpr uint8_t CAST_UINT64_TO_INT64_INSTRUCTION       = static_cast<uint8_t>(88);
+    static inline constexpr uint8_t CAST_UINT64_TO_FLOAT_INSTRUCTION       = static_cast<uint8_t>(89);
+    static inline constexpr uint8_t CAST_UINT64_TO_DOUBLE_INSTRUCTION      = static_cast<uint8_t>(90);
 
-    static inline constexpr char CAST_INT8_TO_BOOL_INSTRUCTION          = std::bit_cast<char>(static_cast<uint8_t>(91));
-    static inline constexpr char CAST_INT8_TO_UINT8_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(92));
-    static inline constexpr char CAST_INT8_TO_UINT16_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(93));
-    static inline constexpr char CAST_INT8_TO_UINT32_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(94));
-    static inline constexpr char CAST_INT8_TO_UINT64_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(95));
-    static inline constexpr char CAST_INT8_TO_INT8_INSTRUCTION          = std::bit_cast<char>(static_cast<uint8_t>(96));
-    static inline constexpr char CAST_INT8_TO_INT16_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(97));
-    static inline constexpr char CAST_INT8_TO_INT32_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(98));
-    static inline constexpr char CAST_INT8_TO_INT64_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(99));
-    static inline constexpr char CAST_INT8_TO_FLOAT_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(100));
-    static inline constexpr char CAST_INT8_TO_DOUBLE_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(101));
+    static inline constexpr uint8_t CAST_INT8_TO_BOOL_INSTRUCTION          = static_cast<uint8_t>(91);
+    static inline constexpr uint8_t CAST_INT8_TO_UINT8_INSTRUCTION         = static_cast<uint8_t>(92);
+    static inline constexpr uint8_t CAST_INT8_TO_UINT16_INSTRUCTION        = static_cast<uint8_t>(93);
+    static inline constexpr uint8_t CAST_INT8_TO_UINT32_INSTRUCTION        = static_cast<uint8_t>(94);
+    static inline constexpr uint8_t CAST_INT8_TO_UINT64_INSTRUCTION        = static_cast<uint8_t>(95);
+    static inline constexpr uint8_t CAST_INT8_TO_INT8_INSTRUCTION          = static_cast<uint8_t>(96);
+    static inline constexpr uint8_t CAST_INT8_TO_INT16_INSTRUCTION         = static_cast<uint8_t>(97);
+    static inline constexpr uint8_t CAST_INT8_TO_INT32_INSTRUCTION         = static_cast<uint8_t>(98);
+    static inline constexpr uint8_t CAST_INT8_TO_INT64_INSTRUCTION         = static_cast<uint8_t>(99);
+    static inline constexpr uint8_t CAST_INT8_TO_FLOAT_INSTRUCTION         = static_cast<uint8_t>(100);
+    static inline constexpr uint8_t CAST_INT8_TO_DOUBLE_INSTRUCTION        = static_cast<uint8_t>(101);
 
-    static inline constexpr char CAST_INT16_TO_BOOL_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(102));
-    static inline constexpr char CAST_INT16_TO_UINT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(103));
-    static inline constexpr char CAST_INT16_TO_UINT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(104));
-    static inline constexpr char CAST_INT16_TO_UINT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(105));
-    static inline constexpr char CAST_INT16_TO_UINT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(106));
-    static inline constexpr char CAST_INT16_TO_INT8_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(107));
-    static inline constexpr char CAST_INT16_TO_INT16_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(108));
-    static inline constexpr char CAST_INT16_TO_INT32_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(109));
-    static inline constexpr char CAST_INT16_TO_INT64_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(110));
-    static inline constexpr char CAST_INT16_TO_FLOAT_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(111));
-    static inline constexpr char CAST_INT16_TO_DOUBLE_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(112));
+    static inline constexpr uint8_t CAST_INT16_TO_BOOL_INSTRUCTION         = static_cast<uint8_t>(102);
+    static inline constexpr uint8_t CAST_INT16_TO_UINT8_INSTRUCTION        = static_cast<uint8_t>(103);
+    static inline constexpr uint8_t CAST_INT16_TO_UINT16_INSTRUCTION       = static_cast<uint8_t>(104);
+    static inline constexpr uint8_t CAST_INT16_TO_UINT32_INSTRUCTION       = static_cast<uint8_t>(105);
+    static inline constexpr uint8_t CAST_INT16_TO_UINT64_INSTRUCTION       = static_cast<uint8_t>(106);
+    static inline constexpr uint8_t CAST_INT16_TO_INT8_INSTRUCTION         = static_cast<uint8_t>(107);
+    static inline constexpr uint8_t CAST_INT16_TO_INT16_INSTRUCTION        = static_cast<uint8_t>(108);
+    static inline constexpr uint8_t CAST_INT16_TO_INT32_INSTRUCTION        = static_cast<uint8_t>(109);
+    static inline constexpr uint8_t CAST_INT16_TO_INT64_INSTRUCTION        = static_cast<uint8_t>(110);
+    static inline constexpr uint8_t CAST_INT16_TO_FLOAT_INSTRUCTION        = static_cast<uint8_t>(111);
+    static inline constexpr uint8_t CAST_INT16_TO_DOUBLE_INSTRUCTION       = static_cast<uint8_t>(112);
 
-    static inline constexpr char CAST_INT32_TO_BOOL_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(113));
-    static inline constexpr char CAST_INT32_TO_UINT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(114));
-    static inline constexpr char CAST_INT32_TO_UINT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(115));
-    static inline constexpr char CAST_INT32_TO_UINT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(116));
-    static inline constexpr char CAST_INT32_TO_UINT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(117));
-    static inline constexpr char CAST_INT32_TO_INT8_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(118));
-    static inline constexpr char CAST_INT32_TO_INT16_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(119));
-    static inline constexpr char CAST_INT32_TO_INT32_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(120));
-    static inline constexpr char CAST_INT32_TO_INT64_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(121));
-    static inline constexpr char CAST_INT32_TO_FLOAT_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(122));
-    static inline constexpr char CAST_INT32_TO_DOUBLE_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(123));
+    static inline constexpr uint8_t CAST_INT32_TO_BOOL_INSTRUCTION         = static_cast<uint8_t>(113);
+    static inline constexpr uint8_t CAST_INT32_TO_UINT8_INSTRUCTION        = static_cast<uint8_t>(114);
+    static inline constexpr uint8_t CAST_INT32_TO_UINT16_INSTRUCTION       = static_cast<uint8_t>(115);
+    static inline constexpr uint8_t CAST_INT32_TO_UINT32_INSTRUCTION       = static_cast<uint8_t>(116);
+    static inline constexpr uint8_t CAST_INT32_TO_UINT64_INSTRUCTION       = static_cast<uint8_t>(117);
+    static inline constexpr uint8_t CAST_INT32_TO_INT8_INSTRUCTION         = static_cast<uint8_t>(118);
+    static inline constexpr uint8_t CAST_INT32_TO_INT16_INSTRUCTION        = static_cast<uint8_t>(119);
+    static inline constexpr uint8_t CAST_INT32_TO_INT32_INSTRUCTION        = static_cast<uint8_t>(120);
+    static inline constexpr uint8_t CAST_INT32_TO_INT64_INSTRUCTION        = static_cast<uint8_t>(121);
+    static inline constexpr uint8_t CAST_INT32_TO_FLOAT_INSTRUCTION        = static_cast<uint8_t>(122);
+    static inline constexpr uint8_t CAST_INT32_TO_DOUBLE_INSTRUCTION       = static_cast<uint8_t>(123);
 
-    static inline constexpr char CAST_INT64_TO_BOOL_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(124));
-    static inline constexpr char CAST_INT64_TO_UINT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(125));
-    static inline constexpr char CAST_INT64_TO_UINT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(126));
-    static inline constexpr char CAST_INT64_TO_UINT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(127));
-    static inline constexpr char CAST_INT64_TO_UINT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(128));
-    static inline constexpr char CAST_INT64_TO_INT8_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(129));
-    static inline constexpr char CAST_INT64_TO_INT16_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(130));
-    static inline constexpr char CAST_INT64_TO_INT32_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(131));
-    static inline constexpr char CAST_INT64_TO_INT64_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(132));
-    static inline constexpr char CAST_INT64_TO_FLOAT_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(133));
-    static inline constexpr char CAST_INT64_TO_DOUBLE_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(134));
+    static inline constexpr uint8_t CAST_INT64_TO_BOOL_INSTRUCTION         = static_cast<uint8_t>(124);
+    static inline constexpr uint8_t CAST_INT64_TO_UINT8_INSTRUCTION        = static_cast<uint8_t>(125);
+    static inline constexpr uint8_t CAST_INT64_TO_UINT16_INSTRUCTION       = static_cast<uint8_t>(126);
+    static inline constexpr uint8_t CAST_INT64_TO_UINT32_INSTRUCTION       = static_cast<uint8_t>(127);
+    static inline constexpr uint8_t CAST_INT64_TO_UINT64_INSTRUCTION       = static_cast<uint8_t>(128);
+    static inline constexpr uint8_t CAST_INT64_TO_INT8_INSTRUCTION         = static_cast<uint8_t>(129);
+    static inline constexpr uint8_t CAST_INT64_TO_INT16_INSTRUCTION        = static_cast<uint8_t>(130);
+    static inline constexpr uint8_t CAST_INT64_TO_INT32_INSTRUCTION        = static_cast<uint8_t>(131);
+    static inline constexpr uint8_t CAST_INT64_TO_INT64_INSTRUCTION        = static_cast<uint8_t>(132);
+    static inline constexpr uint8_t CAST_INT64_TO_FLOAT_INSTRUCTION        = static_cast<uint8_t>(133);
+    static inline constexpr uint8_t CAST_INT64_TO_DOUBLE_INSTRUCTION       = static_cast<uint8_t>(134);
 
-    static inline constexpr char CAST_FLOAT_TO_BOOL_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(135));
-    static inline constexpr char CAST_FLOAT_TO_UINT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(136));
-    static inline constexpr char CAST_FLOAT_TO_UINT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(137));
-    static inline constexpr char CAST_FLOAT_TO_UINT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(138));
-    static inline constexpr char CAST_FLOAT_TO_UINT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(139));
-    static inline constexpr char CAST_FLOAT_TO_INT8_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(140));
-    static inline constexpr char CAST_FLOAT_TO_INT16_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(141));
-    static inline constexpr char CAST_FLOAT_TO_INT32_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(142));
-    static inline constexpr char CAST_FLOAT_TO_INT64_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(143));
-    static inline constexpr char CAST_FLOAT_TO_FLOAT_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(144));
-    static inline constexpr char CAST_FLOAT_TO_DOUBLE_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(145));
+    static inline constexpr uint8_t CAST_FLOAT_TO_BOOL_INSTRUCTION         = static_cast<uint8_t>(135);
+    static inline constexpr uint8_t CAST_FLOAT_TO_UINT8_INSTRUCTION        = static_cast<uint8_t>(136);
+    static inline constexpr uint8_t CAST_FLOAT_TO_UINT16_INSTRUCTION       = static_cast<uint8_t>(137);
+    static inline constexpr uint8_t CAST_FLOAT_TO_UINT32_INSTRUCTION       = static_cast<uint8_t>(138);
+    static inline constexpr uint8_t CAST_FLOAT_TO_UINT64_INSTRUCTION       = static_cast<uint8_t>(139);
+    static inline constexpr uint8_t CAST_FLOAT_TO_INT8_INSTRUCTION         = static_cast<uint8_t>(140);
+    static inline constexpr uint8_t CAST_FLOAT_TO_INT16_INSTRUCTION        = static_cast<uint8_t>(141);
+    static inline constexpr uint8_t CAST_FLOAT_TO_INT32_INSTRUCTION        = static_cast<uint8_t>(142);
+    static inline constexpr uint8_t CAST_FLOAT_TO_INT64_INSTRUCTION        = static_cast<uint8_t>(143);
+    static inline constexpr uint8_t CAST_FLOAT_TO_FLOAT_INSTRUCTION        = static_cast<uint8_t>(144);
+    static inline constexpr uint8_t CAST_FLOAT_TO_DOUBLE_INSTRUCTION       = static_cast<uint8_t>(145);
 
-    static inline constexpr char CAST_DOUBLE_TO_BOOL_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(146));
-    static inline constexpr char CAST_DOUBLE_TO_UINT8_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(147));
-    static inline constexpr char CAST_DOUBLE_TO_UINT16_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(148));
-    static inline constexpr char CAST_DOUBLE_TO_UINT32_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(149));
-    static inline constexpr char CAST_DOUBLE_TO_UINT64_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(150));
-    static inline constexpr char CAST_DOUBLE_TO_INT8_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(151));
-    static inline constexpr char CAST_DOUBLE_TO_INT16_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(152));
-    static inline constexpr char CAST_DOUBLE_TO_INT32_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(153));
-    static inline constexpr char CAST_DOUBLE_TO_INT64_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(154));
-    static inline constexpr char CAST_DOUBLE_TO_FLOAT_INSTRUCTION       = std::bit_cast<char>(static_cast<uint8_t>(155));
-    static inline constexpr char CAST_DOUBLE_TO_DOUBLE_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(156));
+    static inline constexpr uint8_t CAST_DOUBLE_TO_BOOL_INSTRUCTION        = static_cast<uint8_t>(146);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_UINT8_INSTRUCTION       = static_cast<uint8_t>(147);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_UINT16_INSTRUCTION      = static_cast<uint8_t>(148);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_UINT32_INSTRUCTION      = static_cast<uint8_t>(149);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_UINT64_INSTRUCTION      = static_cast<uint8_t>(150);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_INT8_INSTRUCTION        = static_cast<uint8_t>(151);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_INT16_INSTRUCTION       = static_cast<uint8_t>(152);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_INT32_INSTRUCTION       = static_cast<uint8_t>(153);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_INT64_INSTRUCTION       = static_cast<uint8_t>(154);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_FLOAT_INSTRUCTION       = static_cast<uint8_t>(155);
+    static inline constexpr uint8_t CAST_DOUBLE_TO_DOUBLE_INSTRUCTION      = static_cast<uint8_t>(156);
 
-    static inline constexpr char TEST_THEN_JUMP_INSTRUCTION             = std::bit_cast<char>(static_cast<uint8_t>(157));
-    static inline constexpr char TABLE_DISPATCH_INSTRUCTION             = std::bit_cast<char>(static_cast<uint8_t>(158));
+    static inline constexpr uint8_t TEST_THEN_JUMP_INSTRUCTION             = static_cast<uint8_t>(157);
+    static inline constexpr uint8_t TABLE_DISPATCH_INSTRUCTION             = static_cast<uint8_t>(158);
 
-    static inline constexpr char ENDIAN_ASSIGN_CONST_1_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(159));
-    static inline constexpr char ENDIAN_ASSIGN_CONST_2_INSTRUCITON      = std::bit_cast<char>(static_cast<uint8_t>(160));
-    static inline constexpr char ENDIAN_ASSIGN_CONST_4_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(161));
-    static inline constexpr char ENDIAN_ASSIGN_CONST_8_INSTRUCTION      = std::bit_cast<char>(static_cast<uint8_t>(162));
+    static inline constexpr uint8_t ENDIAN_ASSIGN_CONST_1_INSTRUCTION      = static_cast<uint8_t>(159);
+    static inline constexpr uint8_t ENDIAN_ASSIGN_CONST_2_INSTRUCITON      = static_cast<uint8_t>(160);
+    static inline constexpr uint8_t ENDIAN_ASSIGN_CONST_4_INSTRUCTION      = static_cast<uint8_t>(161);
+    static inline constexpr uint8_t ENDIAN_ASSIGN_CONST_8_INSTRUCTION      = static_cast<uint8_t>(162);
 
-    static inline constexpr char CAST_BOOL_TO_BOOL_INSTRUCTION          = std::bit_cast<char>(static_cast<uint8_t>(163));
-    static inline constexpr char CAST_BOOL_TO_UINT8_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(164));
-    static inline constexpr char CAST_BOOL_TO_UINT16_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(165));
-    static inline constexpr char CAST_BOOL_TO_UINT32_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(166));
-    static inline constexpr char CAST_BOOL_TO_UINT64_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(167));
-    static inline constexpr char CAST_BOOL_TO_INT8_INSTRUCTION          = std::bit_cast<char>(static_cast<uint8_t>(168));
-    static inline constexpr char CAST_BOOL_TO_INT16_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(169));
-    static inline constexpr char CAST_BOOL_TO_INT32_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(170));
-    static inline constexpr char CAST_BOOL_TO_INT64_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(171));
-    static inline constexpr char CAST_BOOL_TO_FLOAT_INSTRUCTION         = std::bit_cast<char>(static_cast<uint8_t>(172));
-    static inline constexpr char CAST_BOOL_TO_DOUBLE_INSTRUCTION        = std::bit_cast<char>(static_cast<uint8_t>(173));
+    static inline constexpr uint8_t CAST_BOOL_TO_BOOL_INSTRUCTION          = static_cast<uint8_t>(163);
+    static inline constexpr uint8_t CAST_BOOL_TO_UINT8_INSTRUCTION         = static_cast<uint8_t>(164);
+    static inline constexpr uint8_t CAST_BOOL_TO_UINT16_INSTRUCTION        = static_cast<uint8_t>(165);
+    static inline constexpr uint8_t CAST_BOOL_TO_UINT32_INSTRUCTION        = static_cast<uint8_t>(166);
+    static inline constexpr uint8_t CAST_BOOL_TO_UINT64_INSTRUCTION        = static_cast<uint8_t>(167);
+    static inline constexpr uint8_t CAST_BOOL_TO_INT8_INSTRUCTION          = static_cast<uint8_t>(168);
+    static inline constexpr uint8_t CAST_BOOL_TO_INT16_INSTRUCTION         = static_cast<uint8_t>(169);
+    static inline constexpr uint8_t CAST_BOOL_TO_INT32_INSTRUCTION         = static_cast<uint8_t>(170);
+    static inline constexpr uint8_t CAST_BOOL_TO_INT64_INSTRUCTION         = static_cast<uint8_t>(171);
+    static inline constexpr uint8_t CAST_BOOL_TO_FLOAT_INSTRUCTION         = static_cast<uint8_t>(172);
+    static inline constexpr uint8_t CAST_BOOL_TO_DOUBLE_INSTRUCTION        = static_cast<uint8_t>(173);
 
     static_assert(std::numeric_limits<float>::is_iec559);
     static_assert(std::numeric_limits<double>::is_iec559);
@@ -625,7 +626,7 @@ namespace dg::network_bytecode
             instruction_offset          += INCREMENTAL_SZ;
 
             char * lhs_addr_var_addr    = context_boundsafe_get_back_offset(context, instruction.lhs_addr_var_back_offset);
-            void * lhs_addr             = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(lhs_addr_var_addr));
+            void * lhs_addr             = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(context, lhs_addr_var_addr));
 
             boundsafe_memcpy(context, lhs_addr, instruction.data.data(), instruction.data.size());
         }
@@ -670,7 +671,7 @@ namespace dg::network_bytecode
                                   Context * context)
     {
         AssignConstInstruction<SZ> instruction;
-        typename EndiannessAwaredRepresentativeType<SZ>::type pod; 
+        typename EndiannessAwaredRepresentativeType<std::integral_constant<size_t, SZ>>::type pod; 
 
         constexpr size_t INCREMENTAL_SZ = dg::network_trivial_serializer::size(AssignConstInstruction<SZ>{});
 
@@ -687,7 +688,7 @@ namespace dg::network_bytecode
             dg::network_trivial_serializer::deserialize_into(pod, instruction.data.data());
             
             char * lhs_addr_var_addr    = context_boundsafe_get_back_offset(context, instruction.lhs_addr_var_back_offset);
-            char * lhs_addr             = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(lhs_addr_var_addr));
+            void * lhs_addr             = reinterpret_cast<void *>(boundsafe_load<unsigned_addr_t>(context, lhs_addr_var_addr));
 
             boundsafe_memcpy(context, lhs_addr, &pod, sizeof(pod));
         }
@@ -1484,9 +1485,9 @@ namespace dg::network_bytecode
                          const size_t instruction_sz,
                          Context * context)
     {
-        auto resolutor = [context, &monowise_operation](void * dst, void * src)
+        auto resolutor = [context](void * dst, void * src)
         {
-            FromType src_value = boundsafe_load<T>(context, src);
+            FromType src_value = boundsafe_load<FromType>(context, src);
             ToType dst_value = static_cast<ToType>(src_value);
 
             boundsafe_memcpy(context, dst, &dst_value, sizeof(ToType));
@@ -2477,7 +2478,23 @@ namespace dg::network_bytecode
                 break;
             }
 
-            switch (bytecode[bytecode_offset])
+            //we'd want to have a cond statement, if else followed by a simd table dispatch with no holes
+            //basically, we'd have 4 kinds of instructions
+
+            //jmp
+            //pair store
+            //simd store (probably of 128s in sizes)
+            //and exotic dispatch
+            //core table dispatch would be of 16 in size (0-15), with similar instructions (only differ in the major sign instruction)
+            
+            //we'd be engineering branches such that we could reach at least 1 << 30 instructions/ second
+            //we dont care about the extra 4 * 1 << 30 instructions/ second
+            //we'd attempt to solve that by using SIMD of 256s
+
+            //I think we are heading in the right direction of being problem-complete
+            //we'll build a fast path for the sequence + simd instructions to bring the speed to the optimal threshold
+
+            switch (std::bit_cast<uint8_t>(bytecode[bytecode_offset]))
             {
                 case ALLOCATE_MEMSET_INSTRUCTION:
                 {
@@ -2536,750 +2553,807 @@ namespace dg::network_bytecode
                 }
                 case GET_ADDR_INSTRUCTION:
                 {
-                    exec_getaddr();
+                    exec_getaddr(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case ADD_UINT64_INSTRUCTION:
                 {
-                    exec_add_uint64();
+                    exec_add_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case ADD_INT64_INSTRUCTION:
                 {
-                    exec_add_int64();
+                    exec_add_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case ADD_FLOAT_INSTRUCTION:
                 {
-                    exec_add_float();
+                    exec_add_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case ADD_DOUBLE_INSTRUCTION:
                 {
-                    exec_add_double();
+                    exec_add_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case SUB_UINT64_INSTRUCTION:
                 {
-                    exec_sub_uint64();
+                    exec_sub_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case SUB_INT64_INSTRUCTION:
                 {
-                    exec_sub_int64();
+                    exec_sub_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case SUB_FLOAT_INSTRUCTION:
                 {
-                    exec_sub_float();
+                    exec_sub_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case SUB_DOUBLE_INSTRUCTION:
                 {
-                    exec_sub_double();
+                    exec_sub_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case MUL_UINT64_INSTRUCTION:
                 {
-                    exec_mul_uint64();
+                    exec_mul_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case MUL_INT64_INSTRUCTION:
                 {
-                    exec_mul_int64();
+                    exec_mul_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case MUL_FLOAT_INSTRUCTION:
                 {
-                    exec_mul_float();
+                    exec_mul_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case MUL_DOUBLE_INSTRUCTION:
                 {
-                    exec_mul_double();
+                    exec_mul_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case DIV_UINT64_INSTRUCTION:
                 {
-                    exec_div_uint64();
+                    exec_div_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case DIV_INT64_INSTRUCTION:
                 {
-                    exec_div_int64();
+                    exec_div_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case DIV_FLOAT_INSTRUCTION:
                 {
-                    exec_div_float();
+                    exec_div_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case DIV_DOUBLE_INSTRUCTION:
                 {
-                    exec_div_double();
+                    exec_div_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case MOD_UINT64_INSTRUCTION:
                 {
-                    exec_mod_uint64();
+                    exec_mod_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case MOD_INT64_INSTRUCTION:
                 {
-                    exec_mod_int64();
+                    exec_mod_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case AND_BOOL_INSTRUCTION:
                 {
-                    exec_and_bool();
+                    exec_and_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case OR_BOOL_INSTRUCTION:
                 {
-                    exec_or_bool();
+                    exec_or_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case NOT_BOOL_INSTRUCTION:
                 {
-                    exec_not_bool();
+                    exec_not_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case BW_AND_UINT64_INSTRUCTION:
                 {
-                    exec_bw_and_uint64();
+                    exec_bw_and_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case BW_OR_UINT64_INSTRUCTION:
                 {
-                    exec_bw_or_uint64();
+                    exec_bw_or_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case BW_XOR_UINT64_INSTRUCTION:
                 {
-                    exec_bw_xor_uint64();
+                    exec_bw_xor_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case BW_NOT_UINT64_INSTRUCTION:
                 {
-                    exec_bw_not_uint64();
+                    exec_bw_not_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case BW_LEFTSHIFT_UINT64_INSTRUCTION:
                 {
-                    exec_bw_leftshift_uint64();
+                    exec_bw_leftshift_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case BW_RIGHTSHIFT_UINT64_INSTRUCTION:
                 {
-                    exec_bw_rightshift_uint64();
+                    exec_bw_rightshift_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_LESS_UINT64_INSTRUCTION:
                 {
-                    exec_cmp_less_uint64();
+                    exec_cmp_less_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_LESS_INT64_INSTRUCTION:
                 {
-                    exec_cmp_less_int64();
+                    exec_cmp_less_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_LESS_FLOAT_INSTRUCTION:
                 {
-                    exec_cmp_less_float();
+                    exec_cmp_less_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_LESS_DOUBLE_INSTRUCTION:
                 {
-                    exec_cmp_less_double();
+                    exec_cmp_less_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_GREATER_UINT64_INSTRUCTION:
                 {
-                    exec_cmp_greater_uint64();
+                    exec_cmp_greater_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_GREATER_INT64_INSTRUCTION:
                 {
-                    exec_cmp_greater_int64();
+                    exec_cmp_greater_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_GREATER_FLOAT_INSTRUCTION:
                 {
-                    exec_cmp_greater_float();
+                    exec_cmp_greater_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_GREATER_DOUBLE_INSTRUCTION:
                 {
-                    exec_cmp_greater_double();
+                    exec_cmp_greater_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_EQUAL_UINT64_INSTRUCTION:
                 {
-                    exec_cmp_equal_uint64();
+                    exec_cmp_equal_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_EQUAL_INT64_INSTRUCTION:
                 {
-                    exec_cmp_equal_int64();
+                    exec_cmp_equal_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_EQUAL_FLOAT_INSTRUCTION:
                 {
-                    exec_cmp_equal_float();
+                    exec_cmp_equal_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CMP_EQUAL_DOUBLE_INSTRUCTION:
                 {
-                    exec_cmp_equal_double();
+                    exec_cmp_equal_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_BOOL_INSTRUCTION:
                 {
+                    exec_cast_bool_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_UINT8_INSTRUCTION:
                 {
+                    exec_cast_bool_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_UINT16_INSTRUCTION:
                 {
+                    exec_cast_bool_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_UINT32_INSTRUCTION:
                 {
+                    exec_cast_bool_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_UINT64_INSTRUCTION:
                 {
+                    exec_cast_bool_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_INT8_INSTRUCTION:
                 {
+                    exec_cast_bool_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_INT16_INSTRUCTION:
                 {
+                    exec_cast_bool_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_INT32_INSTRUCTION:
                 {
+                    exec_cast_bool_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_INT64_INSTRUCTION:
                 {
+                    exec_cast_bool_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_FLOAT_INSTRUCTION:
                 {
+                    exec_cast_bool_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_BOOL_TO_DOUBLE_INSTRUCTION:
                 {
+                    exec_cast_bool_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_BOOL_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_UINT8_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_UINT16_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_UINT32_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_UINT64_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_INT8_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_INT16_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_INT32_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_INT64_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_FLOAT_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT8_TO_DOUBLE_INSTRUCTION:
                 {
+                    exec_cast_uint8_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_BOOL_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_UINT8_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_UINT16_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_UINT32_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_UINT64_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_INT8_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_INT16_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_INT32_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_INT64_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_FLOAT_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT16_TO_DOUBLE_INSTRUCTION:
                 {
+                    exec_cast_uint16_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_BOOL_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_UINT8_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_UINT16_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_UINT32_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_UINT64_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_INT8_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_INT16_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_INT32_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_INT64_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_FLOAT_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT32_TO_DOUBLE_INSTRUCTION:
                 {
+                    exec_cast_uint32_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_BOOL_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_UINT8_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_UINT16_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_UINT32_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_UINT64_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_INT8_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_INT16_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_INT32_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_INT64_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_FLOAT_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_UINT64_TO_DOUBLE_INSTRUCTION:
                 {
+                    exec_cast_uint64_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_BOOL_INSTRUCTION:
                 {
+                    exec_cast_int8_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_UINT8_INSTRUCTION:
                 {
-                    
+                    exec_cast_int8_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_UINT16_INSTRUCTION:
                 {
+                    exec_cast_int8_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_UINT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_int8_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_UINT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_int8_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_INT8_INSTRUCTION:
                 {
-
+                    exec_cast_int8_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_INT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_int8_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_INT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_int8_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_INT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_int8_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_FLOAT_INSTRUCTION:
                 {
-                    
+                    exec_cast_int8_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT8_TO_DOUBLE_INSTRUCTION:
                 {
-                    
+                    exec_cast_int8_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_BOOL_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_UINT8_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_UINT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_UINT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_UINT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_INT8_INSTRUCTION:
                 {
-
+                    exec_cast_int16_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_INT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_INT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_INT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_FLOAT_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT16_TO_DOUBLE_INSTRUCTION:
                 {
-                    
+                    exec_cast_int16_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_BOOL_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_UINT8_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_UINT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_UINT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_UINT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_INT8_INSTRUCTION:
                 {
-
+                    exec_cast_int32_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_INT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_INT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_INT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_FLOAT_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT32_TO_DOUBLE_INSTRUCTION:
                 {
-                    
+                    exec_cast_int32_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_BOOL_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_UINT8_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_UINT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_UINT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_UINT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_INT8_INSTRUCTION:
                 {
-
+                    exec_cast_int64_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_INT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_INT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_INT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_FLOAT_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_INT64_TO_DOUBLE_INSTRUCTION:
                 {
-                    
+                    exec_cast_int64_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_BOOL_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_UINT8_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_UINT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_UINT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_UINT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_INT8_INSTRUCTION:
                 {
-
+                    exec_cast_float_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_INT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_INT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_INT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_FLOAT_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_FLOAT_TO_DOUBLE_INSTRUCTION:
                 {
-                    
+                    exec_cast_float_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_BOOL_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_bool(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_UINT8_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_uint8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_UINT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_uint16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_UINT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_uint32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_UINT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_uint64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_INT8_INSTRUCTION:
                 {
-
+                    exec_cast_double_to_int8(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_INT16_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_int16(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_INT32_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_int32(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_INT64_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_int64(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_FLOAT_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_float(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 case CAST_DOUBLE_TO_DOUBLE_INSTRUCTION:
                 {
-                    
+                    exec_cast_double_to_double(bytecode, bytecode_offset, bytecode_sz, context);
                     break;
                 }
                 default:
@@ -3289,7 +3363,7 @@ namespace dg::network_bytecode
             }
         }
 
-        return instruction_ptr;
+        return std::next(bytecode, bytecode_offset);
     }
 }
 

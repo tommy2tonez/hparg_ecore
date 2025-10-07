@@ -24,7 +24,7 @@
 #include "assert.h"
 #include "network_kernel_mailbox_impl1_x.h"
 #include "network_compact_trivial_serializer.h"
-#include "network_rest_frame.h"
+// #include "network_rest_frame.h"
 
 template <class Task>
 auto timeit(Task task) -> size_t{
