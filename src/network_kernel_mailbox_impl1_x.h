@@ -15,6 +15,7 @@
 #include "network_exception_handler.h"
 #include <chrono>
 #include "network_chrono.h"
+#include "network_sock_traffic_status_controller.h"
 
 namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
@@ -717,6 +718,29 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     struct OutBoundRuleInterface{
         virtual ~OutBoundRuleInterface() noexcept = default;
         virtual auto thru(const Address&) noexcept -> std::expected<bool, exception_t> = 0;
+    };
+
+    class SockTrafficAdapter : public virtual NetworkBusyStatusRetrieverInterface{
+
+        public:
+
+            using busy_level_t = NetworkBusyStatusRetrieverInterface::busy_level_t;
+
+            auto get() noexcept -> std::expected<busy_level_t, exception_t>{
+
+                using traffic_t = dg::network_sock_traffic_status_controller::types::traffic_status_t;
+
+                traffic_t inbound_traffic_status    = dg::network_sock_traffic_status_controller::get_inbound_status();
+                traffic_t outbound_traffic_status   = dg::network_sock_traffic_status_controller::get_outbound_status();
+
+                if (inbound_traffic_status == dg::network_sock_traffic_status_controller::constants::congested
+                    && outbound_traffic_status == dg::network_sock_traffic_status_controller::constants::congested){
+
+                    return NetworkBusyStatusRetrieverInterface::BUSY_2;
+                }
+
+                return NetworkBusyStatusRetrieverInterface::BUSY_0;
+            }
     };
 
     //OK

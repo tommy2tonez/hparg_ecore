@@ -52,6 +52,7 @@
 #include <unistd.h>
 #include "network_hash.h"
 #include "network_chrono.h"
+#include "network_sock_traffic_status_controller.h"
 
 namespace dg::network_kernel_mailbox_impl1::types{
 
@@ -2076,7 +2077,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             dg::vector<std::shared_ptr<semaphore_impl::dg_binary_semaphore>> mtx_queue;
             size_t mtx_queue_cap;
-            std::atomic_flag mtx_mtx_queue;
+            stdx::fair_atomic_flag mtx_mtx_queue;
             stdx::inplace_hdi_container<std::atomic<intmax_t>> counter;
             stdx::inplace_hdi_container<std::atomic<intmax_t>> wakeup_threshold;
             stdx::inplace_hdi_container<std::atomic<size_t>> mtx_queue_sz;
@@ -2090,7 +2091,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                   mtx_mtx_queue(),
                                                   counter(std::in_place_t{}, 0),
                                                   wakeup_threshold(std::in_place_t{}, 0),
-                                                  mtx_queue_sz(std::in_place_t{}, 0u){}
+                                                  mtx_queue_sz(std::in_place_t{}, 0u){
+                
+                stdx::inplace_make_fair_atomic_flag(this->mtx_mtx_queue);
+            }
 
             void increment(size_t sz) noexcept{
 
@@ -2126,7 +2130,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
 
                     {
-                        stdx::unlock_guard<std::atomic_flag> lck_grd(this->mtx_mtx_queue);
+                        stdx::unlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
 
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
                         smp_vec = this->mtx_queue;
@@ -2168,7 +2172,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 smp_vec.reserve(MTX_QUEUE_EXPECTED_SIZE);
 
                 [&, this]() noexcept{
-                    stdx::xlock_guard<std::atomic_flag> lck_grd(this->mtx_mtx_queue);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
 
                     if constexpr(DEBUG_MODE_FLAG){
                         if (this->mtx_queue.size() == this->mtx_queue_cap){
@@ -2557,7 +2561,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator;
             size_t ticking_clock_resolution;
             size_t max_retransmission_sz;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
@@ -2567,7 +2571,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                     std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator,
                                                     size_t ticking_clock_resolution,
                                                     size_t max_retransmission_sz,
-                                                    std::unique_ptr<std::mutex> mtx,
+                                                    std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                                     size_t consume_sz_per_load): pkt_map(std::move(pkt_map)),
                                                                                  acked_id_hashset(std::move(acked_id_hashset)),
                                                                                  delay_negotiator(std::move(delay_negotiator)),
@@ -2578,7 +2582,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -2629,7 +2633,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void ack(global_packet_id_t * id_arr, size_t id_arr_sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (id_arr_sz > this->max_consume_size()){
@@ -2648,7 +2652,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void get_retriables(Packet * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 output_arr_sz = 0u;
 
@@ -2683,7 +2687,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             std::chrono::nanoseconds transmission_delay_time;
             size_t max_retransmission_sz;
             size_t pkt_deque_capacity;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
@@ -2693,7 +2697,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                      std::chrono::nanoseconds transmission_delay_time,
                                      size_t max_retransmission_sz,
                                      size_t pkt_deque_capacity,
-                                     std::unique_ptr<std::mutex> mtx,
+                                     std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                      stdx::hdi_container<size_t> consume_sz_per_load) noexcept: pkt_deque(std::move(pkt_deque)),
                                                                                                 acked_id_hashset(std::move(acked_id_hashset)),
                                                                                                 transmission_delay_time(transmission_delay_time),
@@ -2704,7 +2708,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -2739,7 +2743,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void ack(global_packet_id_t * pkt_id_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -2756,7 +2760,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void get_retriables(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 std::chrono::time_point<std::chrono::steady_clock> time_bar = std::chrono::steady_clock::now() - this->transmission_delay_time;
 
@@ -3083,14 +3087,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             dg::pow2_cyclic_queue<dg::string> buffer_vec;
             size_t buffer_vec_capacity;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
             BufferFIFOContainer(dg::pow2_cyclic_queue<dg::string> buffer_vec,
                                 size_t buffer_vec_capacity,
-                                std::unique_ptr<std::mutex> mtx,
+                                std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                 stdx::hdi_container<size_t> consume_sz_per_load) noexcept: buffer_vec(std::move(buffer_vec)),
                                                                                            buffer_vec_capacity(buffer_vec_capacity),
                                                                                            mtx(std::move(mtx)),
@@ -3098,7 +3102,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -3121,7 +3125,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 sz          = std::min(output_buffer_arr_cap, this->buffer_vec.size());
                 auto first  = this->buffer_vec.begin();
@@ -3324,7 +3328,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             dg::pow2_cyclic_queue<dg::vector<dg::string>> distribution_queue;
             dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue;
             dg::pow2_cyclic_queue<dg::vector<dg::string>> leftover_queue;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
         
         public:
@@ -3332,7 +3336,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             FairInBoundBufferContainer(dg::pow2_cyclic_queue<dg::vector<dg::string>> distribution_queue,
                                        dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue,
                                        dg::pow2_cyclic_queue<dg::vector<dg::string>> leftover_queue,
-                                       std::unique_ptr<std::mutex> mtx,
+                                       std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                        size_t consume_sz_per_load): distribution_queue(std::move(distribution_queue)),
                                                                     waiting_queue(std::move(waiting_queue)),
                                                                     leftover_queue(std::move(leftover_queue)),
@@ -3358,7 +3362,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 semaphore_impl::dg_binary_semaphore * releasing_smp = nullptr;
 
                 exception_t err = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->waiting_queue.empty()){
                         auto [dst, smp] = this->waiting_queue.front();
@@ -3396,7 +3400,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 semaphore_impl::dg_binary_semaphore smp(0);
                 
                 bool is_acquire_required = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->leftover_queue.empty()){
                         str_vec = std::move(this->leftover_queue.front());
@@ -3429,7 +3433,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 str_vec->resize(rem_sz);
 
                 if (!str_vec->empty()){
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->waiting_queue.empty()){
                         auto [dst, smp] = this->waiting_queue.front();
@@ -3455,14 +3459,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             dg::pow2_cyclic_queue<Packet> packet_deque;
             size_t packet_deque_capacity;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
         
         public:
 
             PacketFIFOContainer(dg::pow2_cyclic_queue<Packet> packet_deque,
                                 size_t packet_deque_capacity,
-                                std::unique_ptr<std::mutex> mtx,
+                                std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                 stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_deque(std::move(packet_deque)),
                                                                                            packet_deque_capacity(packet_deque_capacity),
                                                                                            mtx(std::move(mtx)),
@@ -3470,7 +3474,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void push(std::move_iterator<Packet *> packet_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -3493,7 +3497,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 sz          = std::min(output_pkt_arr_cap, this->packet_deque.size());
                 auto first  = this->packet_deque.begin();
@@ -3516,14 +3520,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             dg::vector<Packet> packet_vec;
             size_t packet_vec_capacity;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
             PrioritizedPacketContainer(dg::vector<Packet> packet_vec,
                                        size_t packet_vec_capacity,
-                                       std::unique_ptr<std::mutex> mtx,
+                                       std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                        stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_vec(std::move(packet_vec)),
                                                                                                   packet_vec_capacity(packet_vec_capacity),
                                                                                                   mtx(std::move(mtx)),
@@ -3531,7 +3535,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void push(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -3557,7 +3561,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_capacity) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 auto less       = [](const Packet& lhs, const Packet& rhs){return lhs.priority < rhs.priority;};
                 sz              = std::min(output_pkt_arr_capacity, this->packet_vec.size());
@@ -3585,7 +3589,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             dg::vector<ScheduledPacket> packet_vec;
             std::shared_ptr<SchedulerInterface> scheduler;
             size_t packet_vec_capacity;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load; 
 
         public:
@@ -3593,7 +3597,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             ScheduledPacketContainer(dg::vector<ScheduledPacket> packet_vec, 
                                      std::shared_ptr<SchedulerInterface> scheduler,
                                      size_t packet_vec_capacity,
-                                     std::unique_ptr<std::mutex> mtx,
+                                     std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                      stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_vec(std::move(packet_vec)),
                                                                                                 scheduler(std::move(scheduler)),
                                                                                                 packet_vec_capacity(packet_vec_capacity),
@@ -3602,7 +3606,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void push(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -3638,7 +3642,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_capacity) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 auto greater    = [](const ScheduledPacket& lhs, const ScheduledPacket& rhs){return lhs.sched_time > rhs.sched_time;};
                 auto time_bar   = std::chrono::utc_clock::now();
@@ -3849,7 +3853,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue;
             dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue;
             size_t feed_vectorization_sz;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
@@ -3860,7 +3864,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                           dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue,
                                           dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue,
                                           size_t feed_vectorization_sz,
-                                          std::unique_ptr<std::mutex> mtx,
+                                          std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                           size_t consume_sz_per_load) noexcept: normal_packet_queue(std::move(normal_packet_queue)),
                                                                                 ack_packet_queue(std::move(ack_packet_queue)),
                                                                                 rescue_packet_queue(std::move(rescue_packet_queue)),
@@ -3906,7 +3910,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 bool smp_responsibility = {};  
 
                 [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->leftover_queue.empty()){
                         pkt_vec                     = std::move(this->leftover_queue.front());
@@ -3969,13 +3973,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
                 }
 
+                semaphore_impl::dg_binary_semaphore * waiting_queue_smp = nullptr; 
+
                 sz                  = std::min(output_pkt_arr_cap, static_cast<size_t>(pkt_vec->size()));
                 size_t remaining_sz = pkt_vec->size() - sz; 
                 std::copy(std::next(std::make_move_iterator(pkt_vec->begin()), remaining_sz), std::make_move_iterator(pkt_vec->end()), output_pkt_arr);
                 pkt_vec->resize(remaining_sz);
 
                 if (!pkt_vec->empty()){
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if constexpr(DEBUG_MODE_FLAG){
                         if (this->leftover_queue.size() == this->leftover_queue.capacity()){
@@ -3988,10 +3994,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         auto [dst, smp] = this->waiting_queue.front();
                         this->waiting_queue.pop_front();
                         *dst = std::move(pkt_vec.value()); 
-                        smp->release();
+                        waiting_queue_smp = smp;
                     } else{
                         dg::network_exception_handler::nothrow_log(this->leftover_queue.push_back(std::move(pkt_vec.value())));
                     }
+                }
+
+                if (waiting_queue_smp != nullptr)
+                {
+                    waiting_queue_smp->release();
                 }
             }
 
@@ -4013,7 +4024,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::pow2_cyclic_queue<dg::vector<Packet>> * ack_packet_queue;
                 dg::pow2_cyclic_queue<dg::vector<Packet>> * rescue_packet_queue;
                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> * waiting_queue;
-                std::mutex * queue_mtx;
+                stdx::fair_atomic_flag * queue_mtx;
 
                 void push(const types::packet_polymorphic_t& key, std::move_iterator<InternalPushFeedArgument *> data_arr, size_t sz) noexcept{
 
@@ -4035,7 +4046,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     //I aint shitting, this is hard to write
 
                     exception_t err = [&, this]() noexcept{
-                        stdx::xlock_guard<std::mutex> lck_grd(*this->queue_mtx);
+                        stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->queue_mtx);
 
                         if (!this->waiting_queue->empty()){
                             auto [fetching_addr, smp]   = this->waiting_queue->front();
@@ -4165,7 +4176,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             dg::pow2_cyclic_queue<dg::vector<Packet>> packet_queue;
             dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue;
             dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
@@ -4173,7 +4184,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             FairInBoundPacketContainer(dg::pow2_cyclic_queue<dg::vector<Packet>> packet_queue,
                                        dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue,
                                        dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue,
-                                       std::unique_ptr<std::mutex> mtx,
+                                       std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                        size_t consume_sz_per_load) noexcept: packet_queue(std::move(packet_queue)),
                                                                              waiting_queue(std::move(waiting_queue)),
                                                                              leftover_queue(std::move(leftover_queue)),
@@ -4198,7 +4209,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 semaphore_impl::dg_binary_semaphore * releasing_smp = nullptr;
 
                 exception_t err = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->waiting_queue.empty()){
                         auto [dst, smp] = this->waiting_queue.front();
@@ -4238,7 +4249,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 semaphore_impl::dg_binary_semaphore smp(0);
 
                 bool is_acquire_required = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->leftover_queue.empty()){
                         pkt_vec = std::move(this->leftover_queue.front());
@@ -4270,7 +4281,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 pkt_vec->resize(rem_sz);
 
                 if (!pkt_vec->empty()){
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
                     
                     if (!this->waiting_queue.empty()){
                         auto [dst, smp] = this->waiting_queue.front();
@@ -4295,20 +4306,20 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         private:
 
             data_structure::temporal_finite_unordered_set<global_packet_id_t> id_hashset;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
             InBoundIDController(data_structure::temporal_finite_unordered_set<global_packet_id_t> id_hashset,
-                                std::unique_ptr<std::mutex> mtx,
+                                std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                 stdx::hdi_container<size_t> consume_sz_per_load) noexcept: id_hashset(std::move(id_hashset)),
                                                                                            mtx(std::move(mtx)),
                                                                                            consume_sz_per_load(std::move(consume_sz_per_load)){}
 
             void thru(global_packet_id_t * packet_id_arr, size_t sz, std::expected<bool, exception_t> * op) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -4601,7 +4612,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             dg::unordered_set<Address> thru_ip_set;
             dg::unordered_set<Address> inbound_ip_side_set;
             size_t inbound_ip_side_set_cap;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
@@ -4611,7 +4622,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                     dg::unordered_set<Address> thru_ip_set,
                                     dg::unordered_set<Address> inbound_ip_side_set,
                                     size_t inbound_ip_side_set_cap,
-                                    std::unique_ptr<std::mutex> mtx,
+                                    std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                     stdx::hdi_container<size_t> consume_sz_per_load) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
                                                                                                traffic_controller(std::move(traffic_controller)),
                                                                                                thru_ip_set(std::move(thru_ip_set)),
@@ -4622,7 +4633,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void thru(Address * addr_arr, size_t sz, exception_t * response_exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 std::expected<size_t, exception_t> insert_sz = utility::finite_set_insert(this->inbound_ip_side_set, this->inbound_ip_side_set_cap, 
                                                                                           addr_arr, std::next(addr_arr, sz)); 
@@ -4664,7 +4675,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void update() noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> ibapp_exception_arr(this->inbound_ip_side_set.size());
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> ibapp_ip_arr(this->inbound_ip_side_set.size());
@@ -4701,7 +4712,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller;
             dg::unordered_set<Address> outbound_ip_side_set;
             size_t outbound_ip_side_set_cap; //TODOs: bug_control next iteration
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
@@ -4710,7 +4721,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                      std::unique_ptr<packet_controller::TrafficControllerInterface> traffic_controller,
                                      dg::unordered_set<Address> outbound_ip_side_set,
                                      size_t outbound_ip_side_set_cap,
-                                     std::unique_ptr<std::mutex> mtx,
+                                     std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                      stdx::hdi_container<size_t> consume_sz_per_load) noexcept: nat_ip_controller(std::move(nat_ip_controller)),
                                                                                                 traffic_controller(std::move(traffic_controller)),
                                                                                                 outbound_ip_side_set(std::move(outbound_ip_side_set)),
@@ -4720,7 +4731,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void thru(Address * addr_arr, size_t sz, exception_t * response_exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 std::expected<size_t, exception_t> insert_sz = utility::finite_set_insert(this->outbound_ip_side_set, this->outbound_ip_side_set_cap, 
                                                                                           addr_arr, std::next(addr_arr, sz));
@@ -4757,7 +4768,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void update() noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> obapp_exception_arr(this->outbound_ip_side_set.size());
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> obapp_ip_arr(this->outbound_ip_side_set.size());
@@ -4966,19 +4977,19 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             std::unique_ptr<external_interface::NATIPControllerInterface> punch_controller;
             std::unique_ptr<external_interface::NATIPControllerInterface> friend_controller;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
 
         public:
 
             NATIPController(std::unique_ptr<external_interface::NATIPControllerInterface> punch_controller,
                             std::unique_ptr<external_interface::NATIPControllerInterface> friend_controller,
-                            std::unique_ptr<std::mutex> mtx) noexcept: punch_controller(std::move(punch_controller)),
+                            std::unique_ptr<stdx::fair_atomic_flag> mtx) noexcept: punch_controller(std::move(punch_controller)),
                                                                        friend_controller(std::move(friend_controller)),
                                                                        mtx(std::move(mtx)){}
 
             void add_inbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> punch_exception_arr(sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> friend_exception_arr(sz);
@@ -5001,7 +5012,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void add_outbound(Address * addr_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> punch_exception_arr(sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> friend_exception_arr(sz);
@@ -5024,7 +5035,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             void get_inbound_friend_addr(Address * output, size_t off, size_t& sz, size_t cap) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
                 size_t punch_controller_sz = this->punch_controller->get_inbound_friend_addr_iteration_size();
 
                 if (off < punch_controller_sz){
@@ -5049,13 +5060,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get_inbound_friend_addr_iteration_size() noexcept -> size_t{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
                 return this->punch_controller->get_inbound_friend_addr_iteration_size() + this->friend_controller->get_inbound_friend_addr_iteration_size();
             }
 
             void get_outbound_friend_addr(Address * output, size_t off, size_t& sz, size_t cap) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
                 size_t punch_controller_sz = this->punch_controller->get_outbound_friend_addr_iteration_size();
 
                 if (off < punch_controller_sz){                    
@@ -5080,7 +5091,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get_outbound_friend_addr_iteration_size() noexcept -> size_t{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
                 return this->punch_controller->get_outbound_friend_addr_iteration_size() + this->friend_controller->get_outbound_friend_addr_iteration_size();
             }
 
@@ -5276,7 +5287,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                              std::move(delay_negotiator),
                                                                              ticking_clock_resolution,
                                                                              max_retransmission_sz,
-                                                                             std::make_unique<std::mutex>(),
+                                                                             stdx::make_unique_fair_atomic_flag(),
                                                                              consume_sz);
         }
 
@@ -5322,7 +5333,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                               transmission_delay,
                                                               max_retransmission_sz,
                                                               retransmission_queue_cap,
-                                                              std::make_unique<std::mutex>(),
+                                                              stdx::make_unique_fair_atomic_flag(),
                                                               stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -5429,7 +5440,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<dg::string>(stdx::ulog2(stdx::ceil2(buffer_capacity))),
                                                          buffer_capacity,
-                                                         std::make_unique<std::mutex>(),
+                                                         stdx::make_unique_fair_atomic_flag(),
                                                          stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -5558,7 +5569,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
                                                                 dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
-                                                                std::make_unique<std::mutex>(),
+                                                                stdx::make_unique_fair_atomic_flag(),
                                                                 normalized_consume_sz);
         }
 
@@ -5579,7 +5590,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             return std::make_unique<PrioritizedPacketContainer>(std::move(vec),
                                                                 heap_capacity,
-                                                                std::make_unique<std::mutex>(),
+                                                                stdx::make_unique_fair_atomic_flag(),
                                                                 stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -5598,7 +5609,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             return std::make_unique<PacketFIFOContainer>(dg::pow2_cyclic_queue<Packet>(stdx::ulog2(stdx::ceil2(packet_vec_capacity))),
                                                          packet_vec_capacity,
-                                                         std::make_unique<std::mutex>(),
+                                                         stdx::make_unique_fair_atomic_flag(),
                                                          stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -5625,7 +5636,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<ScheduledPacketContainer>(std::move(vec), 
                                                               std::move(scheduler),
                                                               packet_vec_capacity,
-                                                              std::make_unique<std::mutex>(),
+                                                              stdx::make_unique_fair_atomic_flag(),
                                                               stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -5698,7 +5709,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                    dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_capacity))),
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(leftover_queue_capacity))),
                                                                    accum_sz,
-                                                                   std::make_unique<std::mutex>(),
+                                                                   stdx::make_unique_fair_atomic_flag(),
                                                                    normalized_consume_sz);
         }
 
@@ -5732,7 +5743,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             return std::make_unique<FairInBoundPacketContainer>(dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(packet_vec_queue_capacity))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_capacity))),
                                                                 dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(leftover_queue_capacity))),
-                                                                std::make_unique<std::mutex>(),
+                                                                stdx::make_unique_fair_atomic_flag(),
                                                                 normalized_consume_sz);
         }
 
@@ -5824,7 +5835,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             size_t consume_sz               = std::max(tentative_consume_sz, size_t{1u});
 
             return std::make_unique<InBoundIDController>(data_structure::temporal_finite_unordered_set<global_packet_id_t>(idhashset_cap), 
-                                                         std::make_unique<std::mutex>(),
+                                                         stdx::make_unique_fair_atomic_flag(),
                                                          stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -5936,7 +5947,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                              std::move(thru_ip_set),
                                                              std::move(inbound_ip_side_set),
                                                              side_update_buf_capacity,
-                                                             std::make_unique<std::mutex>(),
+                                                             stdx::make_unique_fair_atomic_flag(),
                                                              stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -5968,7 +5979,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                               get_synchronous_traffic_controller(peraddr_capacity, global_capacity, addr_capacity),
                                                               std::move(outbound_ip_side_set),
                                                               side_update_buf_capacity,
-                                                              std::make_unique<std::mutex>(),
+                                                              stdx::make_unique_fair_atomic_flag(),
                                                               stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -6031,7 +6042,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             
             return std::make_unique<NATIPController>(get_synchronous_natpunch_ip_controller(inbound_set_capacity, outbound_set_capacity),
                                                      get_synchronous_natfriend_ip_controller(inbound_rule, outbound_rule, inbound_set_capacity, outbound_set_capacity),
-                                                     std::make_unique<std::mutex>());
+                                                     stdx::make_unique_fair_atomic_flag());
         }
 
         static auto get_exhaustion_controlled_packet_container(std::unique_ptr<PacketContainerInterface> base, 
@@ -7825,6 +7836,40 @@ namespace dg::network_kernel_mailbox_impl1::core{
     };
 }
 
+namespace dg::network_kernel_mailbox_impl1::external_extension{
+
+    class SockTrafficAdapter : public virtual external_interface::NetworkBusyStatusRetrieverInterface{
+
+        public:
+
+            using busy_level_t =  external_interface::NetworkBusyStatusRetrieverInterface::busy_level_t;
+
+            auto get() noexcept -> std::expected<busy_level_t, exception_t>{
+
+                using traffic_t = dg::network_sock_traffic_status_controller::types::traffic_status_t;
+
+                traffic_t inbound_traffic_status    = dg::network_sock_traffic_status_controller::get_inbound_status();
+                traffic_t outbound_traffic_status   = dg::network_sock_traffic_status_controller::get_outbound_status();
+
+                if (inbound_traffic_status == dg::network_sock_traffic_status_controller::constants::congested
+                    && outbound_traffic_status == dg::network_sock_traffic_status_controller::constants::congested){
+
+                    return external_interface::NetworkBusyStatusRetrieverInterface::BUSY_2;
+                }
+
+                return external_interface::NetworkBusyStatusRetrieverInterface::BUSY_0;
+            }
+    };
+
+    struct ComponentFactory
+    {
+        static auto get_network_busy_status_retriever_from_sock_traffic_status_controller() -> std::unique_ptr<external_interface::NetworkBusyStatusRetrieverInterface>{
+
+            return std::make_unique<SockTrafficAdapter>();
+        } 
+    };
+}
+
 namespace dg::network_kernel_mailbox_impl1{
 
     //alright we are to offload this to testing team (which is our team)
@@ -7924,6 +7969,11 @@ namespace dg::network_kernel_mailbox_impl1{
         std::shared_ptr<external_interface::NetworkBusyStatusRetrieverInterface> busy_retriever;
         std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> retry_device;
     };
+
+    extern auto get_network_busy_status_retriever_from_sock_traffic_status_controller() -> std::unique_ptr<external_interface::NetworkBusyStatusRetrieverInterface>{
+
+        return external_extension::ComponentFactory::get_network_busy_status_retriever_from_sock_traffic_status_controller();
+    }
 
     extern auto get_default_natip_controller(std::shared_ptr<external_interface::IPSieverInterface> inbound_rule,
                                              std::shared_ptr<external_interface::IPSieverInterface> outbound_rule,

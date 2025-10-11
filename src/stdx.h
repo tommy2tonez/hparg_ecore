@@ -318,9 +318,11 @@ namespace stdx{
 
     static inline constexpr size_t SPINLOCK_SIZE_MAGIC_VALUE                                    = 16u;
     static inline constexpr size_t EXPBACKOFF_MUTEX_SPINLOCK_SIZE                               = 16u; 
-
+    static inline constexpr size_t EXPBACKOFF_FAIR_AF_YIELD_SPINLOCK_SIZE                       = 128u;
     static inline constexpr std::chrono::nanoseconds EXPBACKOFF_DEFAULT_SPIN_PERIOD             = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
     static inline constexpr std::chrono::nanoseconds EXPBACKOFF_MUTEX_SPIN_PERIOD               = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
+    static inline constexpr std::chrono::nanoseconds EXPBACKOFF_FAIR_AF_YIELD_SPIN_PERIOD       = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(10));
+    static inline const std::thread::id NULL_THREAD_ID                                          = std::bit_cast<std::thread::id>(14422289045101533236ULL);
 
     using spin_lock_t = std::conditional_t<IS_ATOMIC_FLAG_AS_SPINLOCK,
                                            std::atomic_flag,
@@ -348,6 +350,42 @@ namespace stdx{
 
     //recall the eqn: x^0 + x^1 + x^n = f(x) = (x^ (n + 1) - 1) / (x - 1)
     //we are to find x
+
+    struct fair_atomic_flag
+    {
+        std::atomic_flag atomic_flag;
+        std::atomic<std::thread::id> yield_thr_id;
+        std::atomic<size_t> busy_waiter_sz;
+    };
+
+    auto make_fair_atomic_flag(bool value = false) noexcept -> fair_atomic_flag{
+
+        return fair_atomic_flag{
+            .atomic_flag    = std::atomic_flag(value),
+            .yield_thr_id   = std::atomic<std::thread::id>(NULL_THREAD_ID),
+            .busy_waiter_sz = std::atomic<size_t>(0u) 
+        };
+    }
+
+    auto inplace_make_fair_atomic_flag(fair_atomic_flag& atomic_flag, bool value = false) noexcept{
+
+        if (value){
+            atomic_flag.atomic_flag.test_and_set();
+        } else{
+            atomic_flag.atomic_flag.clear();
+        }
+
+        atomic_flag.yield_thr_id.exchange(NULL_THREAD_ID);
+        atomic_flag.busy_waiter_sz.exchange(0u);
+    }
+
+    auto make_unique_fair_atomic_flag(bool value = false) -> std::unique_ptr<fair_atomic_flag>{
+
+        auto rs = std::make_unique<fair_atomic_flag>();
+        inplace_make_fair_atomic_flag(*rs);
+
+        return rs;
+    }
 
     template <class Lambda>
     inline bool eventloop_expbackoff_spin(Lambda&& lambda, 
@@ -406,6 +444,98 @@ namespace stdx{
     inline void busy_wait(Lambda&& lambda){
 
     } 
+
+    inline __attribute__((always_inline)) bool fair_atomic_flag_memsafe_try_lock(fair_atomic_flag * volatile mtx) noexcept{
+
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+
+        bool is_success = mtx->atomic_flag.test_and_set(std::memory_order_relaxed) == false;
+
+        if (!is_success){
+            return false;
+        }
+
+        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            std::atomic_thread_fence(std::memory_order_acquire);
+        }
+    }
+
+    inline __attribute__((always_inline)) void fair_atomic_flag_memsafe_lock(fair_atomic_flag * volatile mtx){
+
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+
+        auto yield_job = [&]() noexcept{
+            return mtx->yield_thr_id.load(std::memory_order_relaxed) != std::this_thread::get_id();
+        };
+
+        eventloop_expbackoff_spin(yield_job, EXPBACKOFF_FAIR_AF_YIELD_SPINLOCK_SIZE, EXPBACKOFF_FAIR_AF_YIELD_SPIN_PERIOD);
+
+        auto job = [&]() noexcept{
+            return mtx->atomic_flag.test_and_set(std::memory_order_relaxed) == false;
+        };
+
+        size_t busy_waiter_sz = mtx->busy_waiter_sz.load(std::memory_order_relaxed);
+
+        if (busy_waiter_sz == 0u){
+            if (!job()){
+                while (true){
+                    if (eventloop_expbackoff_spin(job, EXPBACKOFF_MUTEX_SPINLOCK_SIZE, EXPBACKOFF_MUTEX_SPIN_PERIOD)){
+                        break;
+                    }
+
+                    mtx->busy_waiter_sz.fetch_add(1u, std::memory_order_relaxed);
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    mtx->atomic_flag.wait(true, std::memory_order_relaxed);
+                    mtx->busy_waiter_sz.fetch_sub(1u, std::memory_order_relaxed);
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                }
+            }
+        } else{
+            while (true){
+                mtx->busy_waiter_sz.fetch_add(1u, std::memory_order_relaxed);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+                mtx->atomic_flag.wait(true, std::memory_order_relaxed);
+                mtx->busy_waiter_sz.fetch_sub(1u, std::memory_order_relaxed);
+                std::atomic_signal_fence(std::memory_order_seq_cst);
+
+                if (eventloop_expbackoff_spin(job, EXPBACKOFF_MUTEX_SPINLOCK_SIZE, EXPBACKOFF_MUTEX_SPIN_PERIOD)){
+                    break;
+                }
+            }
+        }
+
+        mtx->yield_thr_id.exchange(NULL_THREAD_ID, std::memory_order_relaxed);
+
+        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            std::atomic_thread_fence(std::memory_order_acquire);
+        }
+    }
+
+    inline __attribute__((always_inline)) void fair_atomic_flag_memsafe_unlock(fair_atomic_flag * volatile mtx){
+
+        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            std::atomic_thread_fence(std::memory_order_release);
+        }
+
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        size_t busy_waiter_sz = mtx->busy_waiter_sz.load(std::memory_order_relaxed);
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+
+        if (busy_waiter_sz > 0u){
+            mtx->yield_thr_id.exchange(std::this_thread::get_id(), std::memory_order_relaxed);
+            std::atomic_signal_fence(std::memory_order_seq_cst);
+        }
+
+        mtx->atomic_flag.clear(std::memory_order_relaxed);
+        mtx->atomic_flag.notify_one();
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+    }
 
     inline __attribute__((always_inline)) bool atomic_flag_memsafe_try_lock(std::atomic_flag * volatile mtx) noexcept{
 
@@ -504,6 +634,35 @@ namespace stdx{
     };
 
     template <>
+    class xlock_guard_base<stdx::fair_atomic_flag>{
+
+        private:
+
+            stdx::fair_atomic_flag * volatile mtx;
+
+        public:
+
+            using self = xlock_guard_base;
+
+            inline __attribute__((always_inline)) xlock_guard_base(stdx::fair_atomic_flag& mtx) noexcept: mtx(&mtx){
+
+                fair_atomic_flag_memsafe_lock(this->mtx);
+            }
+
+            xlock_guard_base(const self&) = delete;
+            xlock_guard_base(self&&) = delete;
+
+            inline __attribute__((always_inline)) ~xlock_guard_base() noexcept{
+
+                fair_atomic_flag_memsafe_unlock(this->mtx);
+            }
+
+            self& operator =(const self&) = delete;
+            self& operator =(self&&) = delete;
+            
+    };
+
+    template <>
     class xlock_guard_base<std::mutex>{
 
         private:
@@ -537,6 +696,11 @@ namespace stdx{
     template <>
     struct xlock_guard_chooser<std::atomic_flag>{
         using type = xlock_guard_base<std::atomic_flag>;
+    };
+
+    template <>
+    struct xlock_guard_chooser<stdx::fair_atomic_flag>{
+        using type = xlock_guard_base<stdx::fair_atomic_flag>;
     };
 
     template <>

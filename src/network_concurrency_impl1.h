@@ -362,7 +362,7 @@ namespace dg::network_concurrency_impl1::planner{
                 if (high_compute_core_count + high_parallel_core_count != core_count){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
-
+                
                 for (size_t i = 0u; i < high_compute_core_count; ++i){
                     high_compute_plan_maker.set_core(this->core_group->operator[](i), 1);
                 }
@@ -375,7 +375,7 @@ namespace dg::network_concurrency_impl1::planner{
                                                                  .set_cpu_usage(COMPUTING_DAEMON, this->computing_cpu_usage.value())
                                                                  .set_cpu_usage(IO_DAEMON, this->kernel_io_cpu_usage.value())
                                                                  .make_plan();
-                
+
                 auto high_parallel_plan = high_parallel_plan_maker.set_thread_per_core(this->high_parallel_thr_per_core.value())
                                                                   .set_cpu_usage(TRANSPORTATION_DAEMON, this->transportation_cpu_usage.value())
                                                                   .set_cpu_usage(HEARTBEAT_DAEMON, this->heartbeat_cpu_usage.value())
@@ -423,7 +423,7 @@ namespace dg::network_concurrency_impl1::planner{
                                                       .set_high_compute_hyperthread_per_core(config.high_compute_hyperthread_per_core)
                                                       .set_core_group(config.uniform_affine_group)
                                                       .make_plan();
-        
+
         for (auto thr_metadata: vectorize_plan(plan)){
             auto [daemon_kind, cpuset] = thr_metadata;
             std::unique_ptr<dg::network_concurrency_impl1::DaemonDedicatedRunnerInterface> runner{};
