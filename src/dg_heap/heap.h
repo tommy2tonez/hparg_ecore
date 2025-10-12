@@ -33,8 +33,8 @@
 
 namespace dg::heap::limits{
 
-    static inline const auto MIN_HEAP_HEIGHT         = uint8_t{12};
-    static inline const auto MAX_HEAP_HEIGHT         = uint8_t{12};
+    static inline const auto MIN_HEAP_HEIGHT         = uint8_t{2};
+    static inline const auto MAX_HEAP_HEIGHT         = uint8_t{2};
     static inline const auto EXCL_MAX_HEAP_HEIGHT    = uint8_t{MAX_HEAP_HEIGHT + 1};
 }
 

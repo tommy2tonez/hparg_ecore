@@ -17,6 +17,7 @@
 namespace dg::network_concurrency{
 
     static inline constexpr size_t THREAD_COUNT = 32u;
+    static inline constexpr size_t MAX_THREAD_COUNT = 10000u;
 
     using namespace dg::network_concurrency_impl1::daemon_option_ns;
     using WorkerInterface = dg::network_concurrency_impl1::WorkerInterface; 
@@ -52,6 +53,11 @@ namespace dg::network_concurrency{
     extern void deinit() noexcept{
 
         delete concurrency_resource;
+    }
+
+    extern auto get_thread_count() noexcept -> size_t{
+
+        return concurrency_resource->thrid_to_idx_map.size();
     }
 
     extern auto this_thread_idx() noexcept -> size_t{

@@ -86,14 +86,14 @@ namespace dg::network_allocation{
 
         private:
 
-            dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<DeferDeallocationArgument> defer_dealloc_arg_queue;
-            dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<std::pair<std::binary_semaphore *, DeferDeallocationArgument *>> waiting_queue;
+            std::unique_ptr<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<DeferDeallocationArgument>> defer_dealloc_arg_queue;
+            std::unique_ptr<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<std::pair<std::binary_semaphore *, DeferDeallocationArgument *>>> waiting_queue;
             std::unique_ptr<std::mutex> mtx;
         
         public:
 
-            DeferDeallocationContainer(dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<DeferDeallocationArgument> defer_dealloc_arg_queue,
-                                       dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<std::pair<std::binary_semaphore *, DeferDeallocationArgument *>> waiting_queue,
+            DeferDeallocationContainer(std::unique_ptr<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<DeferDeallocationArgument>> defer_dealloc_arg_queue,
+                                       std::unique_ptr<dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<std::pair<std::binary_semaphore *, DeferDeallocationArgument *>>> waiting_queue,
                                        std::unique_ptr<std::mutex> mtx) noexcept: defer_dealloc_arg_queue(std::move(defer_dealloc_arg_queue)),
                                                                                   waiting_queue(std::move(waiting_queue)),
                                                                                   mtx(std::move(mtx)){}
@@ -106,20 +106,20 @@ namespace dg::network_allocation{
 
                 stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                if (!this->waiting_queue.empty()){
-                    auto [pending_smp, fetching_arg] = waiting_queue.front();
-                    waiting_queue.pop_front();
+                if (!this->waiting_queue->empty()){
+                    auto [pending_smp, fetching_arg] = waiting_queue->front();
+                    waiting_queue->pop_front();
                     *fetching_arg = std::move(defer_arg);
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     pending_smp->release(); //
                     return dg::network_exception::SUCCESS;
                 }
 
-                if (this->defer_dealloc_arg_queue.size() == this->defer_dealloc_arg_queue.capacity()){
+                if (this->defer_dealloc_arg_queue->size() == this->defer_dealloc_arg_queue->capacity()){
                     return dg::network_exception::QUEUE_FULL;
                 }
 
-                this->defer_dealloc_arg_queue.push_back(std::move(defer_arg));
+                this->defer_dealloc_arg_queue->push_back(std::move(defer_arg));
                 return dg::network_exception::SUCCESS;
             }
 
@@ -131,17 +131,17 @@ namespace dg::network_allocation{
                 while (true){
                     stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
 
-                    if (!this->defer_dealloc_arg_queue.empty()){
-                        auto rs = std::move(this->defer_dealloc_arg_queue.front());
-                        this->defer_dealloc_arg_queue.pop_front();
+                    if (!this->defer_dealloc_arg_queue->empty()){
+                        auto rs = std::move(this->defer_dealloc_arg_queue->front());
+                        this->defer_dealloc_arg_queue->pop_front();
                         return rs;
                     }
 
-                    if (this->waiting_queue.size() == this->waiting_queue.capacity()){
+                    if (this->waiting_queue->size() == this->waiting_queue->capacity()){
                         continue;
                     }
 
-                    this->waiting_queue.push_back(std::make_pair(&smp, &defer_arg));
+                    this->waiting_queue->push_back(std::make_pair(&smp, &defer_arg));
                     break;
                 }
 

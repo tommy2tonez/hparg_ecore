@@ -683,7 +683,13 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr nontrivial_pow2_cyclic_queue(self&& other) noexcept(true){
 
-                *this = std::move(other);
+                this->data_arr  = std::move(other.data_arr);
+                this->off       = other.off;
+                this->sz        = other.sz;
+                this->cap       = other.cap;
+                other.off       = 0u;
+                other.sz        = 0u;
+                other.cap       = 0u;
             }
 
             constexpr ~nontrivial_pow2_cyclic_queue() noexcept{
@@ -696,6 +702,7 @@ namespace dg::network_datastructure::cyclic_queue{
                 if (this == std::addressof(other)){
                     return *this;
                 }
+
 
                 auto proxy = self(stdx::ulog2(other.data_arr.size()));
 
@@ -3127,7 +3134,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto contains(const KeyLike& key) const noexcept(true) -> bool{
 
-                return this->find(key) != this->end();
+                return this->find(key) != this->cend();
             }
 
             template <class KeyLike>
@@ -3188,7 +3195,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             constexpr auto begin() const noexcept -> const_iterator{
 
-                return const_iterator(this->nofancy_begin());
+                return const_iterator(this->nofancy_cbegin());
             }
 
             constexpr auto cbegin() const noexcept -> const_iterator{
@@ -3198,7 +3205,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             constexpr auto end() const noexcept -> const_iterator{
 
-                return const_iterator(this->nofancy_end());
+                return const_iterator(this->nofancy_cend());
             }
 
             constexpr auto cend() const noexcept -> const_iterator{

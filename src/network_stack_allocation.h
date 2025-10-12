@@ -36,6 +36,7 @@ namespace dg::network_stack_allocation{
                 }
 
                 this->stack_cursor_vec.push_back(this->cursor);
+
                 return dg::network_exception::SUCCESS;
             }
 
@@ -120,7 +121,7 @@ namespace dg::network_stack_allocation{
 
             std::vector<std::unique_ptr<StackAllocator>> stack_allocator_vec{};
 
-            for (size_t i = 0u; i < dg::network_concurrency::THREAD_COUNT; ++i){
+            for (size_t i = 0u; i < dg::network_concurrency::get_thread_count(); ++i){
                 stack_allocator_vec.push_back(spawn_stack_allocator(scope_size, buf_sz));
             }
 
@@ -359,8 +360,8 @@ namespace dg::network_stack_allocation{
             self& operator =(const self&) = delete;
             self& operator =(self&&) = delete;
 
-            ~RawAllocation() noexcept{
-
+            __attribute__((noipa)) ~RawAllocation() noexcept{
+                
                 if (this->arr == nullptr){ //!arr
                     return;
                 }

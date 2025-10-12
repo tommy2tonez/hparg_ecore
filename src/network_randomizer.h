@@ -29,7 +29,7 @@ namespace dg::network_randomizer{
             static inline std::vector<RandomizationUnit> table = []{
                 std::vector<RandomizationUnit> rs{};
 
-                for (size_t i = 0u; i < dg::network_concurrency::THREAD_COUNT; ++i){
+                for (size_t i = 0u; i < dg::network_concurrency::MAX_THREAD_COUNT; ++i){
                     size_t seed = std::chrono::high_resolution_clock::now().time_since_epoch().count(); 
                     std::mt19937_64 randomizer{seed};
                     rs.push_back(RandomizationUnit{randomizer(), sizeof(uint64_t) * CHAR_BIT, randomizer});
@@ -40,7 +40,7 @@ namespace dg::network_randomizer{
 
             static inline void re_randomize(RandomizationUnit& random_unit) noexcept{
 
-                random_unit.value           = random_unit.randomizer();
+                random_unit.value           = static_cast<std::mt19937_64&>(random_unit.randomizer)();
                 random_unit.bit_precision   = sizeof(uint64_t) * CHAR_BIT;
             }
 
@@ -58,9 +58,9 @@ namespace dg::network_randomizer{
                     re_randomize(unit);
                 }
 
-                uint64_t ret_value  = stdx::low_bit<BIT_SIZE>(ret_value);
+                uint64_t ret_value  = stdx::low_bit<BIT_SIZE>(unit.value);
                 unit.bit_precision  -= BIT_SIZE;
-                unit.value          >>= BIT_SIZE;;
+                unit.value          >>= BIT_SIZE;
 
                 return ret_value;
             }

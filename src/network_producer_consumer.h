@@ -433,7 +433,9 @@ namespace dg::network_producer_consumer{
 
         size_t sz       = 0u;
         size_t cap      = buf_sz;        
-        auto resource   = BumpAllocatorResource{buf, sz, cap};
+        auto resource   = BumpAllocatorResource{.head   = (buf_sz != 0u) ? buf : std::add_pointer_t<char>(nullptr),
+                                                .sz     = sz,
+                                                .cap    = cap};
 
         return network_producer_consumer::inplace_construct<BumpAllocatorResource>(std::next(buf, buf_sz), resource);
     }

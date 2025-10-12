@@ -367,7 +367,7 @@ namespace dg::network_log{
 
     void error_fast_optional(const char * what) noexcept{
 
-        logger->error_fast_optional(what);
+        // logger->error_fast_optional(what);
     }
 
     void journal(const char * what) noexcept{
@@ -461,8 +461,8 @@ namespace dg::network_log_stackdump{
 
     void error_fast_optional(const char * what) noexcept{
 
-        auto new_what = add_stack_trace(what);
-        network_log::error_fast_optional(new_what.c_str());
+        // auto new_what = add_stack_trace(what);
+        // network_log::error_fast_optional(new_what.c_str());
     }
 
     void error_fast_optional() noexcept{

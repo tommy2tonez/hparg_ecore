@@ -449,20 +449,33 @@ namespace stdx{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
+        if (mtx->yield_thr_id.load(std::memory_order_relaxed) == std::this_thread::get_id()){
+            return false;
+        }
+
         bool is_success = mtx->atomic_flag.test_and_set(std::memory_order_relaxed) == false;
 
         if (!is_success){
             return false;
         }
 
+        mtx->yield_thr_id.exchange(NULL_THREAD_ID, std::memory_order_relaxed);
+
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
         } else{
             std::atomic_thread_fence(std::memory_order_acquire);
         }
+
+        return true;
     }
 
-    inline __attribute__((always_inline)) void fair_atomic_flag_memsafe_lock(fair_atomic_flag * volatile mtx){
+    inline __attribute__((always_inline)) auto try_lock(fair_atomic_flag& mtx, std::memory_order) noexcept -> bool{
+
+        return fair_atomic_flag_memsafe_try_lock(&mtx);
+    }
+
+    inline __attribute__((noinline)) void fair_atomic_flag_memsafe_lock_body(fair_atomic_flag * volatile mtx){
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
@@ -507,6 +520,11 @@ namespace stdx{
         }
 
         mtx->yield_thr_id.exchange(NULL_THREAD_ID, std::memory_order_relaxed);
+    }
+
+    inline __attribute__((always_inline)) void fair_atomic_flag_memsafe_lock(fair_atomic_flag * volatile mtx){
+
+        fair_atomic_flag_memsafe_lock_body(mtx);
 
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -515,15 +533,8 @@ namespace stdx{
         }
     }
 
-    inline __attribute__((always_inline)) void fair_atomic_flag_memsafe_unlock(fair_atomic_flag * volatile mtx){
+    inline __attribute__((noinline)) void fair_atomic_flag_memsafe_unlock_body(fair_atomic_flag * volatile mtx){
 
-        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-            std::atomic_thread_fence(std::memory_order_seq_cst);
-        } else{
-            std::atomic_thread_fence(std::memory_order_release);
-        }
-
-        std::atomic_signal_fence(std::memory_order_seq_cst);
         size_t busy_waiter_sz = mtx->busy_waiter_sz.load(std::memory_order_relaxed);
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
@@ -534,6 +545,17 @@ namespace stdx{
 
         mtx->atomic_flag.clear(std::memory_order_relaxed);
         mtx->atomic_flag.notify_one();
+    }
+
+    inline __attribute__((always_inline)) void fair_atomic_flag_memsafe_unlock(fair_atomic_flag * volatile mtx){
+
+        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+        } else{
+            std::atomic_thread_fence(std::memory_order_release);
+        }
+
+        fair_atomic_flag_memsafe_unlock_body(mtx);
         std::atomic_signal_fence(std::memory_order_seq_cst);
     }
 
@@ -760,6 +782,31 @@ namespace stdx{
             inline __attribute__((always_inline)) ~unlock_guard() noexcept{
 
                 atomic_flag_memsafe_unlock(this->mtx);
+            }
+
+            self& operator =(const self&) = delete;
+            self& operator =(self&&) = delete;
+    };
+
+    template <>
+    class unlock_guard<stdx::fair_atomic_flag>{
+
+        private:
+
+            stdx::fair_atomic_flag * volatile mtx;
+
+        public:
+
+            using self = unlock_guard;
+
+            inline __attribute__((always_inline)) unlock_guard(stdx::fair_atomic_flag& mtx) noexcept: mtx(&mtx){}
+
+            unlock_guard(const self&) = delete;
+            unlock_guard(self&&) = delete;
+
+            inline __attribute__((always_inline)) ~unlock_guard() noexcept{
+
+                fair_atomic_flag_memsafe_unlock(this->mtx);
             }
 
             self& operator =(const self&) = delete;
@@ -1024,7 +1071,7 @@ namespace stdx{
         static_assert(BIT_SZ <= MAX_BIT_CAP);
 
         if constexpr(BIT_SZ == MAX_BIT_CAP){
-            return std::numeric_limits<T>::max(); 
+            return value & std::numeric_limits<T>::max(); 
         } else{
             constexpr T low_mask = (T{1u} << BIT_SZ) - 1;
             return value & low_mask;

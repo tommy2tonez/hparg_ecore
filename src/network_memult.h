@@ -98,7 +98,7 @@ namespace dg::memult{
     template <class T, size_t ALIGNMENT_SZ>
     constexpr auto align(T ptr, const std::integral_constant<size_t, ALIGNMENT_SZ>) noexcept -> T{
 
-        return {};
+        return reinterpret_cast<T>(internal_align(reinterpret_cast<uintptr_t>(ptr), std::integral_constant<size_t, ALIGNMENT_SZ>{}));
     }
 
     template <class T>

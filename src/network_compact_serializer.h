@@ -2538,7 +2538,7 @@ namespace dg::network_compact_serializer{
 
         Stream stream{};
         stream.resize(dg::network_compact_serializer::dgstd_size(obj));
-        dg::network_compact_serializer::dgstd_serialize_into(stream.data(), obj);
+        dg::network_compact_serializer::dgstd_serialize_into(stream.data(), obj, secret);
 
         return stream;
     }

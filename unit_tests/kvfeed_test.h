@@ -152,7 +152,7 @@ namespace kvfeed_test{
             size_t allocation_cost  = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&consumer, feed_sz);
             auto buf                = std::make_unique<char[]>(allocation_cost);
             auto raii_feed          = dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&consumer, feed_sz, buf.get());
-            
+
             if (!raii_feed.has_value()){
                 std::cout << "test_one_kv_preallocated_feed_memory failed" << std::endl;
                 std::abort();
