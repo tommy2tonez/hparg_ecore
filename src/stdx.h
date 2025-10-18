@@ -356,18 +356,23 @@ namespace stdx{
         std::atomic_flag atomic_flag;
         std::atomic<std::thread::id> yield_thr_id;
         std::atomic<size_t> busy_waiter_sz;
+        bool is_relaxed_lock;
     };
 
-    auto make_fair_atomic_flag(bool value = false) noexcept -> fair_atomic_flag{
+    auto make_fair_atomic_flag(bool value = false,
+                               bool is_relaxed_lock = false) noexcept -> fair_atomic_flag{
 
         return fair_atomic_flag{
-            .atomic_flag    = std::atomic_flag(value),
-            .yield_thr_id   = std::atomic<std::thread::id>(NULL_THREAD_ID),
-            .busy_waiter_sz = std::atomic<size_t>(0u) 
+            .atomic_flag        = std::atomic_flag(value),
+            .yield_thr_id       = std::atomic<std::thread::id>(NULL_THREAD_ID),
+            .busy_waiter_sz     = std::atomic<size_t>(0u),
+            .is_relaxed_lock    = is_relaxed_lock
         };
     }
 
-    auto inplace_make_fair_atomic_flag(fair_atomic_flag& atomic_flag, bool value = false) noexcept{
+    auto inplace_make_fair_atomic_flag(fair_atomic_flag& atomic_flag,
+                                       bool value = false,
+                                       bool is_relaxed_lock = false) noexcept{
 
         if (value){
             atomic_flag.atomic_flag.test_and_set();
@@ -377,12 +382,13 @@ namespace stdx{
 
         atomic_flag.yield_thr_id.exchange(NULL_THREAD_ID);
         atomic_flag.busy_waiter_sz.exchange(0u);
+        atomic_flag.is_relaxed_lock = is_relaxed_lock;
     }
 
-    auto make_unique_fair_atomic_flag(bool value = false) -> std::unique_ptr<fair_atomic_flag>{
+    auto make_unique_fair_atomic_flag(bool value = false, bool is_relaxed_lock = false) -> std::unique_ptr<fair_atomic_flag>{
 
         auto rs = std::make_unique<fair_atomic_flag>();
-        inplace_make_fair_atomic_flag(*rs);
+        inplace_make_fair_atomic_flag(*rs, value, is_relaxed_lock);
 
         return rs;
     }
@@ -461,6 +467,11 @@ namespace stdx{
 
         mtx->yield_thr_id.exchange(NULL_THREAD_ID, std::memory_order_relaxed);
 
+        if (mtx->is_relaxed_lock)
+        {
+            return true;
+        }
+
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
         } else{
@@ -526,6 +537,11 @@ namespace stdx{
 
         fair_atomic_flag_memsafe_lock_body(mtx);
 
+        if (mtx->is_relaxed_lock)
+        {
+            return;
+        }
+
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
         } else{
@@ -549,10 +565,13 @@ namespace stdx{
 
     inline __attribute__((always_inline)) void fair_atomic_flag_memsafe_unlock(fair_atomic_flag * volatile mtx){
 
-        if constexpr(STRONG_MEMORY_ORDERING_FLAG){
-            std::atomic_thread_fence(std::memory_order_seq_cst);
-        } else{
-            std::atomic_thread_fence(std::memory_order_release);
+        if (!mtx->is_relaxed_lock)
+        {
+            if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                std::atomic_thread_fence(std::memory_order_seq_cst);
+            } else{
+                std::atomic_thread_fence(std::memory_order_release);
+            }   
         }
 
         fair_atomic_flag_memsafe_unlock_body(mtx);
@@ -1351,8 +1370,9 @@ namespace stdx{
         inplace_hdi_container(const std::in_place_t, Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args&&...>): value(std::forward<Args>(args)...){}
     };
 
-    void high_resolution_sleep(std::chrono::nanoseconds) noexcept{
+    void high_resolution_sleep(std::chrono::nanoseconds dur) noexcept{
 
+        std::this_thread::sleep_for(dur);
     }
 
     template <class ...Args>

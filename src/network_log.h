@@ -17,6 +17,7 @@
 #include "network_postgres_db.h"
 #include <thread>
 #include "network_std_container.h"
+#include <stacktrace>
 
 namespace dg::network_log::implementation{
 
@@ -417,8 +418,10 @@ namespace dg::network_log_stackdump{
 
     void critical(const char * what) noexcept{
 
-        auto new_what = add_stack_trace(what);
-        network_log::critical(new_what.c_str());
+        std::cout << std::stacktrace::current() << '\n';
+        std::cout << "critical called" << std::endl;
+        // auto new_what = add_stack_trace(what);
+        // network_log::critical(new_what.c_str());
     }
 
     void critical() noexcept{
@@ -428,8 +431,8 @@ namespace dg::network_log_stackdump{
     
     void error(const char * what) noexcept{
 
-        auto new_what = add_stack_trace(what);
-        network_log::error(new_what.c_str());
+        // auto new_what = add_stack_trace(what);
+        // network_log::error(new_what.c_str());
     }
 
     void error() noexcept{
@@ -505,8 +508,8 @@ namespace dg::network_log_stackdump{
 
     void journal_fast_optional(const char * what) noexcept{
 
-        auto new_what = add_stack_trace(what);
-        network_log::journal_fast_optional(new_what.c_str());
+        // auto new_what = add_stack_trace(what);
+        // network_log::journal_fast_optional(new_what.c_str());
     }
 
     void journal_fast_optional() noexcept{

@@ -60,7 +60,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t INVALID_DICTIONARY_KEY              = 14u;
     static inline constexpr exception_t INVALID_TABLE_DISPATCH_CODE         = 15u;
     static inline constexpr exception_t INCOMPATIBLE_OPERATABLE_ID          = 16u;
-    static inline constexpr exception_t BAD_ACCESS                          = 17u; 
+    static inline constexpr exception_t BAD_ACCESS                          = 17u;
     static inline constexpr exception_t BAD_ALIGNMENT                       = 18u;
     static inline constexpr exception_t UNREGISTERED_CUFILE_PTR             = 19u;
     static inline constexpr exception_t RUNTIME_SOCKETIO_ERROR              = 20u;
@@ -126,6 +126,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t UNSPECIFIED_ERROR                   = 1024u;
     static inline constexpr exception_t BAD_OPERATION                       = 00u;
     static inline constexpr exception_t INDEX_OUT_OF_RANGE                  = 00u;
+    static inline constexpr exception_t OUT_OF_BOUND_ACCESS                 = 00u;
 
     static inline constexpr exception_t REST_CACHE_MAX_RESPONSE_SIZE_REACHED    = 00u;
     static inline constexpr exception_t REST_CACHE_POPULATION_LIMIT_REACHED     = 00u;
