@@ -19,6 +19,7 @@
 #include <immintrin.h>
 #include <utility>
 #include <exception>
+#include <thread>
 #include "assert.h"
 
 namespace stdx{

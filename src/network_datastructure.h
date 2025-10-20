@@ -68,7 +68,6 @@ namespace dg::network_datastructure::cyclic_queue{
             using difference_type   = std::ptrdiff_t;
             using value_type        = typename BaseIterator::value_type; 
 
-            template <class T = BaseIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T>, bool> = true>
             constexpr pow2_cyclic_queue_iterator(): iter_head(), 
                                                     virtual_idx(), 
                                                     index_getter(){}
@@ -290,7 +289,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr auto cend() const noexcept -> const_iterator{
 
-                return this->cend();
+                return this->end();
             }
 
             constexpr auto size() const noexcept -> size_t{
@@ -528,7 +527,7 @@ namespace dg::network_datastructure::cyclic_queue{
             using difference_type   = std::ptrdiff_t;
             using value_type        = T; 
 
-            template <class T1 = BaseIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T1>, bool> = true>
+            // template <class T1 = BaseIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T1>, bool> = true>
             constexpr aligned_storage_vector_iterator(): iter(){}
 
             constexpr aligned_storage_vector_iterator(BaseIterator iter)noexcept(std::is_nothrow_move_constructible_v<BaseIterator>): iter(std::move(iter)){} 
@@ -828,7 +827,7 @@ namespace dg::network_datastructure::cyclic_queue{
 
             constexpr auto cend() const noexcept -> const_iterator{
 
-                return this->cend();
+                return this->end();
             }
 
             constexpr auto size() const noexcept -> size_t{
@@ -1029,6 +1028,7 @@ namespace dg::network_datastructure::cyclic_queue{
     template <class T, class Allocator, class = void>
     struct pow2_cyclic_queue_chooser{
         using type = nontrivial_pow2_cyclic_queue<T, Allocator>;
+        // using type = simple_pow2_cyclic_queue<T, Allocator>;
     };
 
     template <class T, class Allocator>
@@ -2371,7 +2371,6 @@ namespace dg::network_datastructure::unordered_map_variants{
             using difference_type   = std::ptrdiff_t;
             using value_type        = std::remove_reference_t<decltype(std::declval<BidirIterator&>()->key)>;
 
-            template <class T = BidirIterator, std::enable_if_t<std::is_nothrow_default_constructible_v<T>, bool> = true>
             constexpr unordered_set_node_external_iterator(): base_node_iterator(){}
 
             constexpr unordered_set_node_external_iterator(BidirIterator base_node_iterator) noexcept(std::is_nothrow_move_constructible_v<BidirIterator>): base_node_iterator(std::move(base_node_iterator)){}
@@ -2430,8 +2429,8 @@ namespace dg::network_datastructure::unordered_map_variants{
             Pred pred;
             Allocator allocator;
 
-            using nofancy_iterator          = decltype(virtual_storage_vec)::iterator;
-            using nofancy_const_iterator    = decltype(virtual_storage_vec)::const_iterator;
+            using nofancy_iterator          = typename decltype(virtual_storage_vec)::iterator;
+            using nofancy_const_iterator    = typename decltype(virtual_storage_vec)::const_iterator;
             using node_t                    = UnorderedSetNode<KeyType, VirtualAddrType>;
 
         public:
@@ -2660,7 +2659,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             template <class KeyLike>
             constexpr auto find(const KeyLike& key) const noexcept(true) -> const_iterator{
-
+                
                 return const_iterator(this->nofancy_find(key));
             }
 
@@ -2979,11 +2978,12 @@ namespace dg::network_datastructure::unordered_map_variants{
             Pred pred;
             Allocator allocator;
 
-            using nofancy_iterator          = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>>::iterator;
-            using nofancy_const_iterator    = dg::network_datastructure::cyclic_queue::pow2_cyclic_queue<UnorderedSetNode<KeyType, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<UnorderedSetNode<KeyType, VirtualAddrType>>>::const_iterator;
             using node_t                    = UnorderedSetNode<KeyType, VirtualAddrType>;
 
         public:
+
+            using nofancy_iterator          = typename decltype(virtual_storage_vec)::iterator;
+            using nofancy_const_iterator    = typename decltype(virtual_storage_vec)::const_iterator;
 
             using key_type                  = KeyType;
             using value_type                = KeyType;

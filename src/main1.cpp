@@ -123,36 +123,36 @@ class RecvWorker: public virtual dg::network_concurrency::WorkerInterface
                     }
                 }
 
-                // {
-                //     dg::vector<dg::string> buf_vec(1 << 20);
-                //     size_t buf_vec_sz;
+                {
+                    dg::vector<dg::string> buf_vec(1 << 20);
+                    size_t buf_vec_sz;
 
-                //     sock1->recv(buf_vec.data(), buf_vec_sz, 1 << 20);
+                    sock1->recv(buf_vec.data(), buf_vec_sz, 1 << 20);
 
-                //     if (buf_vec_sz != 0u)
-                //     {
-                //         total_vec_sz += buf_vec_sz;
-                //         std::cout << "<recv>" << total_vec_sz << "<total_vec_sz>" << std::endl;
-                //         std::cout << "<stamp>" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::utc_clock::now().time_since_epoch()) << std::endl;
-                //     } else{
-                //         std::cout << "<recv_worker_beating>" << std::endl;
-                //     }
-                // }
-                // {
-                //     dg::vector<dg::string> buf_vec(1 << 20);
-                //     size_t buf_vec_sz;
+                    if (buf_vec_sz != 0u)
+                    {
+                        total_vec_sz += buf_vec_sz;
+                        std::cout << "<recv>" << total_vec_sz << "<total_vec_sz>" << std::endl;
+                        std::cout << "<stamp>" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::utc_clock::now().time_since_epoch()) << std::endl;
+                    } else{
+                        std::cout << "<recv_worker_beating>" << std::endl;
+                    }
+                }
+                {
+                    dg::vector<dg::string> buf_vec(1 << 20);
+                    size_t buf_vec_sz;
 
-                //     sock2->recv(buf_vec.data(), buf_vec_sz, 1 << 20);
+                    sock2->recv(buf_vec.data(), buf_vec_sz, 1 << 20);
 
-                //     if (buf_vec_sz != 0u)
-                //     {
-                //         total_vec_sz += buf_vec_sz;
-                //         std::cout << "<recv>" << total_vec_sz << "<total_vec_sz>" << std::endl;
-                //         std::cout << "<stamp>" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::utc_clock::now().time_since_epoch()) << std::endl;
-                //     } else{
-                //         std::cout << "<recv_worker_beating>" << std::endl;
-                //     }
-                // }
+                    if (buf_vec_sz != 0u)
+                    {
+                        total_vec_sz += buf_vec_sz;
+                        std::cout << "<recv>" << total_vec_sz << "<total_vec_sz>" << std::endl;
+                        std::cout << "<stamp>" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::utc_clock::now().time_since_epoch()) << std::endl;
+                    } else{
+                        std::cout << "<recv_worker_beating>" << std::endl;
+                    }
+                }
             }
         }
 };
@@ -176,9 +176,9 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 
             std::cout << "<begin0>" << std::endl;
 
-            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec    = make_str_vec(size_t{1} << 9, size_t{1} << 18);
-            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec1   = make_str_vec(size_t{1} << 9, size_t{1} << 18);
-            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec2   = make_str_vec(size_t{1} << 9, size_t{1} << 18);
+            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec    = make_str_vec(size_t{1} << 9, size_t{1} << 18, 5000);
+            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec1   = make_str_vec(size_t{1} << 9, size_t{1} << 18, 5002);
+            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec2   = make_str_vec(size_t{1} << 9, size_t{1} << 18, 5004);
 
             dg::vector<exception_t> err_vec(str_vec.size());
 
@@ -207,11 +207,11 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
             return rs;
         }
 
-        auto make_str_vec(size_t packet_sz, size_t packet_count) -> dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument>
+        auto make_str_vec(size_t packet_sz, size_t packet_count, uint16_t port) -> dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument>
         {
             dg::network_kernel_mailbox_impl1::model::Address self_addr = {};
             self_addr.ip = dg::network_kernel_mailbox_impl1::model::IP{.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value()};
-            self_addr.port = 5000;
+            self_addr.port = port;
 
             dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> rs{};
 
@@ -263,13 +263,13 @@ int main()
                 .sin_fam = AF_INET,
                 .comm = SOCK_DGRAM,
                 .protocol = 0,
-                .host_ip = {},
+                .host_ip = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value()},
                 .host_port_inbound = 5000,
                 .host_port_outbound = 5001,
                 .has_exhaustion_control = false,
 
                 .retransmission_delay = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(4)),
-                .retransmission_concurrency_sz = 1,
+                .retransmission_concurrency_sz = 2,
                 .retransmission_queue_cap = 1 << 20,
                 .retransmission_packet_cap = 10,
                 .retransmission_idhashset_cap = 1 << 20,
@@ -278,21 +278,21 @@ int main()
                 .retransmission_react_queue_cap = 1 << 20,
                 .retransmission_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
 
-                .inbound_buffer_concurrency_sz = 1,
+                .inbound_buffer_concurrency_sz = 2,
                 .inbound_buffer_container_cap = 1 << 20,
                 .inbound_buffer_has_react_pattern = true,
                 .inbound_buffer_react_sz = 10000,
                 .inbound_buffer_react_queue_cap = 1 << 20,
                 .inbound_buffer_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
 
-                .inbound_packet_concurrency_sz = 1,
+                .inbound_packet_concurrency_sz = 2,
                 .inbound_packet_container_cap = 1 << 20,
                 .inbound_packet_has_react_pattern = true,
                 .inbound_packet_react_sz = 10000,
                 .inbound_packet_react_queue_cap = 1 << 20,
                 .inbound_packet_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
 
-                .inbound_idhashset_concurrency_sz = 1,
+                .inbound_idhashset_concurrency_sz = 2,
                 .inbound_idhashset_cap = 1 << 20,
 
                 .worker_inbound_buffer_accumulation_sz = 1000,
@@ -309,7 +309,7 @@ int main()
                 .mailbox_outbound_cap = size_t{1} << 20,
                 .traffic_reset_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)),
 
-                .outbound_packet_concurrency_sz = 1,
+                .outbound_packet_concurrency_sz = 2,
                 .outbound_ack_packet_container_cap = 1 << 20,
                 .outbound_request_packet_container_cap = 1 << 20,
                 .outbound_krescue_packet_container_cap = 1 << 20,
@@ -347,7 +347,7 @@ int main()
                 .sin_fam = AF_INET,
                 .comm = SOCK_DGRAM,
                 .protocol = 0,
-                .host_ip = {},
+                .host_ip = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value()},
                 .host_port_inbound = 5002,
                 .host_port_outbound = 5003,
                 .has_exhaustion_control = false,
@@ -431,7 +431,7 @@ int main()
                 .sin_fam = AF_INET,
                 .comm = SOCK_DGRAM,
                 .protocol = 0,
-                .host_ip = {},
+                .host_ip = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value()},
                 .host_port_inbound = 5004,
                 .host_port_outbound = 5005,
                 .has_exhaustion_control = false,

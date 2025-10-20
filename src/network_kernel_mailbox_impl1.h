@@ -1629,25 +1629,40 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
             return dg::network_exception::wrap_kernel_error(errno);
         }
 
-        server.sin6_family  = AF_INET6;
-        server.sin6_port    = htons(to_addr.port);
+        server.sin6_family      = AF_INET6;
+        server.sin6_port        = htons(to_addr.port);
 
-        size_t iovec2_buf_sz = iovec2_get_allocation_cost(sz);
+        size_t iovec2_buf_sz    = iovec2_get_allocation_cost(sz);
         dg::network_stack_allocation::NoExceptRawAllocation<char[]> iovec2_buf(iovec2_buf_sz);
-        auto iovec_vec = iovec2_inplace_raiimake(iovec2_buf.get(), sz);
-
+        auto iovec_vec          = iovec2_inplace_raiimake(iovec2_buf.get(), sz);
         dg::network_exception_handler::nothrow_log(iovec2_assign_range(iovec_vec.get(), 0u, buf_arr, sz_arr, sz));
 
-        struct mmsghdr msg_header       = legacy_struct_default_init<struct mmsghdr>();
+        size_t mmsghdr_sz       = sz / batchsend_incremental_size() + static_cast<size_t>(sz % batchsend_incremental_size() != 0u); 
+        size_t mmsghdr_buf_sz   = mmsghdr_vec_get_allocation_cost(mmsghdr_sz);
+        dg::network_stack_allocation::NoExceptRawAllocation<char[]> mmsghdr_buf(mmsghdr_buf_sz);
 
-        msg_header.msg_hdr.msg_name     = &server;
-        msg_header.msg_hdr.msg_namelen  = sizeof(server);
-        msg_header.msg_hdr.msg_iov      = iovec_vec->base_arr;
-        msg_header.msg_hdr.msg_iovlen   = iovec_vec->arr_sz;
+        auto msg_header_vec     = mmsghdr_vec_inplace_raiimake(mmsghdr_buf.get(), mmsghdr_sz); 
+
+        if (connect(sock.kernel_sock_fd, (struct sockaddr *) &server, sizeof(server)) == -1)
+        {
+            return dg::network_exception::wrap_kernel_error(errno);
+        }
+
+        for (size_t i = 0u; i < mmsghdr_sz; ++i)
+        {
+            size_t first    = i * batchsend_incremental_size();
+            size_t last     = std::min(static_cast<size_t>((i + 1) * batchsend_incremental_size()), sz);
+
+            dg::network_exception_handler::nothrow_log(mmsghdr_vec_bind_iovec_range(msg_header_vec.get(),
+                                                                                    i,
+                                                                                    iovec_vec.get(),
+                                                                                    first,
+                                                                                    last - first));
+        }
 
         int retval  = sendmmsg(sock.kernel_sock_fd,
-                               &msg_header,
-                               1u,
+                               msg_header_vec->base_arr,
+                               msg_header_vec->arr_sz,
                                constants::KERNEL_NOBLOCK_TRANSMISSION_FLAG);
 
         if (retval == -1)
@@ -1655,7 +1670,7 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
             return dg::network_exception::wrap_kernel_error(errno);
         }
 
-        if (retval != 1)
+        if (retval != msg_header_vec->arr_sz)
         {
             return dg::network_exception::RUNTIME_SOCKETIO_ERROR;
         }
@@ -1727,7 +1742,8 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
         auto msg_header_vec     = mmsghdr_vec_inplace_raiimake(mmsghdr_buf.get(), mmsghdr_sz);
 
-        if (connect(sock.kernel_sock_fd, (struct sockaddr *) &server, sizeof(server)) == -1) {
+        if (connect(sock.kernel_sock_fd, (struct sockaddr *) &server, sizeof(server)) == -1)
+        {
             return dg::network_exception::wrap_kernel_error(errno);
         }
 

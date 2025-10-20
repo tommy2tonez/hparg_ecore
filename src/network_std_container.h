@@ -60,7 +60,7 @@ namespace dg{
     using unordered_unstable_set    = dg::network_std_container::unordered_unstable_set<Key>;
 
     template <class Key>
-    using cyclic_unordered_node_set = dg::network_std_container::unordered_unstable_set<Key>;
+    using cyclic_unordered_node_set = dg::network_std_container::cyclic_unordered_node_set<Key>;
 
     template <class Key, class Value>
     using unordered_map             = dg::network_std_container::unordered_map<Key, Value>;
@@ -69,7 +69,7 @@ namespace dg{
     using unordered_unstable_map    = dg::network_std_container::unordered_unstable_map<Key, Value>;
 
     template <class Key, class Value>
-    using cyclic_unordered_node_map = dg::network_std_container::unordered_unstable_map<Key, Value>;
+    using cyclic_unordered_node_map = dg::network_std_container::cyclic_unordered_node_map<Key, Value>;
 
     template <class T>
     using vector                    = dg::network_std_container::vector<T>;
