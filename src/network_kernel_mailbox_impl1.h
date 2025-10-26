@@ -58,7 +58,7 @@ namespace dg::network_kernel_mailbox_impl1::types{
 
     static_assert(sizeof(size_t) >= sizeof(uint32_t));
 
-    using factory_id_t          = std::array<char, 128>;
+    using factory_id_t          = std::array<char, 20>;
     using local_packet_id_t     = uint64_t;
     using packet_polymorphic_t  = uint8_t;
 }
@@ -356,10 +356,10 @@ namespace dg::network_kernel_mailbox_impl1::constants{
 
     static inline constexpr size_t MAXIMUM_MSG_SIZE                     = size_t{1} << 12;
     static inline constexpr size_t MAX_REQUEST_PACKET_CONTENT_SIZE      = size_t{1} << 10;
-    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 6;
+    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 3;
     static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
     static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 8;
-    static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 6;
+    static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 8;
 
     static inline constexpr int KERNEL_NOBLOCK_TRANSMISSION_FLAG        = MSG_DONTROUTE | MSG_DONTWAIT;
     static inline constexpr bool HAS_STRICT_SOCKET_CLOSE                = false;
@@ -1949,7 +1949,7 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                 size_t heap_idx;
             };
 
-            dg::unordered_unstable_map<global_packet_id_t, HeapNode *> id_heap_map;
+            dg::unordered_unstable_map2<global_packet_id_t, HeapNode *> id_heap_map;
             dg::vector<std::unique_ptr<HeapNode>> temporal_heap;
             size_t temporal_heap_sz;
 
@@ -1959,7 +1959,7 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                                                      temporal_heap(),
                                                      temporal_heap_sz(0u){
 
-                this->id_heap_map.reserve(cap);
+                this->id_heap_map.reserve(1);
 
                 for (size_t i = 0u; i < cap; ++i){
                     this->temporal_heap.push_back(std::make_unique<HeapNode>(HeapNode{}));
@@ -1971,6 +1971,16 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
 
                 if (this->id_heap_map.contains(pkt.id)){
                     return dg::network_exception::DUPLICATE_ENTRY;
+                }
+
+                auto map_ptr = this->id_heap_map.find(pkt.id);
+                
+                if (map_ptr != this->id_heap_map.end()){
+                    HeapNode * associated_heap_node = stdx::safe_ptr_access(map_ptr->second);
+                    associated_heap_node->sched_time = expiry_time;
+                    this->correct_heap_node_at(associated_heap_node->heap_idx);
+
+                    return dg::network_exception::SUCCESS;
                 }
 
                 std::expected<HeapNode *, exception_t> reference_node = this->add_heap_node(std::move(pkt), expiry_time);
@@ -1998,9 +2008,9 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                     return;
                 }
 
-                HeapNode * associated_heap_node = stdx::safe_ptr_access(map_ptr->second);
+                size_t idx = stdx::safe_ptr_access(map_ptr->second)->heap_idx;
                 this->id_heap_map.erase(map_ptr);
-                this->erase_heap_node_at(associated_heap_node->heap_idx);
+                this->erase_heap_node_at(idx);
             }
 
             auto get_expired_packet(std::chrono::nanoseconds expiry_window) noexcept -> std::optional<Packet>{
@@ -3154,7 +3164,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     }
 
                     if (this->pkt_map.size() == this->pkt_map.capacity()){
-                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
+                        exception_arr[i] = dg::network_exception::SOCKET_QUEUE_FULL;
                         continue;
                     }
 
@@ -3919,7 +3929,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         return dg::network_exception::SUCCESS;
                     }
 
-                    return dg::network_exception::QUEUE_FULL;
+                    return dg::network_exception::SOCKET_QUEUE_FULL;
                 }();
 
                 if (dg::network_exception::is_failed(err)){
@@ -3928,11 +3938,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return;
                 }
 
-                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
-
                 if (releasing_smp != nullptr){
                     releasing_smp->release();
                 }
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
             }
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
@@ -3966,6 +3976,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception_handler::dg_assert(str_vec.has_value());
                 sz = std::min(output_buffer_arr_cap, static_cast<size_t>(str_vec->size()));
                 size_t rem_sz = str_vec->size() - sz;                
+
 
                 std::copy(std::make_move_iterator(std::next(str_vec->begin(), rem_sz)),
                           std::make_move_iterator(str_vec->end()),
@@ -4584,8 +4595,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         inbound_vec.value()[i] = std::move(*base_data_arr[i].packet_ptr.base());
                     }
 
-                    //I aint shitting, this is hard to write
-
                     exception_t err = [&, this]() noexcept{
                         stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->queue_mtx);
 
@@ -4766,7 +4775,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         return dg::network_exception::SUCCESS;
                     }
 
-                    return dg::network_exception::QUEUE_FULL;
+                    return dg::network_exception::SOCKET_QUEUE_FULL;
                 }();
 
                 if (dg::network_exception::is_failed(err)){
@@ -4776,12 +4785,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     return;
                 }
 
-                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
-
                 if (releasing_smp != nullptr){
                     releasing_smp->release();
-                    return;
                 }
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
             }
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
@@ -4818,7 +4826,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 sz = std::min(static_cast<size_t>(pkt_vec->size()), output_pkt_arr_cap); 
                 size_t rem_sz = pkt_vec->size() - sz;
 
-                std::copy(std::next(std::make_move_iterator(pkt_vec->begin()), rem_sz), std::make_move_iterator(pkt_vec->end()), output_pkt_arr);
+                std::copy(std::next(std::make_move_iterator(pkt_vec->begin()), rem_sz),
+                          std::make_move_iterator(pkt_vec->end()),
+                          output_pkt_arr);
+
                 pkt_vec->resize(rem_sz);
 
                 if (!pkt_vec->empty()){
@@ -5798,7 +5809,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MAX_TICKING_CLOCK_RESOLUTION   = size_t{1} << 30;
             const size_t MIN_MAX_RETRANSMISSION_SZ      = 0u;
             const size_t MAX_MAX_RETRANSMISSION_SZ      = 256u;
-            
+
             if (std::clamp(pkt_map_capacity, MIN_PKT_MAP_CAPACITY, MAX_PKT_MAP_CAPACITY) != pkt_map_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
@@ -5811,7 +5822,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(ticking_clock_resolution, MIN_TICKING_CLOCK_RESOLUTION, MAX_TICKING_CLOCK_RESOLUTION)){
+            if (std::clamp(ticking_clock_resolution, MIN_TICKING_CLOCK_RESOLUTION, MAX_TICKING_CLOCK_RESOLUTION) != ticking_clock_resolution){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -5930,7 +5941,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             if (keyvalue_aggregation_cap > consumption_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                keyvalue_aggregation_cap = consumption_sz;
+                // dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             return std::make_unique<HashDistributedRetransmissionController>(std::move(base_vec_up),
@@ -6083,15 +6095,17 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         static auto get_fair_inbound_buffer_container(size_t distribution_queue_sz,
                                                       size_t waiting_queue_sz,
                                                       size_t leftover_queue_sz,
-                                                      size_t consume_factor = 4u) -> std::unique_ptr<BufferContainerInterface>{
-            
+                                                      size_t vec_unit_sz) -> std::unique_ptr<BufferContainerInterface>{
+
             const size_t MIN_DISTRIBUTION_QUEUE_SZ  = size_t{1};
             const size_t MAX_DISTRIBUTION_QUEUE_SZ  = size_t{1} << 20;
             const size_t MIN_WAITING_QUEUE_SZ       = size_t{1};
             const size_t MAX_WAITING_QUEUE_SZ       = size_t{1} << 20;
             const size_t MIN_LEFTOVER_QUEUE_SZ      = size_t{1};
             const size_t MAX_LEFTOVER_QUEUE_SZ      = size_t{1} << 20;
-                                    
+            const size_t MIN_VEC_UNIT_SZ            = size_t{1};
+            const size_t MAX_VEC_UNIT_SZ            = size_t{1} << 20;
+
             if (std::clamp(distribution_queue_sz, MIN_DISTRIBUTION_QUEUE_SZ, MAX_DISTRIBUTION_QUEUE_SZ) != distribution_queue_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
@@ -6104,14 +6118,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t tentative_consume_sz     = std::min(distribution_queue_sz, waiting_queue_sz) >> consume_factor;
-            size_t normalized_consume_sz    = std::max(tentative_consume_sz, static_cast<size_t>(1u));
+            if (std::clamp(vec_unit_sz, MIN_VEC_UNIT_SZ, MAX_VEC_UNIT_SZ) != vec_unit_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
                                                                 dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
                                                                 stdx::make_unique_fair_atomic_flag(),
-                                                                normalized_consume_sz);
+                                                                vec_unit_sz);
         }
 
         static auto get_prioritized_packet_container(size_t heap_capacity,
@@ -6257,7 +6272,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         static auto get_fair_inbound_packet_container(size_t packet_vec_queue_capacity,
                                                       size_t waiting_queue_capacity,
                                                       size_t leftover_queue_capacity,
-                                                      size_t consume_factor = 4u) -> std::unique_ptr<FairInBoundPacketContainer>{
+                                                      size_t vec_unit_sz) -> std::unique_ptr<FairInBoundPacketContainer>{
                                                 
             const size_t MIN_PACKET_VEC_QUEUE_CAPACITY  = 1u;
             const size_t MAX_PACKET_VEC_QUEUE_CAPACITY  = size_t{1} << 25;
@@ -6265,7 +6280,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MAX_WAITING_QUEUE_CAPACITY     = size_t{1} << 25;
             const size_t MIN_LEFTOVER_QUEUE_CAPACITY    = 1u;
             const size_t MAX_LEFTOVER_QUEUE_CAPACITY    = size_t{1} << 25; 
-                                        
+            const size_t MIN_VEC_UNIT_SZ                = 1u;
+            const size_t MAX_VEC_UNIT_SZ                = size_t{1} << 20; 
+
             if (std::clamp(packet_vec_queue_capacity, MIN_PACKET_VEC_QUEUE_CAPACITY, MAX_PACKET_VEC_QUEUE_CAPACITY) != packet_vec_queue_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
@@ -6277,15 +6294,16 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             if (std::clamp(leftover_queue_capacity, MIN_LEFTOVER_QUEUE_CAPACITY, MAX_LEFTOVER_QUEUE_CAPACITY) != leftover_queue_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
-
-            size_t tentative_consume_sz     = std::min(packet_vec_queue_capacity, waiting_queue_capacity) >> consume_factor;
-            size_t normalized_consume_sz    = std::max(tentative_consume_sz, static_cast<size_t>(1u));
+            
+            if (std::clamp(vec_unit_sz, MIN_VEC_UNIT_SZ, MAX_VEC_UNIT_SZ) != vec_unit_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             return std::make_unique<FairInBoundPacketContainer>(dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(packet_vec_queue_capacity))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_capacity))),
                                                                 dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(leftover_queue_capacity))),
                                                                 stdx::make_unique_fair_atomic_flag(),
-                                                                normalized_consume_sz);
+                                                                vec_unit_sz);
         }
 
         static auto get_reacting_packet_container(std::unique_ptr<PacketContainerInterface> base,
@@ -6413,7 +6431,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             if (keyvalue_aggregation_cap > consumption_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                keyvalue_aggregation_cap = consumption_sz;
+                // dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             return std::make_unique<HashDistributedInBoundIDController>(std::move(base_vec_up),
@@ -6911,7 +6930,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                                                                           buf_arr.get(),
                                                                                                           sz_arr.get(),
                                                                                                           sz);
-                    
+
                     if (dg::network_exception::is_failed(err)){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
                     }
@@ -7914,7 +7933,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                std::shared_ptr<packet_controller::PacketIntegrityValidatorInterface> packet_integrity_validator,
                                                size_t inbound_consumption_cap,
                                                size_t busy_threshold_sz,
-                                               size_t ack_vectorization_sz = constants::DEFAULT_KEYVALUE_ACCUMULATION_SIZE) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+                                               size_t ack_vectorization_sz = constants::MAX_ACK_PER_PACKET) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
 
             const size_t MIN_INBOUND_CONSUMPTION_CAP    = size_t{1};
             const size_t MAX_INBOUND_CONSUMPTION_CAP    = size_t{1} << 25;
@@ -8147,7 +8166,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                     }
 
                     this->ob_packet_container->push(std::make_move_iterator(pkt_data_arr.get()), sz, exception_arr.get());
-                    
+
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
                             *(base_data_arr[i].arg.base())  = dg::network_exception_handler::nothrow_log(packet_service::devirtualize_request_packet(std::move(pkt_data_arr[i])));
@@ -8235,7 +8254,17 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                                            size_t num_process_inbound_worker,
                                                            size_t num_outbound_worker,
                                                            size_t num_kernel_rescue_worker,
-                                                           size_t num_retry_worker) -> std::unique_ptr<MailboxInterface>{
+                                                           size_t num_retry_worker,
+                                                           
+                                                           std::unique_ptr<packet_controller::BufferContainerInterface> ib_buffer_fair_container,
+                                                           size_t buffer_fair_container_get_cap,
+                                                           size_t buffer_fair_container_push_cap,
+                                                           size_t buffer_fair_container_busy_threshold,
+
+                                                           std::unique_ptr<packet_controller::PacketContainerInterface> ib_packet_fair_container,
+                                                           size_t packet_fair_container_get_cap,
+                                                           size_t packet_fair_container_push_cap,
+                                                           size_t packet_fair_container_busy_threshold) -> std::unique_ptr<MailboxInterface>{
 
             const size_t DEFAULT_HEARTBEAT_INTERVAL                         = size_t{1} << 10;
 
@@ -8444,6 +8473,42 @@ namespace dg::network_kernel_mailbox_impl1::core{
             size_t socket_sp_vec_ptr                                                                                        = 0u;
             size_t dedicated_outbound_socket_sp_vec_ptr                                                                     = 0u; 
 
+            std::shared_ptr<packet_controller::BufferContainerInterface> ib_process_consume_end                             = {};
+
+            if (ib_buffer_fair_container != nullptr){
+                std::shared_ptr<packet_controller::BufferContainerInterface> intermediate_container = std::move(ib_buffer_fair_container);
+                auto worker_ins     = worker::ComponentFactory::get_buffer_redistributor_worker(ib_buffer_container_sp,
+                                                                                                intermediate_container,
+                                                                                                buffer_fair_container_get_cap,
+                                                                                                buffer_fair_container_push_cap,
+                                                                                                buffer_fair_container_busy_threshold);
+
+                auto daemon_handle  = dg::network_exception_handler::nothrow_log(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
+                daemon_vec.emplace_back(std::move(daemon_handle));
+
+                ib_process_consume_end = intermediate_container;
+            } else{
+                ib_process_consume_end = ib_buffer_container_sp;
+            }
+
+            std::shared_ptr<packet_controller::PacketContainerInterface> mailbox_consume_end                                = {};
+
+            if (ib_packet_fair_container != nullptr){
+                std::shared_ptr<packet_controller::PacketContainerInterface> intermediate_container = std::move(ib_packet_fair_container);
+                auto worker_ins     = worker::ComponentFactory::get_packet_redistributor_worker(ib_packet_container_sp,
+                                                                                                intermediate_container,
+                                                                                                packet_fair_container_get_cap,
+                                                                                                packet_fair_container_push_cap,
+                                                                                                packet_fair_container_busy_threshold);
+
+                auto daemon_handle  = dg::network_exception_handler::nothrow_log(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
+                daemon_vec.emplace_back(std::move(daemon_handle));
+
+                mailbox_consume_end = intermediate_container;
+            } else{
+                mailbox_consume_end = ib_packet_container_sp;
+            }
+
             for (size_t i = 0u; i < num_kernel_inbound_worker; ++i){
                 auto worker_ins     = worker::ComponentFactory::get_kernel_inbound_worker(ib_buffer_container_sp, rescue_post_sp, 
                                                                                           socket_sp_vec[socket_sp_vec_ptr++ % socket_sp_vec.size()], 
@@ -8455,7 +8520,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
             for (size_t i = 0u; i < num_process_inbound_worker; ++i){
                 auto worker_ins     = worker::ComponentFactory::get_process_inbound_worker(retransmission_controller_sp, ob_packet_container_sp, ib_packet_container_sp, 
-                                                                                           ib_buffer_container_sp, ib_id_controller_sp, 
+                                                                                           ib_process_consume_end, ib_id_controller_sp, 
                                                                                            ib_border_controller_sp_vec[ib_border_controller_sp_vec_ptr++ % ib_border_controller_sp_vec.size()], 
                                                                                            ack_packet_generator_sp, packet_integrity_validator_sp, ib_packet_consumption_cap,
                                                                                            ib_packet_busy_threshold_sz);
@@ -8501,7 +8566,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
             daemon_vec.push_back(std::move(traffic_daemon_handle));
 
             return std::make_unique<RetransmittableMailBoxController>(std::move(daemon_vec), std::move(req_packet_generator), retransmission_controller_sp, 
-                                                                      ob_packet_container_sp, ib_packet_container_sp, mailbox_inbound_cap, 
+                                                                      ob_packet_container_sp, mailbox_consume_end, mailbox_inbound_cap, 
                                                                       mailbox_outbound_cap);
         }
     };
@@ -8578,6 +8643,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t retransmission_queue_cap;
         uint32_t retransmission_packet_cap;
         uint32_t retransmission_idhashset_cap;
+        uint32_t retransmission_ticking_clock_resolution;
         bool retransmission_has_react_pattern;
         uint32_t retransmission_react_sz;
         uint32_t retransmission_react_queue_cap;
@@ -8588,7 +8654,12 @@ namespace dg::network_kernel_mailbox_impl1{
         bool inbound_buffer_has_react_pattern;
         uint32_t inbound_buffer_react_sz;
         uint32_t inbound_buffer_react_queue_cap;
-        std::chrono::nanoseconds inbound_buffer_react_time; 
+        std::chrono::nanoseconds inbound_buffer_react_time;
+        bool inbound_buffer_has_fair_redistribution;
+        uint32_t inbound_buffer_fair_distribution_queue_cap;
+        uint32_t inbound_buffer_fair_waiting_queue_cap;
+        uint32_t inbound_buffer_fair_leftover_queue_cap;
+        uint32_t inbound_buffer_fair_unit_sz;
 
         uint32_t inbound_packet_concurrency_sz;
         uint32_t inbound_packet_container_cap;
@@ -8596,9 +8667,22 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t inbound_packet_react_sz;
         uint32_t inbound_packet_react_queue_cap;
         std::chrono::nanoseconds inbound_packet_react_time;
+        bool inbound_packet_has_fair_redistribution;
+        uint32_t inbound_packet_fair_packet_queue_cap;
+        uint32_t inbound_packet_fair_waiting_queue_cap;
+        uint32_t inbound_packet_fair_leftover_queue_cap; 
+        uint32_t inbound_packet_fair_unit_sz;
 
         uint32_t inbound_idhashset_concurrency_sz; 
         uint32_t inbound_idhashset_cap;
+
+        uint32_t worker_inbound_buffer_fair_container_fr_warehouse_get_cap;
+        uint32_t worker_inbound_buffer_fair_container_to_warehouse_push_cap;
+        uint32_t worker_inbound_buffer_fair_container_busy_threshold;
+
+        uint32_t worker_inbound_fair_packet_fr_warehouse_get_cap;
+        uint32_t worker_inbound_fair_packet_to_warehouse_push_cap;
+        uint32_t worker_inbound_fair_packet_busy_threshold;
 
         uint32_t worker_inbound_buffer_accumulation_sz;
         uint32_t worker_inbound_packet_consumption_cap;
@@ -8614,15 +8698,21 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t mailbox_outbound_cap;
         std::chrono::nanoseconds traffic_reset_duration;
 
-        uint32_t outbound_packet_concurrency_sz;
-        uint32_t outbound_ack_packet_container_cap;
-        uint32_t outbound_request_packet_container_cap; 
-        uint32_t outbound_krescue_packet_container_cap;
+        // uint32_t outbound_packet_concurrency_sz;
+        // uint32_t outbound_ack_packet_container_cap;
+        // uint32_t outbound_request_packet_container_cap; 
+        // uint32_t outbound_krescue_packet_container_cap;
         uint32_t outbound_transmit_frequency;
-        bool outbound_packet_has_react_pattern;
-        uint32_t outbound_packet_react_sz;
-        uint32_t outbound_packet_react_queue_cap;
-        std::chrono::nanoseconds outbound_packet_react_time;
+        // bool outbound_packet_has_react_pattern;
+        // uint32_t outbound_packet_react_sz;
+        // uint32_t outbound_packet_react_queue_cap;
+        // std::chrono::nanoseconds outbound_packet_react_time;
+
+        uint32_t outbound_request_packet_container_cap;
+        uint32_t outbound_ack_packet_container_cap;
+        uint32_t outbound_krescue_packet_container_cap;
+        uint32_t outbound_waiting_queue_capacity;
+        uint32_t outbound_leftover_queue_capacity; 
 
         bool inbound_tc_has_borderline_per_inbound_worker;
         uint32_t inbound_tc_peraddr_cap;
@@ -8716,6 +8806,18 @@ namespace dg::network_kernel_mailbox_impl1{
 
                 return packet_controller::ComponentFactory::get_randomhash_distributed_buffer_container(std::move(buffer_container_vec));
             }
+            
+            static auto make_inbound_buffer_fair_container(Config config) -> std::unique_ptr<packet_controller::BufferContainerInterface>{
+
+                if (!config.inbound_buffer_has_fair_redistribution){
+                    return nullptr;
+                }
+
+                return packet_controller::ComponentFactory::get_fair_inbound_buffer_container(config.inbound_buffer_fair_distribution_queue_cap,
+                                                                                              config.inbound_buffer_fair_waiting_queue_cap,
+                                                                                              config.inbound_buffer_fair_leftover_queue_cap,
+                                                                                              config.inbound_buffer_fair_unit_sz);
+            }
 
             static auto make_inbound_packet_container(Config config) -> std::unique_ptr<packet_controller::PacketContainerInterface>{
 
@@ -8773,6 +8875,18 @@ namespace dg::network_kernel_mailbox_impl1{
                 }
 
                 return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
+            }
+
+            static auto make_inbound_packet_fair_container(Config config) -> std::unique_ptr<packet_controller::PacketContainerInterface>{
+
+                if (!config.inbound_packet_has_fair_redistribution){
+                    return nullptr;
+                }
+
+                return packet_controller::ComponentFactory::get_fair_inbound_packet_container(config.inbound_packet_fair_packet_queue_cap,
+                                                                                              config.inbound_packet_fair_waiting_queue_cap,
+                                                                                              config.inbound_packet_fair_leftover_queue_cap,
+                                                                                              config.inbound_packet_fair_unit_sz);
             }
 
             static auto make_inbound_id_controller(Config config) -> std::unique_ptr<packet_controller::InBoundIDControllerInterface>{
@@ -8836,29 +8950,20 @@ namespace dg::network_kernel_mailbox_impl1{
 
                 if (config.retransmission_concurrency_sz == 1u){
                     if (config.has_exhaustion_control){
-                        if (config.retransmission_has_react_pattern){
-                            return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_reacting_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap),
-                                                                                                                                                                                                        config.retransmission_react_sz,
-                                                                                                                                                                                                        config.retransmission_react_queue_cap,
-                                                                                                                                                                                                        config.retransmission_react_time),
-                                                                                                                            config.retry_device,
-                                                                                                                            packet_controller::ComponentFactory::get_default_exhaustion_controller());
-                        }
-
-                        return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap),
-                                                                                                                                                                                           config.retry_device,
-                                                                                                                                                                                           packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                        return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
+                                                                                                                                                                                                            config.retransmission_idhashset_cap,
+                                                                                                                                                                                                            packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
+                                                                                                                                                                                                            config.retransmission_ticking_clock_resolution,
+                                                                                                                                                                                                            config.retransmission_packet_cap),
+                                                                                                                        config.retry_device,
+                                                                                                                        packet_controller::ComponentFactory::get_default_exhaustion_controller());
                     }
 
-                    if (config.retransmission_has_react_pattern){
-                        return packet_controller::ComponentFactory::get_reacting_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap),
-                                                                                                           config.retransmission_react_sz,
-                                                                                                           config.retransmission_react_queue_cap,
-                                                                                                           config.retransmission_react_time);
-                    }
-
-                    return packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap,
-                                                                                              config.retransmission_idhashset_cap, config.retransmission_queue_cap);
+                    return packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
+                                                                                                               config.retransmission_idhashset_cap,
+                                                                                                               packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
+                                                                                                               config.retransmission_ticking_clock_resolution,
+                                                                                                               config.retransmission_packet_cap);
                 }
 
                 std::vector<std::unique_ptr<packet_controller::RetransmissionControllerInterface>> retransmission_controller_vec{};
@@ -8867,21 +8972,22 @@ namespace dg::network_kernel_mailbox_impl1{
                     auto current_retransmission_controller = std::unique_ptr<packet_controller::RetransmissionControllerInterface>{}; 
                     
                     if (config.has_exhaustion_control){
-                        current_retransmission_controller = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap),
-                                                                                                                                                                                                                        config.retry_device,
-                                                                                                                                                                                                                        packet_controller::ComponentFactory::get_default_exhaustion_controller()); 
+                        current_retransmission_controller = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
+                                                                                                                                                                                                                                         config.retransmission_idhashset_cap,
+                                                                                                                                                                                                                                         packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
+                                                                                                                                                                                                                                         config.retransmission_ticking_clock_resolution,
+                                                                                                                                                                                                                                         config.retransmission_packet_cap),
+                                                                                                                                                     config.retry_device,
+                                                                                                                                                     packet_controller::ComponentFactory::get_default_exhaustion_controller()); 
                     } else{
-                        current_retransmission_controller = packet_controller::ComponentFactory::get_retransmission_controller(config.retransmission_delay, config.retransmission_packet_cap, config.retransmission_idhashset_cap, config.retransmission_queue_cap);
+                        current_retransmission_controller = packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
+                                                                                                                                                config.retransmission_idhashset_cap,
+                                                                                                                                                packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
+                                                                                                                                                config.retransmission_ticking_clock_resolution,
+                                                                                                                                                config.retransmission_packet_cap);
                     }
 
                     retransmission_controller_vec.push_back(std::move(current_retransmission_controller));
-                }
-
-                if (config.retransmission_has_react_pattern){
-                    return packet_controller::ComponentFactory::get_reacting_retransmission_controller(packet_controller::ComponentFactory::get_randomhash_distributed_retransmission_controller(std::move(retransmission_controller_vec)),
-                                                                                                       config.retransmission_react_sz,
-                                                                                                       config.retransmission_react_queue_cap,
-                                                                                                       config.retransmission_react_time);
                 }
 
                 return packet_controller::ComponentFactory::get_randomhash_distributed_retransmission_controller(std::move(retransmission_controller_vec));
@@ -8889,66 +8995,11 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_outbound_packet_container(Config config) -> std::unique_ptr<packet_controller::PacketContainerInterface>{
 
-                if (config.outbound_packet_concurrency_sz == 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
-
-                if (config.outbound_packet_concurrency_sz == 1u){
-                    if (config.has_exhaustion_control){
-                        if (config.outbound_packet_has_react_pattern){
-                            return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
-                                                                                                                                                                                                                                                             config.outbound_krescue_packet_container_cap),
-                                                                                                                                                                                      config.outbound_packet_react_sz,
-                                                                                                                                                                                      config.outbound_packet_react_queue_cap,
-                                                                                                                                                                                      config.outbound_packet_react_time),
-                                                                                                                   config.retry_device,
-                                                                                                                   packet_controller::ComponentFactory::get_default_exhaustion_controller());
-                        }
-
-                        return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
-                                                                                                                                                                                      config.outbound_krescue_packet_container_cap),
-                                                                                                                                                                                      config.retry_device,
-                                                                                                                                                                                      packet_controller::ComponentFactory::get_default_exhaustion_controller());
-                    }
-
-                    if (config.outbound_packet_has_react_pattern){
-                        return packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
-                                                                                                                                                                         config.outbound_krescue_packet_container_cap),
-                                                                                                  config.outbound_packet_react_sz,
-                                                                                                  config.outbound_packet_react_queue_cap,
-                                                                                                  config.outbound_packet_react_time);
-                    }
-
-                    return packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
-                                                                                                  config.outbound_krescue_packet_container_cap);
-                }
-
-                std::vector<std::unique_ptr<packet_controller::PacketContainerInterface>> packet_container_vec{};
-
-                for (size_t i = 0u; i < config.outbound_packet_concurrency_sz; ++i){
-                    auto current_packet_container = std::unique_ptr<packet_controller::PacketContainerInterface>{}; 
-
-                    if (config.has_exhaustion_control){
-                        current_packet_container = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
-                                                                                                                                                                                                          config.outbound_krescue_packet_container_cap),
-                                                                                                                                                                                                          config.retry_device,
-                                                                                                                                                                                                          packet_controller::ComponentFactory::get_default_exhaustion_controller());
-                    } else{
-                        current_packet_container = packet_controller::ComponentFactory::get_std_outbound_packet_container(config.outbound_ack_packet_container_cap, config.outbound_request_packet_container_cap,
-                                                                                                                          config.outbound_krescue_packet_container_cap);
-                    }
-
-                    packet_container_vec.push_back(std::move(current_packet_container));
-                }
-
-                if (config.outbound_packet_has_react_pattern){
-                    return packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec)),
-                                                                                              config.outbound_packet_react_sz,
-                                                                                              config.outbound_packet_react_queue_cap,
-                                                                                              config.outbound_packet_react_time);
-                }
-
-                return packet_controller::ComponentFactory::get_randomhash_distributed_packet_container(std::move(packet_container_vec));
+                return packet_controller::ComponentFactory::get_normal_outbound_packet_container(config.outbound_request_packet_container_cap,
+                                                                                                 config.outbound_ack_packet_container_cap,
+                                                                                                 config.outbound_krescue_packet_container_cap,
+                                                                                                 config.outbound_waiting_queue_capacity,
+                                                                                                 config.outbound_leftover_queue_capacity);
             }
 
             static auto make_outbound_border_controller(Config config) -> std::vector<std::unique_ptr<packet_controller::OutBoundBorderController>>{
@@ -9091,7 +9142,17 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                       config.num_process_inbound_worker,
                                                                                       config.num_outbound_worker,
                                                                                       config.num_kernel_rescue_worker,
-                                                                                      config.num_retry_worker);
+                                                                                      config.num_retry_worker,
+                                                                                    
+                                                                                      make_inbound_buffer_fair_container(config),
+                                                                                      config.worker_inbound_buffer_fair_container_fr_warehouse_get_cap,
+                                                                                      config.worker_inbound_buffer_fair_container_to_warehouse_push_cap,
+                                                                                      config.worker_inbound_buffer_fair_container_busy_threshold,
+                                                                                    
+                                                                                      make_inbound_packet_fair_container(config),
+                                                                                      config.worker_inbound_fair_packet_fr_warehouse_get_cap,
+                                                                                      config.worker_inbound_fair_packet_to_warehouse_push_cap,
+                                                                                      config.worker_inbound_fair_packet_busy_threshold);
             }
     };
 

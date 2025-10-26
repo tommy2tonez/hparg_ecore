@@ -8,6 +8,7 @@
 #include <stdlib.h> 
 #include <type_traits>
 #include <expected>
+#include <stacktrace>
 
 using exception_t = uint16_t; 
 
@@ -189,6 +190,7 @@ namespace dg::network_exception{
 
     inline void throw_exception(exception_t){
         
+        std::cout << std::stacktrace::current() << '\n';
         throw base_exception("unspecified error");
     }
 
