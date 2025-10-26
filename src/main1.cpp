@@ -224,7 +224,6 @@ int main()
                 .host_ip = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value()},
                 .host_port_inbound = 5000,
                 .host_port_outbound = 5001,
-                .has_exhaustion_control = true,
 
                 .retransmission_delay = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(4)),
                 .retransmission_concurrency_sz = 1,
@@ -236,6 +235,7 @@ int main()
                 .retransmission_react_sz = 1,
                 .retransmission_react_queue_cap = 1 << 10,
                 .retransmission_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
+                .retransmission_has_exhaustion_control = true,
 
                 .inbound_buffer_concurrency_sz = 2,
                 .inbound_buffer_container_cap = 1 << 14,
@@ -248,6 +248,7 @@ int main()
                 .inbound_buffer_fair_waiting_queue_cap = 1 << 10,
                 .inbound_buffer_fair_leftover_queue_cap = 1 << 10,
                 .inbound_buffer_fair_unit_sz = 1 << 10,
+                .inbound_buffer_has_exhaustion_control = true,
 
                 .inbound_packet_concurrency_sz = 2,
                 .inbound_packet_container_cap = 1 << 14,
@@ -260,6 +261,7 @@ int main()
                 .inbound_packet_fair_waiting_queue_cap = 1 << 10,
                 .inbound_packet_fair_leftover_queue_cap = 1 << 10,
                 .inbound_packet_fair_unit_sz = 1 << 10,
+                .inbound_packet_has_exhaustion_control = true, 
 
                 .inbound_idhashset_concurrency_sz = 2,
                 .inbound_idhashset_cap = 1 << 14,
@@ -288,11 +290,13 @@ int main()
 
                 .outbound_transmit_frequency = uint32_t{1} << 15,
 
-                .outbound_request_packet_container_cap = 1 << 14,
-                .outbound_ack_packet_container_cap = 1 << 14,
-                .outbound_krescue_packet_container_cap = 1 << 14,
-                .outbound_waiting_queue_capacity = 1 << 10,
-                .outbound_leftover_queue_capacity = 1 << 10,
+                .outbound_container_request_packet_container_cap = 1 << 14,
+                .outbound_container_ack_packet_container_cap = 1 << 14,
+                .outbound_container_krescue_packet_container_cap = 1 << 14,
+                .outbound_container_waiting_queue_capacity = 1 << 10,
+                .outbound_container_leftover_queue_capacity = 1 << 10,
+                .outbound_container_unit_sz = 1 << 10,
+                .outbound_container_has_exhaustion_control = true,
 
                 .inbound_tc_has_borderline_per_inbound_worker = true,
                 .inbound_tc_peraddr_cap = uint32_t{1} << 20,

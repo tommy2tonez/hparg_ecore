@@ -471,7 +471,7 @@ namespace dg::network_memlock_impl1{
 
             static auto internal_acquire_try_strong(size_t table_idx) noexcept -> bool{
 
-                return self::internal_acquire_try(table_idx);
+                return lck_table[table_idx].value.test_and_set(std::memory_order_seq_cst) == false;
             }
 
             static void internal_acquire_wait(size_t table_idx) noexcept{

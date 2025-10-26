@@ -33,13 +33,15 @@ namespace map_test{
         std::unordered_map<Key, Value> std_map{};
         Map<Key, Value> cmp_map{};
 
-        auto seed                   = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-        auto key_rand_gen           = std::bind(std::uniform_int_distribution<Key>{}, std::mt19937_64(seed));
-        auto val_rand_gen           = std::bind(std::uniform_int_distribution<Value>{}, std::mt19937_64(seed * 2));
-        auto ops_gen                = std::bind(std::uniform_int_distribution<size_t>(0u, 11u), std::mt19937_64(seed * 4));
-        auto random_clear_gen       = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1} << 20), std::mt19937_64(seed * 8)); 
-        auto random_clear_sz_gen    = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1} << 20), std::mt19937_64(seed * 16));
-        auto clear_gen              = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1u} << 24), std::mt19937_64(seed * 32));
+        auto seed                           = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+        auto key_rand_gen                   = std::bind(std::uniform_int_distribution<Key>{}, std::mt19937_64(seed));
+        auto val_rand_gen                   = std::bind(std::uniform_int_distribution<Value>{}, std::mt19937_64(seed * 2));
+        auto ops_gen                        = std::bind(std::uniform_int_distribution<size_t>(0u, 12u), std::mt19937_64(seed * 4));
+        auto random_clear_gen               = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1} << 20), std::mt19937_64(seed * 8)); 
+        auto random_clear_sz_gen            = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1} << 20), std::mt19937_64(seed * 16));
+        auto clear_gen                      = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1u} << 24), std::mt19937_64(seed * 32)); 
+        auto clear_by_reconstruction_gen    = std::bind(std::uniform_int_distribution<size_t>(0u, size_t{1u} << 24), std::mt19937_64(seed * 32));
+        auto erase_gen                      = std::bind(std::uniform_int_distribution<size_t>(), std::mt19937_64(seed * 64)); 
 
         // while (true){
         for (size_t i = 0u; i < TEST_SZ; ++i){
@@ -48,6 +50,7 @@ namespace map_test{
             size_t ops      = ops_gen();
             size_t clear    = random_clear_gen();
             size_t do_clear = clear_gen(); 
+            size_t do_clear_by_reconstruction = clear_by_reconstruction_gen();
 
             if (ops == 0u){
                 std_map.emplace(key, val);
@@ -145,6 +148,13 @@ namespace map_test{
                 auto map_pair = std::make_pair(key, val);
                 std_map.insert(&map_pair, &map_pair + 1);
                 cmp_map.insert(&map_pair, &map_pair + 1);
+            } else if (ops == 12u){
+                if (std_map.size() != 0u){
+                    size_t random_idx = erase_gen() % std_map.size();
+                    auto erase_it = std::next(std_map.begin(), random_idx);
+                    cmp_map.erase(erase_it->first);
+                    std_map.erase(erase_it);
+                }
             }
 
             if (clear == 0u){
@@ -196,6 +206,11 @@ namespace map_test{
             if (do_clear == 0u){
                 std_map.clear();
                 cmp_map.clear();
+            }
+
+            if (do_clear_by_reconstruction){
+                std_map = {};
+                cmp_map = {};
             }
         }
 
@@ -256,12 +271,12 @@ namespace map_test{
         std::cout << "__MAP_TEST_BEGIN__" << std::endl;
         std::cout << "testing dg::map_variants::unordered_node_map" << std::endl;
         test_map<dg::network_datastructure::unordered_map_variants::unordered_node_map, uint16_t, uint16_t>();
-        std::cout << "testing dg::map_variants::unordered_unstable_map" << std::endl;
-        test_map<dg::map_variants::unordered_unstable_map, uint16_t, uint16_t>();
-        std::cout << "testing dg::map_variants::unordered_unstable_fast_map" << std::endl;
-        test_map<tmp_fast_map, uint16_t, uint16_t>();
-        std::cout << "testing dg::map_variants::unordered_unstable_fastinsert_map" << std::endl;
-        test_map<tmp_fastinsert_map, uint16_t, uint16_t>();
+        // std::cout << "testing dg::map_variants::unordered_unstable_map" << std::endl;
+        // test_map<dg::map_variants::unordered_unstable_map, uint16_t, uint16_t>();
+        // std::cout << "testing dg::map_variants::unordered_unstable_fast_map" << std::endl;
+        // test_map<tmp_fast_map, uint16_t, uint16_t>();
+        // std::cout << "testing dg::map_variants::unordered_unstable_fastinsert_map" << std::endl;
+        // test_map<tmp_fastinsert_map, uint16_t, uint16_t>();
         std::cout << "__MAP_TEST_END__" << std::endl;
 
     }

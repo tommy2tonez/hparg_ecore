@@ -452,7 +452,7 @@ namespace stdx{
 
     } 
 
-    inline __attribute__((always_inline)) bool fair_atomic_flag_memsafe_try_lock(fair_atomic_flag * volatile mtx) noexcept{
+    inline __attribute__((always_inline)) bool fair_atomic_flag_memsafe_try_lock(fair_atomic_flag * volatile mtx, std::memory_order on_success_memorder = std::memory_order_seq_cst) noexcept{
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
@@ -476,7 +476,7 @@ namespace stdx{
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
         } else{
-            std::atomic_thread_fence(std::memory_order_acquire);
+            std::atomic_thread_fence(on_success_memorder);
         }
 
         return true;

@@ -1042,14 +1042,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            dg::vector<std::shared_ptr<dg_binary_semaphore>> mtx_queue;
+            dg::unordered_unstable_map<std::thread::id, std::shared_ptr<semaphore_impl::dg_binary_semaphore>> mtx_queue;
             size_t mtx_queue_cap;
-            std::atomic_flag mtx_mtx_queue;
+            stdx::fair_atomic_flag mtx_mtx_queue;
             stdx::inplace_hdi_container<std::atomic<intmax_t>> counter;
             stdx::inplace_hdi_container<std::atomic<intmax_t>> wakeup_threshold;
             stdx::inplace_hdi_container<std::atomic<size_t>> mtx_queue_sz;
-
-            static inline constexpr size_t MTX_QUEUE_EXPECTED_SIZE = 32u; 
 
         public:
 
@@ -1058,7 +1056,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                   mtx_mtx_queue(),
                                                   counter(std::in_place_t{}, 0),
                                                   wakeup_threshold(std::in_place_t{}, 0),
-                                                  mtx_queue_sz(std::in_place_t{}, 0u){}
+                                                  mtx_queue_sz(std::in_place_t{}, 0u){
+                
+                stdx::inplace_make_fair_atomic_flag(this->mtx_mtx_queue);
+            }
 
             void increment(size_t sz) noexcept{
 
@@ -1067,8 +1068,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 this->counter.value.fetch_add(sz, std::memory_order_relaxed); //increment
                 intmax_t expected = this->wakeup_threshold.value.load(std::memory_order_relaxed);
-                dg::vector<std::shared_ptr<dg_binary_semaphore>> smp_vec = {};
-                smp_vec.reserve(MTX_QUEUE_EXPECTED_SIZE);
 
                 for (size_t epoch = 0u; epoch < INCREMENT_RETRY_SZ; ++epoch){
                     intmax_t current = this->counter.value.load(std::memory_order_relaxed);
@@ -1094,17 +1093,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
 
                     {
-                        stdx::unlock_guard<std::atomic_flag> lck_grd(this->mtx_mtx_queue);
+                        stdx::unlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
 
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
-                        smp_vec = this->mtx_queue;
-                        this->mtx_queue.clear();
+                        this->do_release(this->mtx_queue);
                     }
 
                     break;
                 }
-
-                this->do_release(smp_vec);
             }
 
             void decrement(size_t sz) noexcept{
@@ -1131,12 +1127,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     return;
                 }
 
-                std::shared_ptr<dg_binary_semaphore> waiting_smp = dg::network_allocation::make_shared<dg_binary_semaphore>(0);
-                dg::vector<std::shared_ptr<dg_binary_semaphore>> smp_vec = {};
-                smp_vec.reserve(MTX_QUEUE_EXPECTED_SIZE);
+                std::shared_ptr<semaphore_impl::dg_binary_semaphore> waiting_smp = dg::network_allocation::make_shared<semaphore_impl::dg_binary_semaphore>(0);
 
                 [&, this]() noexcept{
-                    stdx::xlock_guard<std::atomic_flag> lck_grd(this->mtx_mtx_queue);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
 
                     if constexpr(DEBUG_MODE_FLAG){
                         if (this->mtx_queue.size() == this->mtx_queue_cap){
@@ -1145,7 +1139,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         }
                     }
 
-                    this->mtx_queue.push_back(waiting_smp);
+                    this->mtx_queue[std::this_thread::get_id()] = waiting_smp;
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     this->mtx_queue_sz.value.fetch_add(1u, std::memory_order_relaxed);
                     std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -1156,22 +1150,26 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         stdx::seq_cst_guard seqcst_tx;
 
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
-                        smp_vec = this->mtx_queue;
-                        this->mtx_queue.clear();
+                        this->do_release(this->mtx_queue);
                     }
                 }();
 
-                this->do_release(smp_vec);
                 std::atomic_signal_fence(std::memory_order_seq_cst); // another fence
-                waiting_smp->acquire();
+                std::expected<bool, exception_t> err = waiting_smp->try_acquire_for(waiting_time);
+
+                if (err.has_value() && err.value() == false)
+                {
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
+                    this->mtx_queue.erase(std::this_thread::get_id());
+                }
             }
 
         private:
 
-            inline __attribute__((force_inline)) void do_release(dg::vector<std::shared_ptr<dg_binary_semaphore>>& smp_vec){
+            inline __attribute__((force_inline)) void do_release(dg::unordered_unstable_map<std::thread::id, std::shared_ptr<semaphore_impl::dg_binary_semaphore>>& smp_vec){
 
-                for (const auto& smp: smp_vec){
-                    smp->release();
+                for (const auto& kv_pair: smp_vec){
+                    kv_pair.second->release();
                 }
 
                 smp_vec.clear();

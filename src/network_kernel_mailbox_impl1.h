@@ -1109,9 +1109,223 @@ namespace dg::network_kernel_mailbox_impl1::utility{
     }
 }
 
+namespace dg::network_kernel_mailbox_impl1::socket_utility{
+
+    struct iovec2
+    {
+        struct iovec * base_arr;
+        size_t arr_sz;
+    };
+
+    static constexpr auto iovec2_get_allocation_cost(size_t iovec_sz) noexcept -> size_t
+    {
+        size_t base_arr_sz;
+
+        if (iovec_sz == 0u)
+        {
+            base_arr_sz = 0u;
+        } else
+        {
+            base_arr_sz = iovec_sz * sizeof(struct iovec) + alignof(struct iovec);
+        }
+
+        size_t iovec2_sz        = sizeof(struct iovec2) + alignof(struct iovec2);
+        size_t allocation_sz    = base_arr_sz + iovec2_sz; 
+
+        return allocation_sz;
+    } 
+
+    static auto iovec2_inplace_make(char * buf, size_t iovec_sz) noexcept -> struct iovec2 *  
+    {
+        struct iovec * base_arr; 
+
+        if (iovec_sz == 0u)
+        {
+            buf = buf;
+            base_arr = nullptr;
+        } else 
+        {
+            buf = dg::memult::align(buf, std::integral_constant<size_t, alignof(struct iovec)>{});
+            base_arr = new (buf) struct iovec[iovec_sz];
+            std::memset(base_arr, 0, iovec_sz * sizeof(struct iovec));
+            std::advance(buf, iovec_sz * sizeof(struct iovec));
+        }
+
+        buf = dg::memult::align(buf, std::integral_constant<size_t, alignof(iovec2)>());
+        struct iovec2 * return_obj = new (buf) struct iovec2(iovec2{.base_arr = base_arr, .arr_sz = iovec_sz});
+        std::advance(buf, sizeof(struct iovec2));
+
+        return return_obj;
+    }
+
+    static void iovec2_inplace_destroy(struct iovec2 * obj) noexcept
+    {
+        obj = stdx::safe_ptr_access(obj);
+
+        std::destroy(obj->base_arr, std::next(obj->base_arr, obj->arr_sz));
+        std::destroy_at(obj);
+    }
+
+    static auto iovec2_inplace_raiimake(char * buf, size_t iovec_sz) noexcept -> std::unique_ptr<struct iovec2, decltype(&iovec2_inplace_destroy)>
+    {
+        return {iovec2_inplace_make(buf, iovec_sz), iovec2_inplace_destroy};
+    }
+
+    static auto iovec2_assign_range(struct iovec2 * obj,
+                                    size_t offset,
+                                    void ** buf_arr,
+                                    size_t * sz_arr,
+                                    size_t arr_sz) noexcept -> exception_t 
+    {
+        if (offset + arr_sz > stdx::safe_ptr_access(obj)->arr_sz)
+        {
+            return dg::network_exception::OUT_OF_BOUND_ACCESS;
+        }
+
+        for (size_t i = 0u; i < arr_sz; ++i)
+        {
+            size_t abs_i = offset + i;
+
+            obj->base_arr[abs_i].iov_base   = buf_arr[i];
+            obj->base_arr[abs_i].iov_len    = sz_arr[i];
+        }
+
+        return dg::network_exception::SUCCESS;
+    }
+
+    struct mmsghdr_vec
+    {
+        struct mmsghdr * base_arr;
+        size_t arr_sz;
+    };
+
+    static auto mmsghdr_vec_get_allocation_cost(size_t mmsghdr_sz) noexcept -> size_t
+    {
+        size_t base_arr_sz;
+
+        if (mmsghdr_sz == 0u)
+        {
+            base_arr_sz = 0u;
+        } else
+        {
+            base_arr_sz = mmsghdr_sz * sizeof(struct mmsghdr) + alignof(struct mmsghdr);
+        }
+
+        size_t mmsghdr_vec_sz   = sizeof(struct mmsghdr_vec) + alignof(struct mmsghdr_vec);
+        size_t allocation_sz    = base_arr_sz + mmsghdr_vec_sz;
+
+        return allocation_sz;
+    }
+
+    static auto mmsghdr_vec_inplace_make(char * buf, size_t mmsghdr_sz) noexcept -> struct mmsghdr_vec *
+    {
+        struct mmsghdr * base_arr;
+
+        if (mmsghdr_sz == 0u)
+        {
+            buf = buf;
+            base_arr = nullptr;
+        } else
+        {
+            buf = dg::memult::align(buf, std::integral_constant<size_t, alignof(struct mmsghdr)>());
+            base_arr = new (buf) struct mmsghdr[mmsghdr_sz];
+            std::memset(base_arr, 0, mmsghdr_sz * sizeof(struct mmsghdr));
+            std::advance(buf, mmsghdr_sz * sizeof(struct mmsghdr));
+        }
+
+        buf = dg::memult::align(buf, std::integral_constant<size_t, alignof(mmsghdr_vec)>());
+        struct mmsghdr_vec * return_obj = new (buf) struct mmsghdr_vec(mmsghdr_vec{.base_arr = base_arr, .arr_sz = mmsghdr_sz});
+        std::advance(buf, sizeof(struct mmsghdr_vec));
+
+        return return_obj;
+    }
+
+    static void mmsghdr_vec_inplace_destroy(struct mmsghdr_vec * obj) noexcept
+    {
+        obj = stdx::safe_ptr_access(obj);
+
+        std::destroy(obj->base_arr, std::next(obj->base_arr, obj->arr_sz));
+        std::destroy_at(obj);
+    }
+
+    static auto mmsghdr_vec_inplace_raiimake(char * buf, size_t mmsghdr_sz) noexcept -> std::unique_ptr<struct mmsghdr_vec, decltype(&mmsghdr_vec_inplace_destroy)>
+    {
+        return {mmsghdr_vec_inplace_make(buf, mmsghdr_sz), mmsghdr_vec_inplace_destroy};
+    }
+
+    static auto mmsghdr_vec_bijective_bind_iovec_range(struct mmsghdr_vec * obj,
+                                                       size_t offset,
+                                                       struct iovec2 * iovec_vec) noexcept -> exception_t
+    {
+        obj = stdx::safe_ptr_access(obj);
+        iovec_vec = stdx::safe_ptr_access(iovec_vec);
+
+        if (offset + iovec_vec->arr_sz > obj->arr_sz)
+        {
+            return dg::network_exception::OUT_OF_BOUND_ACCESS;
+        }
+
+        for (size_t i = 0u; i < iovec_vec->arr_sz; ++i)
+        {
+            size_t abs_i = i + offset;
+            obj->base_arr[abs_i].msg_hdr.msg_iov    = std::next(iovec_vec->base_arr, i);
+            obj->base_arr[abs_i].msg_hdr.msg_iovlen = 1u;
+        }
+
+        return dg::network_exception::SUCCESS;
+    }
+
+    static auto mmsghdr_vec_bind_iovec_range(struct mmsghdr_vec * obj,
+                                             size_t obj_offset,
+                                             struct iovec2 * iovec_vec,
+                                             size_t iovec_vec_offset,
+                                             size_t iovec_vec_range) noexcept -> exception_t
+    {
+        obj = stdx::safe_ptr_access(obj);
+        iovec_vec = stdx::safe_ptr_access(iovec_vec);
+
+        if (obj_offset >= obj->arr_sz)
+        {
+            return dg::network_exception::OUT_OF_BOUND_ACCESS;
+        }
+
+        if (iovec_vec_offset + iovec_vec_range > iovec_vec->arr_sz)
+        {
+            return dg::network_exception::OUT_OF_BOUND_ACCESS;
+        }
+
+        obj->base_arr[obj_offset].msg_hdr.msg_iov       = std::next(iovec_vec->base_arr, iovec_vec_offset);
+        obj->base_arr[obj_offset].msg_hdr.msg_iovlen    = iovec_vec_range;
+
+        return dg::network_exception::SUCCESS;
+    } 
+
+    static auto mmsghdr_vec_rangebind_server(struct mmsghdr_vec * obj,
+                                             void * server_obj,
+                                             size_t server_obj_sz,
+                                             size_t offset,
+                                             size_t sz) noexcept -> exception_t
+    {
+        if (offset + sz > obj->arr_sz)
+        {
+            return dg::network_exception::OUT_OF_BOUND_ACCESS;
+        }
+
+        for (size_t i = 0u; i < sz; ++i)
+        {
+            size_t abs_i = offset + i;
+            obj->base_arr[abs_i].msg_hdr.msg_name       = server_obj;
+            obj->base_arr[abs_i].msg_hdr.msg_namelen    = stdx::safe_integer_cast<int>(server_obj_sz);
+        }
+
+        return dg::network_exception::SUCCESS;
+    }
+}
+
 namespace dg::network_kernel_mailbox_impl1::socket_service{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
+    using namespace dg::network_kernel_mailbox_impl1::socket_utility;
 
     using socket_close_t = void (*)(SocketHandle *) noexcept; 
 
@@ -1367,216 +1581,6 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
     static consteval auto batchrecv_max_array_size() -> size_t
     {
         return constants::KERNEL_BATCH_POPCOUNT;
-    }
-
-    struct iovec2
-    {
-        struct iovec * base_arr;
-        size_t arr_sz;
-    };
-
-    static constexpr auto iovec2_get_allocation_cost(size_t iovec_sz) noexcept -> size_t
-    {
-        size_t base_arr_sz;
-
-        if (iovec_sz == 0u)
-        {
-            base_arr_sz = 0u;
-        } else
-        {
-            base_arr_sz = iovec_sz * sizeof(struct iovec) + alignof(struct iovec);
-        }
-
-        size_t iovec2_sz        = sizeof(struct iovec2) + alignof(struct iovec2);
-        size_t allocation_sz    = base_arr_sz + iovec2_sz; 
-
-        return allocation_sz;
-    } 
-
-    static auto iovec2_inplace_make(char * buf, size_t iovec_sz) noexcept -> struct iovec2 *  
-    {
-        struct iovec * base_arr; 
-
-        if (iovec_sz == 0u)
-        {
-            buf = buf;
-            base_arr = nullptr;
-        } else 
-        {
-            buf = dg::memult::align(buf, std::integral_constant<size_t, alignof(struct iovec)>{});
-            base_arr = new (buf) struct iovec[iovec_sz];
-            std::memset(base_arr, 0, iovec_sz * sizeof(struct iovec));
-            std::advance(buf, iovec_sz * sizeof(struct iovec));
-        }
-
-        buf = dg::memult::align(buf, std::integral_constant<size_t, alignof(iovec2)>());
-        struct iovec2 * return_obj = new (buf) struct iovec2(iovec2{.base_arr = base_arr, .arr_sz = iovec_sz});
-        std::advance(buf, sizeof(struct iovec2));
-
-        return return_obj;
-    }
-
-    static void iovec2_inplace_destroy(struct iovec2 * obj) noexcept
-    {
-        obj = stdx::safe_ptr_access(obj);
-
-        std::destroy(obj->base_arr, std::next(obj->base_arr, obj->arr_sz));
-        std::destroy_at(obj);
-    }
-
-    static auto iovec2_inplace_raiimake(char * buf, size_t iovec_sz) noexcept -> std::unique_ptr<struct iovec2, decltype(&iovec2_inplace_destroy)>
-    {
-        return {iovec2_inplace_make(buf, iovec_sz), iovec2_inplace_destroy};
-    }
-
-    static auto iovec2_assign_range(struct iovec2 * obj,
-                                    size_t offset,
-                                    void ** buf_arr,
-                                    size_t * sz_arr,
-                                    size_t arr_sz) noexcept -> exception_t 
-    {
-        if (offset + arr_sz > stdx::safe_ptr_access(obj)->arr_sz)
-        {
-            return dg::network_exception::OUT_OF_BOUND_ACCESS;
-        }
-
-        for (size_t i = 0u; i < arr_sz; ++i)
-        {
-            size_t abs_i = offset + i;
-
-            obj->base_arr[abs_i].iov_base   = buf_arr[i];
-            obj->base_arr[abs_i].iov_len    = sz_arr[i];
-        }
-
-        return dg::network_exception::SUCCESS;
-    }
-
-    struct mmsghdr_vec
-    {
-        struct mmsghdr * base_arr;
-        size_t arr_sz;
-    };
-
-    static auto mmsghdr_vec_get_allocation_cost(size_t mmsghdr_sz) noexcept -> size_t
-    {
-        size_t base_arr_sz;
-
-        if (mmsghdr_sz == 0u)
-        {
-            base_arr_sz = 0u;
-        } else
-        {
-            base_arr_sz = mmsghdr_sz * sizeof(struct mmsghdr) + alignof(struct mmsghdr);
-        }
-
-        size_t mmsghdr_vec_sz   = sizeof(struct mmsghdr_vec) + alignof(struct mmsghdr_vec);
-        size_t allocation_sz    = base_arr_sz + mmsghdr_vec_sz;
-
-        return allocation_sz;
-    }
-
-    static auto mmsghdr_vec_inplace_make(char * buf, size_t mmsghdr_sz) noexcept -> struct mmsghdr_vec *
-    {
-        struct mmsghdr * base_arr;
-
-        if (mmsghdr_sz == 0u)
-        {
-            buf = buf;
-            base_arr = nullptr;
-        } else
-        {
-            buf = dg::memult::align(buf, std::integral_constant<size_t, alignof(struct mmsghdr)>());
-            base_arr = new (buf) struct mmsghdr[mmsghdr_sz];
-            std::memset(base_arr, 0, mmsghdr_sz * sizeof(struct mmsghdr));
-            std::advance(buf, mmsghdr_sz * sizeof(struct mmsghdr));
-        }
-
-        buf = dg::memult::align(buf, std::integral_constant<size_t, alignof(mmsghdr_vec)>());
-        struct mmsghdr_vec * return_obj = new (buf) struct mmsghdr_vec(mmsghdr_vec{.base_arr = base_arr, .arr_sz = mmsghdr_sz});
-        std::advance(buf, sizeof(struct mmsghdr_vec));
-
-        return return_obj;
-    }
-
-    static void mmsghdr_vec_inplace_destroy(struct mmsghdr_vec * obj) noexcept
-    {
-        obj = stdx::safe_ptr_access(obj);
-
-        std::destroy(obj->base_arr, std::next(obj->base_arr, obj->arr_sz));
-        std::destroy_at(obj);
-    }
-
-    static auto mmsghdr_vec_inplace_raiimake(char * buf, size_t mmsghdr_sz) noexcept -> std::unique_ptr<struct mmsghdr_vec, decltype(&mmsghdr_vec_inplace_destroy)>
-    {
-        return {mmsghdr_vec_inplace_make(buf, mmsghdr_sz), mmsghdr_vec_inplace_destroy};
-    }
-
-    static auto mmsghdr_vec_bijective_bind_iovec_range(struct mmsghdr_vec * obj,
-                                                       size_t offset,
-                                                       struct iovec2 * iovec_vec) noexcept -> exception_t
-    {
-        obj = stdx::safe_ptr_access(obj);
-        iovec_vec = stdx::safe_ptr_access(iovec_vec);
-
-        if (offset + iovec_vec->arr_sz > obj->arr_sz)
-        {
-            return dg::network_exception::OUT_OF_BOUND_ACCESS;
-        }
-
-        for (size_t i = 0u; i < iovec_vec->arr_sz; ++i)
-        {
-            size_t abs_i = i + offset;
-            obj->base_arr[abs_i].msg_hdr.msg_iov    = std::next(iovec_vec->base_arr, i);
-            obj->base_arr[abs_i].msg_hdr.msg_iovlen = 1u;
-        }
-
-        return dg::network_exception::SUCCESS;
-    }
-
-    static auto mmsghdr_vec_bind_iovec_range(struct mmsghdr_vec * obj,
-                                             size_t obj_offset,
-                                             struct iovec2 * iovec_vec,
-                                             size_t iovec_vec_offset,
-                                             size_t iovec_vec_range) noexcept -> exception_t
-    {
-        obj = stdx::safe_ptr_access(obj);
-        iovec_vec = stdx::safe_ptr_access(iovec_vec);
-
-        if (obj_offset >= obj->arr_sz)
-        {
-            return dg::network_exception::OUT_OF_BOUND_ACCESS;
-        }
-
-        if (iovec_vec_offset + iovec_vec_range > iovec_vec->arr_sz)
-        {
-            return dg::network_exception::OUT_OF_BOUND_ACCESS;
-        }
-
-        obj->base_arr[obj_offset].msg_hdr.msg_iov       = std::next(iovec_vec->base_arr, iovec_vec_offset);
-        obj->base_arr[obj_offset].msg_hdr.msg_iovlen    = iovec_vec_range;
-
-        return dg::network_exception::SUCCESS;
-    } 
-
-    static auto mmsghdr_vec_rangebind_server(struct mmsghdr_vec * obj,
-                                             void * server_obj,
-                                             size_t server_obj_sz,
-                                             size_t offset,
-                                             size_t sz) noexcept -> exception_t
-    {
-        if (offset + sz > obj->arr_sz)
-        {
-            return dg::network_exception::OUT_OF_BOUND_ACCESS;
-        }
-
-        for (size_t i = 0u; i < sz; ++i)
-        {
-            size_t abs_i = offset + i;
-            obj->base_arr[abs_i].msg_hdr.msg_name       = server_obj;
-            obj->base_arr[abs_i].msg_hdr.msg_namelen    = stdx::safe_integer_cast<int>(server_obj_sz);
-        }
-
-        return dg::network_exception::SUCCESS;
     }
 
     static auto batchsend_noblock_ipv6(const SocketHandle& sock,
@@ -1949,7 +1953,7 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                 size_t heap_idx;
             };
 
-            dg::unordered_unstable_map2<global_packet_id_t, HeapNode *> id_heap_map;
+            dg::unordered_unstable_map<global_packet_id_t, HeapNode *> id_heap_map;
             dg::vector<std::unique_ptr<HeapNode>> temporal_heap;
             size_t temporal_heap_sz;
 
@@ -1959,7 +1963,7 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                                                      temporal_heap(),
                                                      temporal_heap_sz(0u){
 
-                this->id_heap_map.reserve(1);
+                this->id_heap_map.reserve(cap);
 
                 for (size_t i = 0u; i < cap; ++i){
                     this->temporal_heap.push_back(std::make_unique<HeapNode>(HeapNode{}));
@@ -1971,16 +1975,6 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
 
                 if (this->id_heap_map.contains(pkt.id)){
                     return dg::network_exception::DUPLICATE_ENTRY;
-                }
-
-                auto map_ptr = this->id_heap_map.find(pkt.id);
-                
-                if (map_ptr != this->id_heap_map.end()){
-                    HeapNode * associated_heap_node = stdx::safe_ptr_access(map_ptr->second);
-                    associated_heap_node->sched_time = expiry_time;
-                    this->correct_heap_node_at(associated_heap_node->heap_idx);
-
-                    return dg::network_exception::SUCCESS;
                 }
 
                 std::expected<HeapNode *, exception_t> reference_node = this->add_heap_node(std::move(pkt), expiry_time);
@@ -2555,6 +2549,7 @@ namespace dg::network_kernel_mailbox_impl1::semaphore_impl{
 
 namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
+    //OK
     class BusyObserver: public virtual packet_controller::NetworkBusyObserverInterface{
 
         private:
@@ -2622,6 +2617,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    //OK
     class ComplexReactor{
 
         private:
@@ -2632,8 +2628,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             stdx::inplace_hdi_container<std::atomic<intmax_t>> counter;
             stdx::inplace_hdi_container<std::atomic<intmax_t>> wakeup_threshold;
             stdx::inplace_hdi_container<std::atomic<size_t>> mtx_queue_sz;
-
-            static inline constexpr size_t MTX_QUEUE_EXPECTED_SIZE = 32u; 
 
         public:
 
@@ -2654,8 +2648,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 this->counter.value.fetch_add(sz, std::memory_order_relaxed); //increment
                 intmax_t expected = this->wakeup_threshold.value.load(std::memory_order_relaxed);
-                dg::unordered_unstable_map<std::thread::id, std::shared_ptr<semaphore_impl::dg_binary_semaphore>> smp_vec = {};
-                smp_vec.reserve(MTX_QUEUE_EXPECTED_SIZE);
 
                 for (size_t epoch = 0u; epoch < INCREMENT_RETRY_SZ; ++epoch){
                     intmax_t current = this->counter.value.load(std::memory_order_relaxed);
@@ -2684,14 +2676,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         stdx::unlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
 
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
-                        smp_vec = this->mtx_queue;
-                        this->mtx_queue.clear();
+                        this->do_release(this->mtx_queue);
                     }
 
                     break;
                 }
-
-                this->do_release(smp_vec);
             }
 
             void decrement(size_t sz) noexcept{
@@ -2719,8 +2708,6 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
 
                 std::shared_ptr<semaphore_impl::dg_binary_semaphore> waiting_smp = dg::network_allocation::make_shared<semaphore_impl::dg_binary_semaphore>(0);
-                dg::unordered_unstable_map<std::thread::id, std::shared_ptr<semaphore_impl::dg_binary_semaphore>> smp_vec = {};
-                smp_vec.reserve(MTX_QUEUE_EXPECTED_SIZE);
 
                 [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
@@ -2743,14 +2730,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         stdx::seq_cst_guard seqcst_tx;
 
                         this->mtx_queue_sz.value.exchange(0u, std::memory_order_relaxed);
-                        smp_vec = this->mtx_queue;
-                        this->mtx_queue.clear();
+                        this->do_release(this->mtx_queue);
                     }
                 }();
 
-                this->do_release(smp_vec);
                 std::atomic_signal_fence(std::memory_order_seq_cst); // another fence
-                waiting_smp->try_acquire_for(waiting_time);
+                std::expected<bool, exception_t> err = waiting_smp->try_acquire_for(waiting_time);
+
+                if (err.has_value() && err.value() == false)
+                {
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
+                    this->mtx_queue.erase(std::this_thread::get_id());
+                }
             }
 
         private:
@@ -3103,6 +3094,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    //OK
     class MemoryEfficientRetransmissionController: public virtual RetransmissionControllerInterface{
 
         private:
@@ -6228,8 +6220,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                          size_t rescue_packet_vec_queue_capacity,
                                                          size_t waiting_queue_capacity,
                                                          size_t leftover_queue_capacity,
-                                                         size_t accum_sz = constants::DEFAULT_ACCUMULATION_SIZE,
-                                                         size_t consume_factor = 4u) -> std::unique_ptr<PacketContainerInterface>{
+                                                         size_t unit_sz,
+                                                         size_t accum_sz = constants::DEFAULT_ACCUMULATION_SIZE) -> std::unique_ptr<PacketContainerInterface>{
                 
             const size_t MIN_NORMAL_PACKET_VEC_QUEUE_CAPACITY   = 1u;
             const size_t MAX_NORMAL_PACKET_VEC_QUEUE_CAPACITY   = size_t{1} << 25;
@@ -6239,6 +6231,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MAX_RESCUE_PACKET_QUEUE_CAPACITY       = size_t{1} << 25;
             const size_t MIN_ACCUM_SZ                           = 1u;
             const size_t MAX_ACCUM_SZ                           = size_t{1} << 25;
+            const size_t MIN_UNIT_SZ                            = 1u;
+            const size_t MAX_UNIT_SZ                            = size_t{1} << 25;
 
             if (std::clamp(normal_packet_vec_queue_capacity, MIN_NORMAL_PACKET_VEC_QUEUE_CAPACITY, MAX_NORMAL_PACKET_VEC_QUEUE_CAPACITY) != normal_packet_vec_queue_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -6256,8 +6250,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t tentative_consume_sz     = std::min(std::min(normal_packet_vec_queue_capacity, ack_packet_vec_queue_capacity), rescue_packet_vec_queue_capacity) >> consume_factor;
-            size_t normalized_consume_sz    = std::max(tentative_consume_sz, static_cast<size_t>(1u));
+            if (std::clamp(unit_sz, MIN_UNIT_SZ, MAX_UNIT_SZ) != unit_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             return std::make_unique<NormalOutboundPacketContainer>(dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(normal_packet_vec_queue_capacity))),
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(ack_packet_vec_queue_capacity))),
@@ -6266,7 +6261,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(leftover_queue_capacity))),
                                                                    accum_sz,
                                                                    stdx::make_unique_fair_atomic_flag(),
-                                                                   normalized_consume_sz);
+                                                                   unit_sz);
         }
 
         static auto get_fair_inbound_packet_container(size_t packet_vec_queue_capacity,
@@ -6994,7 +6989,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 void push(std::move_iterator<Packet *> packet_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> cpy_packet_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> cpy_packet_arr(sz); ////memory allocation, where? has to be on dedicated 1024 byte leaf allocation in order to avoid memory fragmentation
 
                     Packet * base_packet_arr = packet_arr.base();
                     std::copy(base_packet_arr, std::next(base_packet_arr, sz), cpy_packet_arr.get());
@@ -7167,7 +7162,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 {
                     for (size_t i = 0u; i < str_arr_sz; ++i)
                     {
-                        str_arr[i].resize(elemental_size);
+                        str_arr[i].resize(elemental_size); //memory allocation, better to be raw allocation without memset to make this daemon solely for transportation
                     }
 
                     return dg::network_exception::SUCCESS;
@@ -8154,7 +8149,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 void push(std::move_iterator<InternalOBArgument *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<Packet[]> pkt_data_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> cpy_data_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> cpy_data_arr(sz); //memory allocation, where? has to be on dedicated 1024 byte leaf allocation in order to avoid memory fragmentation
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
 
                     InternalOBArgument * base_data_arr = data_arr.base();
@@ -8636,8 +8631,6 @@ namespace dg::network_kernel_mailbox_impl1{
         uint16_t host_port_inbound;
         uint16_t host_port_outbound; 
 
-        bool has_exhaustion_control; 
-
         std::chrono::nanoseconds retransmission_delay; 
         uint32_t retransmission_concurrency_sz;
         uint32_t retransmission_queue_cap;
@@ -8648,6 +8641,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t retransmission_react_sz;
         uint32_t retransmission_react_queue_cap;
         std::chrono::nanoseconds retransmission_react_time;
+        bool retransmission_has_exhaustion_control; 
 
         uint32_t inbound_buffer_concurrency_sz;
         uint32_t inbound_buffer_container_cap;
@@ -8660,7 +8654,8 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t inbound_buffer_fair_waiting_queue_cap;
         uint32_t inbound_buffer_fair_leftover_queue_cap;
         uint32_t inbound_buffer_fair_unit_sz;
-
+        bool inbound_buffer_has_exhaustion_control; 
+ 
         uint32_t inbound_packet_concurrency_sz;
         uint32_t inbound_packet_container_cap;
         bool inbound_packet_has_react_pattern;
@@ -8672,6 +8667,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t inbound_packet_fair_waiting_queue_cap;
         uint32_t inbound_packet_fair_leftover_queue_cap; 
         uint32_t inbound_packet_fair_unit_sz;
+        bool inbound_packet_has_exhaustion_control;
 
         uint32_t inbound_idhashset_concurrency_sz; 
         uint32_t inbound_idhashset_cap;
@@ -8698,21 +8694,15 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t mailbox_outbound_cap;
         std::chrono::nanoseconds traffic_reset_duration;
 
-        // uint32_t outbound_packet_concurrency_sz;
-        // uint32_t outbound_ack_packet_container_cap;
-        // uint32_t outbound_request_packet_container_cap; 
-        // uint32_t outbound_krescue_packet_container_cap;
         uint32_t outbound_transmit_frequency;
-        // bool outbound_packet_has_react_pattern;
-        // uint32_t outbound_packet_react_sz;
-        // uint32_t outbound_packet_react_queue_cap;
-        // std::chrono::nanoseconds outbound_packet_react_time;
 
-        uint32_t outbound_request_packet_container_cap;
-        uint32_t outbound_ack_packet_container_cap;
-        uint32_t outbound_krescue_packet_container_cap;
-        uint32_t outbound_waiting_queue_capacity;
-        uint32_t outbound_leftover_queue_capacity; 
+        uint32_t outbound_container_request_packet_container_cap;
+        uint32_t outbound_container_ack_packet_container_cap;
+        uint32_t outbound_container_krescue_packet_container_cap;
+        uint32_t outbound_container_waiting_queue_capacity;
+        uint32_t outbound_container_leftover_queue_capacity; 
+        uint32_t outbound_container_unit_sz;
+        bool outbound_container_has_exhaustion_control; 
 
         bool inbound_tc_has_borderline_per_inbound_worker;
         uint32_t inbound_tc_peraddr_cap;
@@ -8756,7 +8746,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 }
 
                 if (config.inbound_buffer_concurrency_sz == 1u){
-                    if (config.has_exhaustion_control){
+                    if (config.inbound_buffer_has_exhaustion_control){
                         if (config.inbound_buffer_has_react_pattern){
                             return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
                                                                                                                                                                                       config.inbound_buffer_react_sz,
@@ -8786,7 +8776,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 for (size_t i = 0u; i < config.inbound_buffer_concurrency_sz; ++i){
                     auto current_buffer_container = std::unique_ptr<packet_controller::BufferContainerInterface>{};
 
-                    if (config.has_exhaustion_control){
+                    if (config.inbound_buffer_has_exhaustion_control){
                         current_buffer_container = packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
                                                                                                                                    config.retry_device,
                                                                                                                                    packet_controller::ComponentFactory::get_default_exhaustion_controller());
@@ -8826,7 +8816,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 }
 
                 if (config.inbound_packet_concurrency_sz == 1u){
-                    if (config.has_exhaustion_control){
+                    if (config.inbound_packet_has_exhaustion_control){
                         if (config.inbound_packet_has_react_pattern){
                             return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
                                                                                                                                                                                       config.inbound_packet_react_sz,
@@ -8856,7 +8846,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 for (size_t i = 0u; i < config.inbound_packet_concurrency_sz; ++i){
                     auto current_packet_container = std::unique_ptr<packet_controller::PacketContainerInterface>{};
                      
-                    if (config.has_exhaustion_control){
+                    if (config.inbound_packet_has_exhaustion_control){
                         current_packet_container = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
                                                                                                                                    config.retry_device,
                                                                                                                                    packet_controller::ComponentFactory::get_default_exhaustion_controller());
@@ -8949,7 +8939,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 }
 
                 if (config.retransmission_concurrency_sz == 1u){
-                    if (config.has_exhaustion_control){
+                    if (config.retransmission_has_exhaustion_control){
                         return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
                                                                                                                                                                                                             config.retransmission_idhashset_cap,
                                                                                                                                                                                                             packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
@@ -8971,7 +8961,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 for (size_t i = 0u; i < config.retransmission_concurrency_sz; ++i){
                     auto current_retransmission_controller = std::unique_ptr<packet_controller::RetransmissionControllerInterface>{}; 
                     
-                    if (config.has_exhaustion_control){
+                    if (config.retransmission_has_exhaustion_control){
                         current_retransmission_controller = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
                                                                                                                                                                                                                                          config.retransmission_idhashset_cap,
                                                                                                                                                                                                                                          packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
@@ -8995,11 +8985,20 @@ namespace dg::network_kernel_mailbox_impl1{
 
             static auto make_outbound_packet_container(Config config) -> std::unique_ptr<packet_controller::PacketContainerInterface>{
 
-                return packet_controller::ComponentFactory::get_normal_outbound_packet_container(config.outbound_request_packet_container_cap,
-                                                                                                 config.outbound_ack_packet_container_cap,
-                                                                                                 config.outbound_krescue_packet_container_cap,
-                                                                                                 config.outbound_waiting_queue_capacity,
-                                                                                                 config.outbound_leftover_queue_capacity);
+                auto ins = packet_controller::ComponentFactory::get_normal_outbound_packet_container(config.outbound_container_request_packet_container_cap,
+                                                                                                     config.outbound_container_ack_packet_container_cap,
+                                                                                                     config.outbound_container_krescue_packet_container_cap,
+                                                                                                     config.outbound_container_waiting_queue_capacity,
+                                                                                                     config.outbound_container_leftover_queue_capacity,
+                                                                                                     config.outbound_container_unit_sz);
+                
+                if (config.outbound_container_has_exhaustion_control){
+                    return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(std::move(ins), 
+                                                                                                           config.retry_device,
+                                                                                                           packet_controller::ComponentFactory::get_default_exhaustion_controller());
+                } else{
+                    return ins;
+                }
             }
 
             static auto make_outbound_border_controller(Config config) -> std::vector<std::unique_ptr<packet_controller::OutBoundBorderController>>{
