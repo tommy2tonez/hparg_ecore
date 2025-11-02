@@ -1042,7 +1042,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            dg::unordered_unstable_map<std::thread::id, std::shared_ptr<semaphore_impl::dg_binary_semaphore>> mtx_queue;
+            dg::unordered_unstable_map<std::thread::id, std::shared_ptr<dg_binary_semaphore>> mtx_queue;
             size_t mtx_queue_cap;
             stdx::fair_atomic_flag mtx_mtx_queue;
             stdx::inplace_hdi_container<std::atomic<intmax_t>> counter;
@@ -1127,7 +1127,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     return;
                 }
 
-                std::shared_ptr<semaphore_impl::dg_binary_semaphore> waiting_smp = dg::network_allocation::make_shared<semaphore_impl::dg_binary_semaphore>(0);
+                std::shared_ptr<dg_binary_semaphore> waiting_smp = dg::network_allocation::make_shared<dg_binary_semaphore>(0);
 
                 [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
@@ -1166,7 +1166,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            inline __attribute__((force_inline)) void do_release(dg::unordered_unstable_map<std::thread::id, std::shared_ptr<semaphore_impl::dg_binary_semaphore>>& smp_vec){
+            inline __attribute__((force_inline)) void do_release(dg::unordered_unstable_map<std::thread::id, std::shared_ptr<dg_binary_semaphore>>& smp_vec){
 
                 for (const auto& kv_pair: smp_vec){
                     kv_pair.second->release();
@@ -1229,7 +1229,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map;
             const std::chrono::nanoseconds abs_timeout_dur;
             const size_t ticking_clock_resolution;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> thru_sz_per_load;
 
         public:
@@ -1237,7 +1237,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             TemporalAbsoluteTimeoutInBoundGate(temporal_finite_unordered_map<GlobalIdentifier, std::chrono::time_point<std::chrono::steady_clock>> abstimeout_map,
                                                std::chrono::nanoseconds abs_timeout_dur,
                                                size_t ticking_clock_resolution,
-                                               std::unique_ptr<std::mutex> mtx,
+                                               std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                                stdx::hdi_container<size_t> thru_sz_per_load) noexcept: abstimeout_map(std::move(abstimeout_map)),
                                                                                                        abs_timeout_dur(abs_timeout_dur),
                                                                                                        ticking_clock_resolution(ticking_clock_resolution),
@@ -1253,7 +1253,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 auto ticking_steady_clock = dg::ticking_clock<std::chrono::steady_clock>(this->ticking_clock_resolution); 
 
@@ -1377,20 +1377,20 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         private:
 
             temporal_switching_bloom_filter<GlobalIdentifier> blacklist_set;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> thru_sz_per_load;
 
         public:
 
             TemporalBlackListGate(temporal_switching_bloom_filter<GlobalIdentifier> blacklist_set,
-                                  std::unique_ptr<std::mutex> mtx,
+                                  std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                   stdx::hdi_container<size_t> thru_sz_per_load) noexcept: blacklist_set(std::move(blacklist_set)),
                                                                                           mtx(std::move(mtx)),
                                                                                           thru_sz_per_load(thru_sz_per_load){}
 
             void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
                     if (this->blacklist_set.not_contains(global_id_arr[i])){
@@ -1410,7 +1410,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
                     this->blacklist_set.insert(global_id_arr[i]);
@@ -1702,7 +1702,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             const size_t key_id_map_cap;
             __uint128_t id_ticker;
             const std::chrono::nanoseconds expiry_period;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> tick_sz_per_load;
 
         public:
@@ -1713,7 +1713,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                size_t key_id_map_cap,
                                __uint128_t id_ticker,
                                std::chrono::nanoseconds expiry_period,
-                               std::unique_ptr<std::mutex> mtx,
+                               std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                stdx::hdi_container<size_t> tick_sz_per_load) noexcept: entrance_entry_pq(std::move(entrance_entry_pq)),
                                                                                        entrance_entry_pq_cap(entrance_entry_pq_cap),
                                                                                        key_id_map(std::move(key_id_map)),
@@ -1732,7 +1732,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 auto now = this->get_now();
 
@@ -1763,7 +1763,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             void get_expired_id(GlobalIdentifier * output_arr, size_t& sz, size_t cap) noexcept{ //bad
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 auto bar_time   = std::chrono::steady_clock::now() - this->expiry_period;
                 sz              = 0u;
@@ -1994,7 +1994,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             size_t global_packet_segment_cap;
             size_t global_packet_segment_counter;
             size_t max_segment_sz_per_stream; 
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
@@ -2004,7 +2004,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             size_t global_packet_segment_cap,
                             size_t global_packet_segment_counter,
                             size_t max_segment_sz_per_stream,
-                            std::unique_ptr<std::mutex> mtx,
+                            std::unique_ptr<stdx::fair_atomic_flag> mtx,
                             stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_map(std::move(packet_map)),
                                                                                        packet_map_cap(packet_map_cap),
                                                                                        global_packet_segment_cap(global_packet_segment_cap),
@@ -2022,7 +2022,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
                 PacketSegment * base_segment_arr = segment_arr.base();
 
                 for (size_t i = 0u; i < sz; ++i){
@@ -2099,7 +2099,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 for (size_t i = 0u; i < sz; ++i){
                     auto map_ptr = this->packet_map.find(id_arr[i]);
@@ -2365,14 +2365,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             dg::pow2_cyclic_queue<dg::string> buffer_vec;
             size_t buffer_vec_capacity;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
             BufferFIFOContainer(dg::pow2_cyclic_queue<dg::string> buffer_vec,
                                 size_t buffer_vec_capacity,
-                                std::unique_ptr<std::mutex> mtx,
+                                std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                 stdx::hdi_container<size_t> consume_sz_per_load) noexcept: buffer_vec(std::move(buffer_vec)),
                                                                                            buffer_vec_capacity(buffer_vec_capacity),
                                                                                            mtx(std::move(mtx)),
@@ -2380,7 +2380,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -2403,7 +2403,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
-                stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 sz          = std::min(output_buffer_arr_cap, this->buffer_vec.size());
                 auto first  = this->buffer_vec.begin();
@@ -2606,7 +2606,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             dg::pow2_cyclic_queue<dg::vector<dg::string>> distribution_queue;
             dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, dg_binary_semaphore *>> waiting_queue;
             dg::pow2_cyclic_queue<dg::vector<dg::string>> leftover_queue;
-            std::unique_ptr<std::mutex> mtx;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
         
         public:
@@ -2614,7 +2614,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             FairInBoundBufferContainer(dg::pow2_cyclic_queue<dg::vector<dg::string>> distribution_queue,
                                        dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, dg_binary_semaphore *>> waiting_queue,
                                        dg::pow2_cyclic_queue<dg::vector<dg::string>> leftover_queue,
-                                       std::unique_ptr<std::mutex> mtx,
+                                       std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                        size_t consume_sz_per_load): distribution_queue(std::move(distribution_queue)),
                                                                     waiting_queue(std::move(waiting_queue)),
                                                                     leftover_queue(std::move(leftover_queue)),
@@ -2640,7 +2640,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg_binary_semaphore * releasing_smp = nullptr;
 
                 exception_t err = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->waiting_queue.empty()){
                         auto [dst, smp] = this->waiting_queue.front();
@@ -2678,7 +2678,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg_binary_semaphore smp(0);
                 
                 bool is_acquire_required = [&, this]() noexcept{
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->leftover_queue.empty()){
                         str_vec = std::move(this->leftover_queue.front());
@@ -2711,7 +2711,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 str_vec->resize(rem_sz);
 
                 if (!str_vec->empty()){
-                    stdx::xlock_guard<std::mutex> lck_grd(*this->mtx);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->waiting_queue.empty()){
                         auto [dst, smp] = this->waiting_queue.front();
@@ -2982,7 +2982,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 size_t consuming_sz     = 0u;
                 size_t consuming_cap    = this->upstream_consume_sz;
                 dg::network_stack_allocation::NoExceptAllocation<dg::string[]> buf_arr(consuming_cap);
-
+                
                 this->base->recv(buf_arr.get(), consuming_sz, consuming_cap); 
 
                 auto et_feed_resolutor                      = InternalEntranceFeedResolutor{};
@@ -3344,7 +3344,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             return std::make_unique<TemporalAbsoluteTimeoutInBoundGate>(std::move(abstimeout_map),
                                                                         abs_timeout_dur,
                                                                         ticking_clock_resolution,
-                                                                        std::make_unique<std::mutex>(),
+                                                                        stdx::make_unique_fair_atomic_flag(),
                                                                         stdx::hdi_container<size_t>{max_consume_sz});
         }
 
@@ -3398,7 +3398,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz); 
 
             return std::make_unique<TemporalBlackListGate>(std::move(blacklist_set),
-                                                           std::make_unique<std::mutex>(),
+                                                           stdx::make_unique_fair_atomic_flag(),
                                                            stdx::hdi_container<size_t>{max_consume_sz});
         }
 
@@ -3506,7 +3506,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                         unique_id_cap,
                                                         __uint128_t{0u},
                                                         expiry_period,
-                                                        std::make_unique<std::mutex>(),
+                                                        stdx::make_unique_fair_atomic_flag(),
                                                         stdx::hdi_container<size_t>{max_consume_sz});
         }
 
@@ -3601,7 +3601,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                     global_packet_segment_cap,
                                                     size_t{0u},
                                                     max_segment_sz_per_stream,
-                                                    std::make_unique<std::mutex>(),
+                                                    stdx::make_unique_fair_atomic_flag(),
                                                     stdx::hdi_container<size_t>{max_consume_sz});
         }
 
@@ -3678,7 +3678,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<dg::string>(stdx::ulog2(upqueue_cap)),
                                                          upqueue_cap,
-                                                         std::make_unique<std::mutex>(),
+                                                         stdx::make_unique_fair_atomic_flag(),
                                                          stdx::hdi_container<size_t>{consume_sz});
         }
 
@@ -3749,7 +3749,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         static auto get_fair_inbound_buffer_container(size_t distribution_queue_sz,
                                                       size_t waiting_queue_sz,
                                                       size_t leftover_queue_sz,
-                                                      size_t consume_factor = 4u) -> std::unique_ptr<InBoundContainerInterface>{
+                                                      size_t unit_sz) -> std::unique_ptr<InBoundContainerInterface>{
             
             const size_t MIN_DISTRIBUTION_QUEUE_SZ  = size_t{1};
             const size_t MAX_DISTRIBUTION_QUEUE_SZ  = size_t{1} << 20;
@@ -3757,7 +3757,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             const size_t MAX_WAITING_QUEUE_SZ       = size_t{1} << 20;
             const size_t MIN_LEFTOVER_QUEUE_SZ      = size_t{1};
             const size_t MAX_LEFTOVER_QUEUE_SZ      = size_t{1} << 20;
-                                    
+            const size_t MIN_UNIT_SZ                = size_t{1};
+            const size_t MAX_UNIT_SZ                = size_t{1} << 20; 
+
             if (std::clamp(distribution_queue_sz, MIN_DISTRIBUTION_QUEUE_SZ, MAX_DISTRIBUTION_QUEUE_SZ) != distribution_queue_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
@@ -3770,14 +3772,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t tentative_consume_sz     = std::min(distribution_queue_sz, waiting_queue_sz) >> consume_factor;
-            size_t normalized_consume_sz    = std::max(tentative_consume_sz, static_cast<size_t>(1u));
+            if (std::clamp(unit_sz, MIN_UNIT_SZ, MAX_UNIT_SZ) != unit_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
             return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
                                                                 dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
-                                                                std::make_unique<std::mutex>(),
-                                                                normalized_consume_sz);
+                                                                stdx::make_unique_fair_atomic_flag(),
+                                                                unit_sz);
         }
 
 
@@ -4072,6 +4075,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         size_t inbound_container_redistributor_distribution_queue_sz;
         size_t inbound_container_redistributor_waiting_queue_sz;
         size_t inbound_container_redistributor_concurrent_sz;
+        size_t inbound_container_redistributor_unit_sz;
 
         uint32_t expiry_worker_count;
         uint32_t expiry_worker_packet_assembler_vectorization_sz;
@@ -4250,7 +4254,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 
                 return ComponentFactory::get_fair_inbound_buffer_container(config.inbound_container_redistributor_distribution_queue_sz,
                                                                            config.inbound_container_redistributor_waiting_queue_sz,
-                                                                           config.inbound_container_redistributor_concurrent_sz);
+                                                                           config.inbound_container_redistributor_concurrent_sz,
+                                                                           config.inbound_container_redistributor_unit_sz);
             }
 
             static auto make_latency_controller(Config config) -> std::unique_ptr<EntranceControllerInterface>{
@@ -4419,7 +4424,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 return ComponentFactory::get_flash_streamx_mailbox(std::move(daemon_vec),
                                                                    std::move(packetizer),
                                                                    base,
-                                                                   inbound_container_sp,
+                                                                   enduser_inbound_container_sp,
                                                                    outbound_rule,
                                                                    mailbox_transmission_vectorization_sz);
             }

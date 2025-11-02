@@ -33,15 +33,8 @@ namespace dg::network_std_container{
     template <class Key, class Value>
     using unordered_map             = std::unordered_map<Key, Value, container_hasher<Key>, container_equal_to<Key>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
 
-    // template <class Key, class Value>
-    // using unordered_unstable_map    = dg::network_datastructure::unordered_map_variants::unordered_node_map<Key, Value, std::size_t, std::integral_constant<bool, true>, container_hasher<Key>, container_equal_to<Key>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
-
     template <class Key, class Value>
-    using unordered_unstable_map    = std::unordered_map<Key, Value, container_hasher<Key>, container_equal_to<Key>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
-
-    template <class Key, class Value>
-    using unordered_unstable_map2   = dg::network_datastructure::unordered_map_variants::unordered_node_map<Key, Value, std::size_t, std::integral_constant<bool, true>, container_hasher<Key>, container_equal_to<Key>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
-
+    using unordered_unstable_map    = dg::network_datastructure::unordered_map_variants::unordered_node_map<Key, Value, std::size_t, std::integral_constant<bool, true>, container_hasher<Key>, container_equal_to<Key>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
     
     template <class Key, class Value>
     using cyclic_unordered_node_map = dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_map<Key, Value, container_hasher<Key>, std::size_t, std::integral_constant<bool, true>, container_equal_to<Key>, dg::network_allocation::NoExceptAllocator<std::pair<const Key, Value>>>;
@@ -74,9 +67,6 @@ namespace dg{
 
     template <class Key, class Value>
     using unordered_unstable_map    = dg::network_std_container::unordered_map<Key, Value>;
-
-    template <class Key, class Value>
-    using unordered_unstable_map2    = dg::network_std_container::unordered_unstable_map2<Key, Value>;
 
     template <class Key, class Value>
     using cyclic_unordered_node_map = dg::network_std_container::cyclic_unordered_node_map<Key, Value>;

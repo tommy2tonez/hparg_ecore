@@ -1,0 +1,391 @@
+#ifndef __DG_NETWORK_KERNEL_ALLOCATOR__
+#define __DG_NETWORK_KERNEL_ALLOCATOR__
+
+namespace dg::network_kernel_allocator
+{
+
+    //we are going to rewrite the allocator in the worst case scenerio of 1 leaf == 1 allocation, and we are not aiming to optimize memory but rather allocation speed by increasing the outdegree of the heap
+    //we are going to maintain the definition of left, right and center of a node and each node has 8-16 childrens without loss of generality
+    //we'd have to be able to allocate 10 million allocations/ second for each of the allocator in the concurrent allocators
+    //let's write a simple pow2_cyclic_queue allocations for now
+
+    class BatchAllocatorInterface
+    {
+        public:
+
+            virtual ~BatchAllocatorInterface() noexcept = default;
+            virtual void malloc(std::add_pointer_t<void> * ret_mem_arr, size_t request_mem_blk_count, exception_t * exception_arr) noexcept = 0;
+            virtual void free(std::add_pointer_t<void> * free_mem_arr, size_t arr_sz);
+            virtual auto malloc_size() const noexcept -> size_t = 0;
+            virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
+
+    template <class T>
+    class AllocatorInterface
+    {
+        public:
+
+            virtual ~AllocatorInterface() noexcept = default;
+            virtual auto malloc() noexcept -> std::expected<void *, exception_t> noexcept = 0;
+            virtual void free(void *) noexcept;
+            virtual auto malloc_size() const noexcept -> size_t = 0;
+    };
+
+    using memfree_func_t = void (*)(void *) noexcept; 
+
+    class BatchAllocator : public virtual BatchAllocatorInterface
+    {
+        private:
+
+            std::vector<void *> mem_queue;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
+            memfree_func_t memfree_func;
+            stdx::hdi_container<size_t> mempiece_sz;
+            stdx::hdi_container<size_t> max_consume_per_load;
+
+        public:
+
+            BatchAllocator(std::vector<void *> mem_queue,
+                           std::unique_ptr<stdx::fair_atomic_flag> mtx,
+                           memfree_func_t memfree_func,
+                           size_t mempiece_sz,
+                           size_t max_consume_per_load): mem_queue(std::move(mem_queue)),
+                                                         mempiece_sz(stdx::hdi_container<size_t>{mempiece_sz}),
+                                                         max_consume_per_load(stdx::hdi_container<size_t>{max_consume_per_load}),
+                                                         mtx(std::move(mtx)),
+                                                         memfree_func(memfree_func){}
+            
+            ~BatchAllocator() noexcept
+            {
+                for (auto mempiece: this->mem_queue)
+                {
+                    this->memfree_func(mempiece);
+                }                
+            }
+
+            void malloc(std::add_pointer_t<void> * ret_mem_arr, size_t request_mem_blk_count, exception_t * exception_arr) noexcept
+            {
+                if (request_mem_blk_count > this->max_consume_size())
+                {
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }
+
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                size_t fulfillable_sz   = std::min(static_cast<size_t>(this->mem_queue.size()), request_mem_blk_count);
+                size_t rem_sz           = this->mem_queue.size() - fulfillable_sz;   
+
+                std::copy(std::next(this->mem_queue.begin(), rem_sz), this->mem_queue.end(), ret_mem_arr);
+                this->mem_queue.resize(rem_sz);
+
+                std::fill(exception_arr, std::next(exception_arr, fulfillable_sz), dg::network_exception::SUCCESS);
+                std::fill(std::next(exception_arr, fulfillable_sz), std::next(exception_arr, request_mem_blk_count), dg::network_exception::RESOURCE_EXHAUSTION);
+            }
+
+            void free(std::add_pointer_t<void> * free_mem_arr, size_t arr_sz) noexcept
+            {
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                size_t old_sz   = this->mem_queue.size();
+                size_t new_sz   = old_sz + arr_sz;
+
+                this->mem_queue.resize(new_sz);
+                std::copy(free_mem_arr, std::next(free_mem_arr, old_sz), std::next(this->mem_queue.begin(), old_sz));
+            }
+
+            auto malloc_size() const noexcept -> size_t
+            {
+                return this->mempiece_sz.value;
+            }
+
+            auto max_consume_size() noexcept -> size_t
+            {
+                return this->max_consume_per_load.value;
+            } 
+    };
+
+    class AffinedAllocator : public virtual AllocatorInterface<AffinedAllocator>
+    {
+        private:
+
+            std::shared_ptr<BatchAllocatorInterface> base_allocator;
+            size_t refill_sz;
+            std::vector<void *> mem_vec;
+            size_t mem_vec_capacity;
+            std::vector<void *> free_vec;
+            size_t free_vec_capacity;
+
+        public:
+
+            AffinedAllocator(std::shared_ptr<BatchAllocatorInterface> base_allocator,
+                             size_t refill_sz,
+                             std::vector<void *> mem_vec,
+                             size_t mem_vec_capacity,
+                             std::vector<void *> free_vec,
+                             size_t free_vec_capacity): base_allocator(std::move(base_allocator)),
+                                                        refill_sz(refill_sz),
+                                                        mem_vec(std::move(mem_vec)),
+                                                        mem_vec_capacity(mem_vec_capacity),
+                                                        free_vec(std::move(free_vec)),
+                                                        free_vec_capacity(free_vec_capacity){}
+
+            auto malloc() noexcept -> std::expected<void *, exception_t> noexcept
+            {
+                if (this->mem_vec.empty())
+                {
+                    exception_t err = this->refill_mem_vec();
+
+                    if (dg::network_exception::is_failed(err))
+                    {
+                        return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                    }
+                }
+
+                void * rs = this->mem_vec.back();
+                this->mem_vec.pop_back();
+
+                return rs;
+            }
+
+            void free(void * mem_ptr) noexcept
+            {
+                if (this->mem_vec.size() == this->mem_vec_capacity)
+                {
+                    if (this->free_vec.size() == this->free_vec_capacity)
+                    {
+                        this->empty_free_vec();
+                    }
+
+                    this->free_vec.push_back(mem_ptr);
+                    return;
+                }
+
+                this->mem_vec.push_back(mem_ptr);
+            }
+
+            auto malloc_size() const noexcept -> size_t
+            {
+                return this->base_allocator->malloc_size();
+            }
+
+        private:
+
+            auto refill_mem_vec() noexcept -> exception_t
+            {
+                if (!this->mem_vec.empty())
+                {
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<void>[]> mem_arr(this->refill_sz);
+                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(this->refill_sz);
+
+                this->base_allocator->malloc(mem_arr.get(), this->refill_sz, exception_arr.get());
+
+                for (size_t i = 0u; i < this->refill_sz; ++i)
+                {
+                    if (dg::network_exception::is_success(exception_arr[i]))
+                    {
+                        this->mem_vec.push_back(mem_arr[i]);
+                    }
+                }
+
+                if (this->mem_vec.empty())
+                {
+                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                }
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            void empty_free_vec() noexcept
+            {
+                if (this->free_vec.empty())
+                {
+                    return;
+                }
+
+                this->base_allocator->free(this->free_vec.data(), this->free_vec.size());
+                this->free_vec.clear();
+            }
+    };
+
+    class AffinedMapAllocator : public virtual AllocatorInterface<AffinedMapAllocator>
+    {
+        private:
+
+            std::vector<std::unique_ptr<AllocatorInterface<AffinedAllocator>>> affined_map;
+            size_t mempiece_sz;
+
+        public:
+
+            AffinedMapAllocator(std::vector<std::unique_ptr<AllocatorInterface<AffinedAllocator>>> affined_map,
+                                size_t mempiece_sz): affined_map(std::move(affined_map)),
+                                                     mempiece_sz(mempiece_sz){}
+
+            auto malloc() noexcept -> std::expected<void *, exception_t> 
+            {
+                size_t thr_idx = dg::network_concurrency::this_thread_idx();
+
+                if constexpr(DEBUG_MODE_FLAG)
+                {
+                    if (thr_idx >= this->affined_map.size())
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                return this->affined_map[thr_idx]->malloc();
+            }
+
+            void free(void * mem_ptr) noexcept
+            {
+                size_t thr_idx = dg::network_concurrency::this_thread_idx();
+
+                if constexpr(DEBUG_MODE_FLAG)
+                {
+                    if (thr_idx >= this->affined_map.size())
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                this->affined_map[thr_idx]->free(mem_ptr);
+            }
+
+            auto malloc_size() const noexcept -> size_t
+            {
+                return this->mempiece_sz;
+            }
+    };
+
+    struct ComponentFactory
+    {
+        static auto make_batch_allocator(size_t mempiece_count,
+                                         size_t mempiece_sz,
+                                         size_t consume_decay_factor = 4u) -> std::unique_ptr<BatchAllocatorInterface>
+        {
+            const size_t MIN_MEMPIECE_COUNT = 1u;
+            const size_t MAX_MEMPIECE_COUNT = size_t{1} << 30;
+            const size_t MIN_MEMPIECE_SZ    = 1u;
+            const size_t MAX_MEMPIECE_SZ    = size_t{1} << 30;
+
+            if (std::clamp(mempiece_count, MIN_MEMPIECE_COUNT, MAX_MEMPIECE_COUNT) != mempiece_count)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(mempiece_sz, MIN_MEMPIECE_SZ, MAX_MEMPIECE_SZ) != mempiece_sz)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            std::vector<void *> mempiece_vec{};
+            mempiece_vec.reserve(mempiece_count);
+            size_t consume_sz = mempiece_count >> consume_decay_factor;
+
+            constexpr auto std_free = [](void * mem_ptr) noexcept
+            {
+                std::free(mem_ptr);
+            };
+
+            try
+            {
+                for (size_t i = 0u; i < mempiece_count; ++i)
+                {
+                    void * mempiece = std::aligned_alloc(alignof(std::max_align_t), mempiece_sz);
+
+                    if (mempiece == nullptr)
+                    {
+                        dg::network_exception::throw_exception(dg::network_exception::RESOURCE_EXHAUSTION);
+                    }
+
+                    mempiece_vec.push_back(mempiece);
+                }
+
+                return std::make_unique<BatchAllocator>(std::move(mempiece_vec),
+                                                        stdx::make_unique_fair_atomic_flag(),
+                                                        std_free,
+                                                        mempiece_sz,
+                                                        consume_sz);
+            }
+            catch (...)
+            {
+                for (void * mempiece: mempiece_vec)
+                {
+                    std::free(mempiece);
+                }
+
+                throw;
+            }
+        }
+
+        static auto make_affined_allocator(std::shared_ptr<BatchAllocatorInterface> base_allocator,
+                                           size_t refill_sz,
+                                           size_t mem_vec_capacity,
+                                           size_t free_vec_capacity) -> std::unique_ptr<AllocatorInterface<AffinedAllocator>>
+        {
+            const size_t MIN_REFILL_SZ          = 1u;
+            const size_t MAX_REFILL_SZ          = size_t{1} << 30;
+            const size_t MIN_MEM_VEC_CAPACITY   = 1u;
+            const size_t MAX_MEM_VEC_CAPACITY   = size_t{1} << 30;
+            const size_t MIN_FREE_VEC_CAPACITY  = 1u;
+            const size_t MAX_FREE_VEC_CAPACITY  = size_t{1} << 30;
+
+            if (base_allocator == nullptr)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(refill_sz, MIN_REFILL_SZ, MAX_REFILL_SZ) != refill_sz)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(mem_vec_capacity, MIN_MEM_VEC_CAPACITY, MAX_MEM_VEC_CAPACITY) != mem_vec_capacity)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(free_vec_capacity, MIN_FREE_VEC_CAPACITY, MAX_FREE_VEC_CAPACITY) != free_vec_capacity)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (refill_sz > base_allocator->max_consume_size())
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<AffinedAllocator>(base_allocator,
+                                                      refill_sz,
+                                                      std::vector<void *>(),
+                                                      mem_vec_capacity,
+                                                      std::vector<void *>(),
+                                                      free_vec_capacity);
+        }
+
+        static auto make_affined_map_allocator(std::shared_ptr<BatchAllocatorInterface> base_allocator,
+                                               size_t affined_refill_sz,
+                                               size_t affined_mem_vec_capacity,
+                                               size_t affined_free_vec_capacity) -> std::unique_ptr<AllocatorInterface<AffinedMapAllocator>>
+        {
+            std::vector<std::unique_ptr<AllocatorInterface<AffinedAllocator>>> affined_map{};
+
+            for (size_t i = 0u; i < dg::network_concurrency::MAX_THREAD_COUNT; ++i)
+            {
+                affined_map.push_back(make_affined_allocator(base_allocator,
+                                                             affined_refill_sz,
+                                                             affined_mem_vec_capacity,
+                                                             affined_free_vec_capacity));
+            }
+
+            return std::make_unique<AffinedMapAllocator>(std::move(affined_map), base_allocator->malloc_size());
+        }
+    };
+}
+
+#endif
