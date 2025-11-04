@@ -1,21 +1,25 @@
 #ifndef __DG_NETWORK_KERNEL_ALLOCATOR__
 #define __DG_NETWORK_KERNEL_ALLOCATOR__
 
+#include <stdint.h>
+#include <stdlib.h>
+#include <memory>
+#include <thread>
+#include <mutex>
+#include "stdx.h"
+#include "network_exception.h"
+#include "network_log.h"
+#include "network_concurrency.h"
+
 namespace dg::network_kernel_allocator
 {
-
-    //we are going to rewrite the allocator in the worst case scenerio of 1 leaf == 1 allocation, and we are not aiming to optimize memory but rather allocation speed by increasing the outdegree of the heap
-    //we are going to maintain the definition of left, right and center of a node and each node has 8-16 childrens without loss of generality
-    //we'd have to be able to allocate 10 million allocations/ second for each of the allocator in the concurrent allocators
-    //let's write a simple pow2_cyclic_queue allocations for now
-
     class BatchAllocatorInterface
     {
         public:
 
             virtual ~BatchAllocatorInterface() noexcept = default;
             virtual void malloc(std::add_pointer_t<void> * ret_mem_arr, size_t request_mem_blk_count, exception_t * exception_arr) noexcept = 0;
-            virtual void free(std::add_pointer_t<void> * free_mem_arr, size_t arr_sz);
+            virtual void free(std::add_pointer_t<void> * free_mem_arr, size_t arr_sz) noexcept = 0;
             virtual auto malloc_size() const noexcept -> size_t = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
@@ -26,7 +30,7 @@ namespace dg::network_kernel_allocator
         public:
 
             virtual ~AllocatorInterface() noexcept = default;
-            virtual auto malloc() noexcept -> std::expected<void *, exception_t> noexcept = 0;
+            virtual auto malloc() noexcept -> std::expected<void *, exception_t> = 0;
             virtual void free(void *) noexcept;
             virtual auto malloc_size() const noexcept -> size_t = 0;
     };
@@ -54,7 +58,7 @@ namespace dg::network_kernel_allocator
                                                          max_consume_per_load(stdx::hdi_container<size_t>{max_consume_per_load}),
                                                          mtx(std::move(mtx)),
                                                          memfree_func(memfree_func){}
-            
+
             ~BatchAllocator() noexcept
             {
                 for (auto mempiece: this->mem_queue)
@@ -91,7 +95,7 @@ namespace dg::network_kernel_allocator
                 size_t new_sz   = old_sz + arr_sz;
 
                 this->mem_queue.resize(new_sz);
-                std::copy(free_mem_arr, std::next(free_mem_arr, old_sz), std::next(this->mem_queue.begin(), old_sz));
+                std::copy(free_mem_arr, std::next(free_mem_arr, arr_sz), std::next(this->mem_queue.begin(), old_sz));
             }
 
             auto malloc_size() const noexcept -> size_t
@@ -130,7 +134,7 @@ namespace dg::network_kernel_allocator
                                                         free_vec(std::move(free_vec)),
                                                         free_vec_capacity(free_vec_capacity){}
 
-            auto malloc() noexcept -> std::expected<void *, exception_t> noexcept
+            auto malloc() noexcept -> std::expected<void *, exception_t>
             {
                 if (this->mem_vec.empty())
                 {
@@ -173,9 +177,24 @@ namespace dg::network_kernel_allocator
 
             auto refill_mem_vec() noexcept -> exception_t
             {
-                if (!this->mem_vec.empty())
+                if constexpr(DEBUG_MODE_FLAG)
                 {
-                    return dg::network_exception::INVALID_ARGUMENT;
+                    if (!this->mem_vec.empty())
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                if (!this->free_vec.empty())
+                {
+                    size_t move_sz  = std::min(static_cast<size_t>(this->free_vec.size()), this->mem_vec_capacity);
+                    size_t rem_sz   = this->free_vec.size() - move_sz;
+
+                    std::copy(std::next(this->free_vec.begin(), rem_sz), this->free_vec.end(), std::back_inserter(this->mem_vec));
+                    this->free_vec.resize(rem_sz);
+
+                    return dg::network_exception::SUCCESS;
                 }
 
                 dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<void>[]> mem_arr(this->refill_sz);
@@ -285,9 +304,11 @@ namespace dg::network_kernel_allocator
 
             std::vector<void *> mempiece_vec{};
             mempiece_vec.reserve(mempiece_count);
-            size_t consume_sz = mempiece_count >> consume_decay_factor;
 
-            constexpr auto std_free = [](void * mem_ptr) noexcept
+            size_t tentative_consume_sz = mempiece_count >> consume_decay_factor;
+            size_t consume_sz           = std::max(size_t{1}, tentative_consume_sz); 
+
+            constexpr auto std_free     = [](void * mem_ptr) noexcept
             {
                 std::free(mem_ptr);
             };
@@ -355,13 +376,10 @@ namespace dg::network_kernel_allocator
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (refill_sz > base_allocator->max_consume_size())
-            {
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+            size_t adjusted_refill_sz = std::min(refill_sz, static_cast<size_t>(base_allocator->max_consume_size())); 
 
             return std::make_unique<AffinedAllocator>(base_allocator,
-                                                      refill_sz,
+                                                      adjusted_refill_sz,
                                                       std::vector<void *>(),
                                                       mem_vec_capacity,
                                                       std::vector<void *>(),

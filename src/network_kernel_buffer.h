@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <cstring>
+#include <memory>
+#include "stdx.h"
+#include "network_exception.h"
+#include "network_log.h"
 
 namespace dg::network_kernel_buffer
 {
@@ -14,7 +19,7 @@ namespace dg::network_kernel_buffer
             {
                 if (byte_sz == 0u)
                 {
-                    return nullptr;
+                    return std::add_pointer_t<void>(nullptr);
                 }
 
                 void * rs = std::malloc(byte_sz);
@@ -56,7 +61,7 @@ namespace dg::network_kernel_buffer
             }
     };
 
-    template <class Allocator>
+    template <class Allocator = StdAllocator>
     class kernel_string
     {
         private:
@@ -70,8 +75,9 @@ namespace dg::network_kernel_buffer
         public:
 
             using self = kernel_string;
+            using value_type = char;
 
-            kernel_string() noexcept: buffer(static_cast<char *>(stdx::remove_expected(Allocator::malloc(0u)))),
+            kernel_string() noexcept: buffer(static_cast<char *>(dg::network_exception::remove_expected(Allocator::malloc(0u)))),
                                       buffer_sz(0u),
                                       buffer_cap(0u){}
 
@@ -132,6 +138,7 @@ namespace dg::network_kernel_buffer
                 }
 
                 this->assign_string_view(other);
+                return *this;
             }
 
             auto operator =(self&& other) noexcept -> self&
@@ -143,7 +150,7 @@ namespace dg::network_kernel_buffer
 
                 this->free_resource();
 
-                this->buffer        = std::exchange(other.buffer, stdx::remove_expected(Allocator::malloc(0u)));
+                this->buffer        = std::exchange(other.buffer, static_cast<char *>(dg::network_exception::remove_expected(Allocator::malloc(0u))));
                 this->buffer_sz     = std::exchange(other.buffer_sz, 0u);
                 this->buffer_cap    = std::exchange(other.buffer_cap, 0u);
 
@@ -237,6 +244,16 @@ namespace dg::network_kernel_buffer
             {
                 return this->buffer_sz == 0u;
             }
+            
+            auto data() const noexcept -> const char *
+            {
+                return this->buffer;                
+            }
+
+            auto data() noexcept -> char *
+            {
+                return this->buffer;
+            }
 
             consteval auto max_size() -> size_t
             {
@@ -257,8 +274,8 @@ namespace dg::network_kernel_buffer
                     dg::network_exception::throw_exception(new_buffer.error());
                 }
 
-                this->buffer = new_buffer.value();
-                this->buffer_cap = byte_sz;
+                this->buffer        = static_cast<char *>(new_buffer.value());
+                this->buffer_cap    = byte_sz;
             }
 
             void resize(size_t byte_sz)
@@ -307,7 +324,7 @@ namespace dg::network_kernel_buffer
 
             operator std::basic_string_view<char>() const noexcept
             {
-                return std::basic_string_view(this->buffer, this->buffer_sz);
+                return std::basic_string_view<char>(this->buffer, this->buffer_sz);
             }
 
             template <class Reflector>
@@ -366,7 +383,7 @@ namespace dg::network_kernel_buffer
 
                 std::copy(str_view.begin(), str_view.end(), static_cast<char *>(mem_blk.value()));
 
-                this->buffer        = mem_blk.value();
+                this->buffer        = static_cast<char *>(mem_blk.value());
                 this->buffer_sz     = str_view.size();
                 this->buffer_cap    = str_view.size();
             }

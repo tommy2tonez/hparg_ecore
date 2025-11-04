@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <expected>
 #include <stacktrace>
+#include <iostream>
 
 using exception_t = uint16_t; 
 

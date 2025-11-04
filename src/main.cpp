@@ -17,12 +17,12 @@
 #include "network_compact_serializer.h"
 #include "network_memlock_proxyspin.h"
 #include "network_producer_consumer.h"
-#include "network_kernel_mailbox_impl1.h"
+// #include "network_kernel_mailbox_impl1.h"
 #include "network_trivial_serializer.h"
 #include "network_std_container.h"
 #include <iostream>
 #include "assert.h"
-#include "network_kernel_mailbox_impl1_x.h"
+// #include "network_kernel_mailbox_impl1_x.h"
 #include "network_compact_trivial_serializer.h"
 // #include "network_rest_frame.h"
 

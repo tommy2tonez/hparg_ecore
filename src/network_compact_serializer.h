@@ -56,7 +56,7 @@ namespace dg::network_compact_serializer::network_trivial_serializer::types_spac
 
     template <class T>
     struct is_reflectible<T, std::void_t<decltype(std::declval<T>().dg_reflect(nil_lambda))>>: std::true_type{};
-    
+
     template <class T, class = void>
     struct is_dg_arithmetic: std::is_arithmetic<T>{};
 
@@ -642,6 +642,33 @@ namespace dg::network_compact_serializer::types_space{
 
     template <class T>
     static inline constexpr bool is_container_wrapper_argument_v = is_container_wrapper_argument<T>::value;
+
+    template <class T, class = void>
+    struct is_data_implemented : std::false_type{};
+
+    template <class T>
+    struct is_data_implemented<T, std::void_t<decltype(std::declval<T&>().data())>> : std::integral_constant<bool, std::is_same_v<std::add_pointer_t<char>, decltype(std::declval<T&>().data())>>{};
+
+    template <class T, class = void>
+    struct is_const_data_implemented : std::false_type{};
+
+    template <class T>
+    struct is_const_data_implemented<T, std::void_t<decltype(std::declval<const T&>().data())>> : std::integral_constant<bool, std::is_same_v<std::add_pointer_t<const char>, decltype(std::declval<const T&>().data())>>{};
+
+    template <class T, class = void>
+    struct is_resize_implemented : std::false_type{};
+
+    template <class T>
+    struct is_resize_implemented<T, std::void_t<decltype(std::declval<T&>().resize(0u))>> : std::true_type{};
+
+    template <class T, class = void>
+    struct is_size_implemented : std::false_type{};
+
+    template <class T>
+    struct is_size_implemented<T, std::void_t<decltype(std::declval<const T&>().size())>> : std::integral_constant<bool, std::numeric_limits<decltype(std::declval<const T&>().size())>::is_integer>{};
+
+    template <class T>
+    static inline constexpr bool is_streamable_implemented_v = is_data_implemented<T>::value && is_const_data_implemented<T>::value && is_resize_implemented<T>::value && is_size_implemented<T>::value;
 }
 
 namespace dg::network_compact_serializer::utility{
@@ -2495,7 +2522,7 @@ namespace dg::network_compact_serializer{
         }
     }
 
-    template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    template <class Stream, class T, std::enable_if_t<types_space::is_streamable_implemented_v<Stream>, bool> = true>
     constexpr auto serialize(const T& obj) -> Stream{
 
         Stream stream{};
@@ -2505,7 +2532,7 @@ namespace dg::network_compact_serializer{
         return stream;
     }
 
-    template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    template <class T, class Stream, std::enable_if_t<types_space::is_streamable_implemented_v<Stream>, bool> = true>
     constexpr auto deserialize(const Stream& stream) -> T{
 
         T rs;
@@ -2514,7 +2541,7 @@ namespace dg::network_compact_serializer{
         return rs;
     }
 
-    template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    template <class Stream, class T, std::enable_if_t<types_space::is_streamable_implemented_v<Stream>, bool> = true>
     constexpr auto integrity_serialize(const T& obj, uint32_t secret = 0u) -> Stream{
 
         Stream stream{};
@@ -2524,7 +2551,7 @@ namespace dg::network_compact_serializer{
         return stream;
     }
 
-    template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    template <class T, class Stream, std::enable_if_t<types_space::is_streamable_implemented_v<Stream>, bool> = true>
     constexpr auto integrity_deserialize(const Stream& stream, uint32_t secret = 0u) -> T{
 
         T rs;
@@ -2533,7 +2560,7 @@ namespace dg::network_compact_serializer{
         return rs;
     }
 
-    template <class Stream, class T, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    template <class Stream, class T, std::enable_if_t<types_space::is_streamable_implemented_v<Stream>, bool> = true>
     constexpr auto dgstd_serialize(const T& obj, uint32_t secret = 0u) -> Stream{
 
         Stream stream{};
@@ -2543,7 +2570,7 @@ namespace dg::network_compact_serializer{
         return stream;
     }
 
-    template <class T, class Stream, std::enable_if_t<types_space::is_byte_stream_container_v<Stream>, bool> = true>
+    template <class T, class Stream, std::enable_if_t<types_space::is_streamable_implemented_v<Stream>, bool> = true>
     constexpr auto dgstd_deserialize(const Stream& stream, uint32_t secret = 0u) -> T{
 
         T rs;

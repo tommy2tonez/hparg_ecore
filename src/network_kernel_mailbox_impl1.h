@@ -67,7 +67,7 @@ namespace dg::network_kernel_mailbox_impl1::types{
 
 namespace dg::network_kernel_mailbox_impl1::allocation{
     
-    using Config = dg::network_kernel_mailbox_impl1_allocation::allocator_instance; 
+    using Config = dg::network_kernel_mailbox_impl1_allocation::allocator_instance::Config; 
 
     auto init(Config config)
     {
@@ -95,6 +95,9 @@ namespace dg::network_kernel_mailbox_impl1::allocation{
 namespace dg::network_kernel_mailbox_impl1::types{
 
     using internal_kernel_buffer = dg::network_kernel_mailbox_impl1::allocation::internal_kernel_buffer;
+
+    template <class T>
+    using internal_vector = dg::network_kernel_mailbox_impl1::allocation::internal_vector<T>;
 }
 
 namespace dg::network_kernel_mailbox_impl1::model{
@@ -655,6 +658,20 @@ namespace dg::network_kernel_mailbox_impl1::core{
 namespace dg::network_kernel_mailbox_impl1::utility{
 
     using namespace dg::network_kernel_mailbox_impl1::model;
+
+    template <class ...Args>
+    auto backsplit_str(internal_kernel_buffer s, size_t sz) -> std::pair<internal_kernel_buffer, internal_kernel_buffer>{
+
+        size_t rhs_sz = std::min(s.size(), sz); 
+        internal_kernel_buffer rhs(rhs_sz);
+
+        for (size_t i = rhs_sz; i != 0u; --i){
+            rhs[i - 1] = s.back();
+            s.pop_back();
+        }
+
+        return std::make_pair(std::move(s), std::move(rhs));
+    }
 
     template <class T>
     static auto legacy_struct_default_init() noexcept -> T{
@@ -2423,7 +2440,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
         auto x_header       = x_header_t{};
         RequestPacket rs    = {};
-        auto [left, right]  = stdx::backsplit_str(std::move(bstream), header_sz);
+        auto [left, right]  = utility::backsplit_str(std::move(bstream), header_sz);
         exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_trivial_serializer::deserialize_into<x_header_t>)(x_header, right.data(), right.size(), REQUEST_PACKET_SERIALIZATION_SECRET);
 
         if (dg::network_exception::is_failed(err)){
@@ -2505,7 +2522,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     static auto deserialize_packet(internal_kernel_buffer bstream) noexcept -> std::expected<Packet, exception_t>{
 
         constexpr size_t PACKET_POLYMORPHIC_HEADER_SZ   = dg::network_compact_trivial_serializer::size(packet_polymorphic_t{});
-        auto [left, right]                              = stdx::backsplit_str(std::move(bstream), PACKET_POLYMORPHIC_HEADER_SZ);
+        auto [left, right]                              = utility::backsplit_str(std::move(bstream), PACKET_POLYMORPHIC_HEADER_SZ);
 
         if (right.size() != PACKET_POLYMORPHIC_HEADER_SZ){
             return std::unexpected(dg::network_exception::SOCKET_MALFORMED_PACKET);
@@ -2812,12 +2829,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         private:
             
             dg::vector<T> queue;
+            size_t queue_cap;
+            size_t allocated_sz;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
 
         public:
 
             LIFOUnitAllocator(dg::vector<T> queue,
+                              size_t queue_cap,
+                              size_t allocated_sz,
                               std::unique_ptr<stdx::fair_atomic_flag> mtx) noexcept: queue(std::move(queue)),
+                                                                                     queue_cap(queue_cap),
+                                                                                     allocated_sz(allocated_sz),
                                                                                      mtx(std::move(mtx)){}
 
             auto get() noexcept -> std::expected<T, exception_t>{
@@ -2825,7 +2848,12 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 if (this->queue.empty()){
+                    if (this->allocated_sz == this->queue_cap){
+                        return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                    }
+
                     this->queue.push_back(T{});
+                    this->allocated_sz += 1u;
                 }
 
                 T rs = std::move(this->queue.back()); 
@@ -3027,7 +3055,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             auto get(MailBoxArgument&& arg) noexcept -> std::expected<RequestPacket, exception_t>{
 
-                if (arg.content.size() > constants::MAX_REQUEST_PACKET_CONTENT_SIZE){
+                if (arg.content_sz > constants::MAX_REQUEST_PACKET_CONTENT_SIZE){
                     return std::unexpected(dg::network_exception::SOCKET_BAD_BUFFER_LENGTH);
                 }
 
@@ -3990,7 +4018,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
 
                 internal_kernel_buffer * base_buffer_arr = buffer_arr.base();
-                dg::vector<internal_kernel_buffer> buffer_vec = dg::network_exception_handler::nothrow_log(this->bufvec_allocator->get());
+                std::expected<dg::vector<internal_kernel_buffer>, exception_t> buffer_vec_tmp = this->bufvec_allocator->get();
+
+                if (!buffer_vec_tmp.has_value()){
+                    std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
+                    return;
+                }
+
+                dg::vector<internal_kernel_buffer> buffer_vec = std::move(buffer_vec_tmp.value());
 
                 buffer_vec.resize(sz);
                 std::copy(std::make_move_iterator(base_buffer_arr),
@@ -4862,7 +4897,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
 
                 Packet * base_pkt_arr = pkt_arr.base();
-                dg::vector<Packet> pkt_vec = dg::network_exception_handler::nothrow_log(this->pktvec_allocator->get());
+
+                std::expected<dg::vector<Packet>, exception_t> pkt_vec_tmp = this->pktvec_allocator->get();
+
+                if (!pkt_vec_tmp.has_value()){
+                    std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
+                    return;
+                }
+
+                dg::vector<Packet> pkt_vec = std::move(pkt_vec_tmp.value());
                 pkt_vec.resize(sz);
                 std::copy(pkt_arr, std::next(pkt_arr, sz), pkt_vec.begin());
 
@@ -6209,11 +6252,20 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         }
         
         template <class T>
-        static auto get_default_lifo_unit_allocator() -> std::unique_ptr<UnitAllocatorInterface<T>>{
+        static auto get_default_lifo_unit_allocator(size_t queue_cap) -> std::unique_ptr<UnitAllocatorInterface<T>>{
 
-            return std::make_unique<LIFOUnitAllocator>(dg::vector<T>(),
-                                                       stdx::make_unique_fair_atomic_flag());
-        } 
+            const size_t MIN_QUEUE_CAP = 1u;
+            const size_t MAX_QUEUE_CAP = size_t{1} << 30;
+
+            if (std::clamp(queue_cap, MIN_QUEUE_CAP, MAX_QUEUE_CAP) != queue_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<LIFOUnitAllocator<T>>(dg::vector<T>(),
+                                                          queue_cap,
+                                                          0u,
+                                                          stdx::make_unique_fair_atomic_flag());
+        }
 
         static auto get_fair_inbound_buffer_container(size_t distribution_queue_sz,
                                                       size_t waiting_queue_sz,
@@ -6245,10 +6297,12 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            size_t queue_cap = distribution_queue_sz + waiting_queue_sz + leftover_queue_sz; 
+
             return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<internal_kernel_buffer>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
                                                                 dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
-                                                                get_default_lifo_unit_allocator<dg::vector<internal_kernel_buffer>>(),
+                                                                get_default_lifo_unit_allocator<dg::vector<internal_kernel_buffer>>(queue_cap),
                                                                 stdx::make_unique_fair_atomic_flag(),
                                                                 vec_unit_sz);
         }
@@ -6386,12 +6440,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            size_t queue_cap = normal_packet_vec_queue_capacity + ack_packet_vec_queue_capacity + rescue_packet_vec_queue_capacity
+                                + waiting_queue_capacity + leftover_queue_capacity;
+
             return std::make_unique<NormalOutboundPacketContainer>(dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(normal_packet_vec_queue_capacity))),
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(ack_packet_vec_queue_capacity))),
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(rescue_packet_vec_queue_capacity))),
                                                                    dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_capacity))),
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(leftover_queue_capacity))),
-                                                                   get_default_lifo_unit_allocator<dg::vector<Packet>>(),
+                                                                   get_default_lifo_unit_allocator<dg::vector<Packet>>(queue_cap),
                                                                    accum_sz,
                                                                    stdx::make_unique_fair_atomic_flag(),
                                                                    unit_sz);
@@ -6427,10 +6484,12 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            size_t unit_allocator_cap = packet_vec_queue_capacity + waiting_queue_capacity + leftover_queue_capacity; 
+
             return std::make_unique<FairInBoundPacketContainer>(dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(packet_vec_queue_capacity))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_capacity))),
                                                                 dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(leftover_queue_capacity))),
-                                                                get_default_lifo_unit_allocator<dg::vector<Packet>>(),
+                                                                get_default_lifo_unit_allocator<dg::vector<Packet>>(unit_allocator_cap),
                                                                 stdx::make_unique_fair_atomic_flag(),
                                                                 vec_unit_sz);
         }
@@ -8179,7 +8238,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                                                                  inbound_capacity(inbound_capacity),
                                                                                  outbound_capacity(outbound_capacity){}
 
-            void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void send(MailBoxArgument * data_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -8196,7 +8255,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> retransmission_deliverer_mem(retransmission_deliverer_allocation_cost);
                 auto retransmission_tmp_deliverer                   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&retransmission_deliverer, trimmed_retransmission_delivery_sz, retransmission_deliverer_mem.get()));
 
-                MailBoxArgument * base_data_arr                     = data_arr.base();
+                MailBoxArgument * base_data_arr                     = data_arr;
 
                 auto internal_deliverer                             = InternalOBDeliverer{};
                 internal_deliverer.ob_packet_container              = this->ob_packet_container.get();
@@ -8253,7 +8312,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 for (size_t i = 0u; i < pkt_arr_sz; ++i){
                     RequestPacket rq_pkt        = dg::network_exception_handler::nothrow_log(packet_service::devirtualize_request_packet(std::move(pkt_arr[i])));
                     size_t elemental_sz         = std::min(output_elemental_capacity_arr[i], static_cast<size_t>(rq_pkt.content.size()));
-                    std::copy(rq_pkt.content.begin(), std::next(rq_pkt.content.begin(), elemental_sz), output_arr[i]);
+                    std::copy(rq_pkt.content.begin(), std::next(rq_pkt.content.begin(), elemental_sz), static_cast<char *>(output_arr[i]));
                     output_elemental_sz_arr[i]  = elemental_sz;
                 }
             }

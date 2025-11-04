@@ -104,7 +104,7 @@ namespace dg::network_kernel_mailbox_impl1_allocation::allocator_instance
 
             static auto free(void * old_ptr) noexcept
             {
-                allocator_instance::free(old_ptr);
+                allocator_instance::dg_free(old_ptr);
             }
     };
 
