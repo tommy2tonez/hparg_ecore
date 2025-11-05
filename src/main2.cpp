@@ -5,29 +5,38 @@
 // #include "network_datastructure.h"
 #include "network_kernel_allocator.h"
 #include "network_kernel_buffer.h"
+#include "network_kernel_mailbox_impl1.h"
 
 int main()
 {
-    auto allocator = dg::network_kernel_allocator::ComponentFactory::make_affined_map_allocator({}, {}, {}, {});
-    auto buf = dg::network_kernel_buffer::kernel_string();
-    buf.size();
-    auto buf2 = buf;
-    buf.at(0);
-    buf[0];
-    buf.front();
-    buf.back();
-    buf.begin();
-    buf.end();
-    buf.cbegin();
-    buf.cend();
-    buf.data();
-    buf.reserve({});
-    buf.resize({});
-    buf.capacity();
-    buf.clear();
-    buf.push_back({});
-    buf.pop_back();
-    buf.swap(buf2);
+    using namespace dg::network_kernel_mailbox_impl1::allocation;
+
+    dg::network_kernel_mailbox_impl1::allocation::init(dg::network_kernel_mailbox_impl1::allocation::Config{.total_mempiece_count = 1 << 10, .mempiece_sz = 1 << 10, .affined_refill_sz = 1 << 8, .affined_mem_vec_capacity = 1 << 8, .affined_free_vec_capacity = 1 << 8});
+
+    internal_kernel_buffer buf{};
+    buf = std::string_view("Hello World");
+
+    std::cout << std::string_view(buf) << std::endl;
+    // auto allocator = dg::network_kernel_allocator::ComponentFactory::make_affined_map_allocator({}, {}, {}, {});
+    // auto buf = dg::network_kernel_buffer::kernel_string();
+    // buf.size();
+    // auto buf2 = buf;
+    // buf.at(0);
+    // buf[0];
+    // buf.front();
+    // buf.back();
+    // buf.begin();
+    // buf.end();
+    // buf.cbegin();
+    // buf.cend();
+    // buf.data();
+    // buf.reserve({});
+    // buf.resize({});
+    // buf.capacity();
+    // buf.clear();
+    // buf.push_back({});
+    // buf.pop_back();
+    // buf.swap(buf2);
     
     // dg::network_datastructure::unordered_map_variants::cyclic_unordered_node_set<std::string> set(32);
 

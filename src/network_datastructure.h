@@ -675,9 +675,11 @@ namespace dg::network_datastructure::cyclic_queue{
                                                                           cap(size_t{1} << pow2_exponent){}
             
 
-            constexpr nontrivial_pow2_cyclic_queue(const self& other){
+            constexpr nontrivial_pow2_cyclic_queue(const self& other): nontrivial_pow2_cyclic_queue(stdx::ulog2(other.data_arr.size())){
 
-                *this = other;
+                for (const auto& e: other){
+                    this->push_back(e);
+                }
             }
 
             constexpr nontrivial_pow2_cyclic_queue(self&& other) noexcept(true){
@@ -701,7 +703,6 @@ namespace dg::network_datastructure::cyclic_queue{
                 if (this == std::addressof(other)){
                     return *this;
                 }
-
 
                 auto proxy = self(stdx::ulog2(other.data_arr.size()));
 

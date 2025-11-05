@@ -102,11 +102,6 @@ namespace dg::network_kernel_mailbox_impl1::types{
 
 namespace dg::network_kernel_mailbox_impl1::model{
 
-    static inline constexpr size_t DG_MAX_ADDRSTRLEN = size_t{1} << 6; 
-
-    static_assert(DG_MAX_ADDRSTRLEN >= INET_ADDRSTRLEN);
-    static_assert(DG_MAX_ADDRSTRLEN >= INET6_ADDRSTRLEN); 
-
     using namespace dg::network_kernel_mailbox_impl1::types;
 
     struct SocketHandle{
@@ -376,7 +371,7 @@ namespace dg::network_kernel_mailbox_impl1::model{
 
     struct MailBoxArgument{
         Address to;
-        void * content;
+        const void * content;
         size_t content_sz;
     };
 }
@@ -3065,7 +3060,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 pkt.id                      = this->id_gen->get();
                 pkt.retransmission_count    = 0u;
                 pkt.priority                = 0u;
-                pkt.content                 = internal_kernel_buffer(std::string_view(static_cast<char *>(arg.content), arg.content_sz));
+                pkt.content                 = internal_kernel_buffer(std::string_view(static_cast<const char *>(arg.content), arg.content_sz));
 
                 return pkt;
             }
@@ -7391,7 +7386,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                                                                     buf_cap_arr.get(),
                                                                                                     arr_sz,
                                                                                                     arr_cap);
-                
+
                 if (dg::network_exception::is_failed(err))
                 {
                     return err;
@@ -7403,7 +7398,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 }
 
                 str_arr_sz = arr_sz;
-
+ 
                 return dg::network_exception::SUCCESS;
             } 
 
@@ -8314,6 +8309,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                     size_t elemental_sz         = std::min(output_elemental_capacity_arr[i], static_cast<size_t>(rq_pkt.content.size()));
                     std::copy(rq_pkt.content.begin(), std::next(rq_pkt.content.begin(), elemental_sz), static_cast<char *>(output_arr[i]));
                     output_elemental_sz_arr[i]  = elemental_sz;
+                    sz                          += 1u;
                 }
             }
 

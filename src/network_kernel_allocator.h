@@ -245,7 +245,7 @@ namespace dg::network_kernel_allocator
 
             auto malloc() noexcept -> std::expected<void *, exception_t> 
             {
-                size_t thr_idx = dg::network_concurrency::this_thread_idx();
+                size_t thr_idx =  dg::network_concurrency::this_thread_idx();
 
                 if constexpr(DEBUG_MODE_FLAG)
                 {
