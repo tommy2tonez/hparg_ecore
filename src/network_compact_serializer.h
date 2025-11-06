@@ -355,6 +355,7 @@ namespace dg::network_compact_serializer::exception_space{
 
         inline auto what() const noexcept -> const char *{
 
+            std::cout << std::stacktrace::current() << std::endl;
             return "corrupted_format";
         }
     };

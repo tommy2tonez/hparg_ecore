@@ -47,6 +47,11 @@ namespace dg::network_kernel_mailbox_impl1_allocation::allocator_instance
             }            
         }
 
+        if (byte_sz == 0u)
+        {
+            return std::add_pointer_t<void>(nullptr);
+        }
+
         if (byte_sz > singleton_object::get()->malloc_size())
         {
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -66,6 +71,11 @@ namespace dg::network_kernel_mailbox_impl1_allocation::allocator_instance
             }
         }
 
+        if (old_ptr == nullptr)
+        {
+            return dg_malloc(new_sz);
+        }
+
         if (new_sz > singleton_object::get()->malloc_size())
         {
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
@@ -83,6 +93,11 @@ namespace dg::network_kernel_mailbox_impl1_allocation::allocator_instance
                 dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
                 std::abort();
             }
+        }
+
+        if (mem_ptr == nullptr)
+        {
+            return;
         }
 
         singleton_object::get()->free(mem_ptr);

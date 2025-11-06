@@ -82,8 +82,7 @@ namespace dg::network_kernel_mailbox_impl1::allocation{
     template <class T, class ...Args>
     auto make_shared(Args&& ...args) -> std::shared_ptr<T>
     {
-        return std::allocate_shared<T>(dg::network_kernel_mailbox_impl1_allocation::allocator_instance::StdWrappedAllocator<T>{},
-                                       std::forward<Args>(args)...);
+        return std::make_shared<T>(std::forward<Args>(args)...);
     }
 
     using internal_kernel_buffer = dg::network_kernel_buffer::kernel_string<dg::network_kernel_mailbox_impl1_allocation::allocator_instance::StaticWrappedAllocator>;
@@ -389,7 +388,7 @@ namespace dg::network_kernel_mailbox_impl1::constants{
 
     static inline constexpr size_t MAXIMUM_MSG_SIZE                     = size_t{1} << 12;
     static inline constexpr size_t MAX_REQUEST_PACKET_CONTENT_SIZE      = size_t{1} << 10;
-    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 3;
+    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 1;
     static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
     static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 8;
     static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 8;
@@ -655,17 +654,24 @@ namespace dg::network_kernel_mailbox_impl1::utility{
     using namespace dg::network_kernel_mailbox_impl1::model;
 
     template <class ...Args>
-    auto backsplit_str(internal_kernel_buffer s, size_t sz) -> std::pair<internal_kernel_buffer, internal_kernel_buffer>{
+    auto backsplit_str(internal_kernel_buffer s, size_t sz) noexcept -> std::expected<std::pair<internal_kernel_buffer, internal_kernel_buffer>, exception_t>{
 
-        size_t rhs_sz = std::min(s.size(), sz); 
-        internal_kernel_buffer rhs(rhs_sz);
+        try
+        {
+            size_t rhs_sz = std::min(s.size(), sz); 
+            internal_kernel_buffer rhs(rhs_sz);
 
-        for (size_t i = rhs_sz; i != 0u; --i){
-            rhs[i - 1] = s.back();
-            s.pop_back();
+            for (size_t i = rhs_sz; i != 0u; --i){
+                rhs[i - 1] = s.back();
+                s.pop_back();
+            }
+
+            return std::make_pair(std::move(s), std::move(rhs));
         }
-
-        return std::make_pair(std::move(s), std::move(rhs));
+        catch (...)
+        {
+            return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+        }
     }
 
     template <class T>
@@ -2435,7 +2441,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
         auto x_header       = x_header_t{};
         RequestPacket rs    = {};
-        auto [left, right]  = utility::backsplit_str(std::move(bstream), header_sz);
+        
+        std::expected<std::pair<internal_kernel_buffer, internal_kernel_buffer>, exception_t> split_data = utility::backsplit_str(std::move(bstream), header_sz);
+
+        if (!split_data.has_value()){
+            return std::unexpected(split_data.error());
+        }
+
+        auto [left, right]  = std::move(split_data.value());
         exception_t err     = dg::network_exception::to_cstyle_function(dg::network_compact_trivial_serializer::deserialize_into<x_header_t>)(x_header, right.data(), right.size(), REQUEST_PACKET_SERIALIZATION_SECRET);
 
         if (dg::network_exception::is_failed(err)){
@@ -2517,7 +2530,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     static auto deserialize_packet(internal_kernel_buffer bstream) noexcept -> std::expected<Packet, exception_t>{
 
         constexpr size_t PACKET_POLYMORPHIC_HEADER_SZ   = dg::network_compact_trivial_serializer::size(packet_polymorphic_t{});
-        auto [left, right]                              = utility::backsplit_str(std::move(bstream), PACKET_POLYMORPHIC_HEADER_SZ);
+
+        std::expected<std::pair<internal_kernel_buffer, internal_kernel_buffer>, exception_t> split_data = utility::backsplit_str(std::move(bstream), PACKET_POLYMORPHIC_HEADER_SZ);
+
+        if (!split_data.has_value())
+        {
+            return std::unexpected(split_data.error());
+        }
+
+        auto [left, right]                              = std::move(split_data.value()); 
 
         if (right.size() != PACKET_POLYMORPHIC_HEADER_SZ){
             return std::unexpected(dg::network_exception::SOCKET_MALFORMED_PACKET);
@@ -3060,7 +3081,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 pkt.id                      = this->id_gen->get();
                 pkt.retransmission_count    = 0u;
                 pkt.priority                = 0u;
-                pkt.content                 = internal_kernel_buffer(std::string_view(static_cast<const char *>(arg.content), arg.content_sz));
+                
+                try
+                {
+                    pkt.content = internal_kernel_buffer(std::string_view(static_cast<const char *>(arg.content), arg.content_sz));
+                }
+                catch (...)
+                {
+                    return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                }
 
                 return pkt;
             }
@@ -5939,7 +5968,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             using namespace std::chrono_literals;
 
             const std::chrono::nanoseconds MIN_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(1ns);
-            const std::chrono::nanoseconds MAX_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(1min);
+            const std::chrono::nanoseconds MAX_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(10min);
 
             if (std::clamp(interval, MIN_INTERVAL, MAX_INTERVAL) != interval){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -7305,37 +7334,37 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> bdh_buf(bdh_allocation_cost);
                 auto buffer_delivery_handle     = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&buffer_delivery_resolutor, adjusted_delivery_sz, bdh_buf.get()));
 
-                for (size_t i = 0u; i < this->buffer_accumulation_sz; ++i){
-                    dg::network_stack_allocation::NoExceptAllocation<internal_kernel_buffer[]> bstream_arr(socket_service::batchrecv_max_array_size());
-                    exception_t resize_err = resize_string_array(bstream_arr.get(), socket_service::batchrecv_max_array_size(), constants::MAXIMUM_MSG_SIZE); 
+                // for (size_t i = 0u; i < this->buffer_accumulation_sz; ++i){
+                dg::network_stack_allocation::NoExceptAllocation<internal_kernel_buffer[]> bstream_arr(socket_service::batchrecv_max_array_size());
+                exception_t resize_err = resize_string_array(bstream_arr.get(), socket_service::batchrecv_max_array_size(), constants::MAXIMUM_MSG_SIZE); 
 
-                    if (dg::network_exception::is_failed(resize_err)){
-                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(resize_err));
-                        return false;
-                    }
+                if (dg::network_exception::is_failed(resize_err)){
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(resize_err));
+                    return false;
+                }
 
-                    size_t sz       = {};
-                    exception_t err = batch_recvblock_helper(*this->socket, bstream_arr.get(), sz, socket_service::batchrecv_max_array_size()); 
+                size_t sz       = {};
+                exception_t err = batch_recvblock_helper(*this->socket, bstream_arr.get(), sz, socket_service::batchrecv_max_array_size()); 
 
-                    if (dg::network_exception::is_failed(err)){
-                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
-                        return false;
-                    }
+                if (dg::network_exception::is_failed(err)){
+                    dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(err));
+                    return false;
+                }
 
-                    for (size_t i = 0u; i < sz; ++i){
-                        dg::network_producer_consumer::delvrsrv_deliver(buffer_delivery_handle.get(), std::move(bstream_arr[i]));
-                    }
+                for (size_t i = 0u; i < sz; ++i){
+                    dg::network_producer_consumer::delvrsrv_deliver(buffer_delivery_handle.get(), std::move(bstream_arr[i]));
+                }
 
-                    size_t dice = dg::network_randomizer::randomize_int<size_t>() & (this->pow2_rescue_heartbeat_interval - 1u);
+                size_t dice = dg::network_randomizer::randomize_int<size_t>() & (this->pow2_rescue_heartbeat_interval - 1u);
 
-                    if (dice == 0u){
-                        exception_t rescue_heartbeat_err = this->rescue_post->heartbeat();
+                if (dice == 0u){
+                    exception_t rescue_heartbeat_err = this->rescue_post->heartbeat();
 
-                        if (dg::network_exception::is_failed(rescue_heartbeat_err)){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(rescue_heartbeat_err));
-                        }
+                    if (dg::network_exception::is_failed(rescue_heartbeat_err)){
+                        dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(rescue_heartbeat_err));
                     }
                 }
+                // }
 
                 return true;
             }
@@ -8262,6 +8291,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 auto ob_deliverer                                   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_deliverer, trimmed_ob_delivery_sz, ob_deliverer_mem.get()));
 
                 dg::network_stack_allocation::NoExceptAllocation<RequestPacket[]> request_pkt_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<RequestPacket[]> retry_pkt_arr(sz);
                 dg::network_stack_allocation::NoExceptAllocation<size_t[]> idx_arr(sz);
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> request_exception_arr(sz);
 
@@ -8276,12 +8306,21 @@ namespace dg::network_kernel_mailbox_impl1::core{
                         exception_arr[i] = pkt.error();
                         continue;
                     }
+                    
+                    std::expected<RequestPacket, exception_t> cpy_pkt = dg::network_exception::cstyle_initialize<RequestPacket>(pkt.value());
+                    
+                    if (!cpy_pkt.has_value()){
+                        exception_arr[i] = cpy_pkt.error();
+                        continue;
+                    }
 
                     request_pkt_arr[thru_sz]    = std::move(pkt.value());
+                    retry_pkt_arr[thru_sz]      = std::move(cpy_pkt.value());
                     idx_arr[thru_sz]            = i;
 
                     auto ob_argument            = InternalOBArgument{
                         .arg            = std::make_move_iterator(&request_pkt_arr[thru_sz]),
+                        .cpy_arg        = std::make_move_iterator(&retry_pkt_arr[thru_sz]),
                         .exception_ptr  = std::next(request_exception_arr.get(), thru_sz)
                     };
 
@@ -8322,6 +8361,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
             struct InternalOBArgument{
                 std::move_iterator<RequestPacket *> arg;
+                std::move_iterator<RequestPacket *> cpy_arg;
                 exception_t * exception_ptr;
             };
 
@@ -8339,9 +8379,8 @@ namespace dg::network_kernel_mailbox_impl1::core{
                     InternalOBArgument * base_data_arr = data_arr.base();
 
                     for (size_t i = 0u; i < sz; ++i){
-                        Packet virt_pkt = dg::network_exception_handler::nothrow_log(packet_service::virtualize_request_packet(std::move(*base_data_arr[i].arg.base())));
-                        cpy_data_arr[i] = virt_pkt;
-                        pkt_data_arr[i] = std::move(virt_pkt);                        
+                        pkt_data_arr[i] = dg::network_exception_handler::nothrow_log(packet_service::virtualize_request_packet(std::move(*base_data_arr[i].arg.base())));                   
+                        cpy_data_arr[i] = dg::network_exception_handler::nothrow_log(packet_service::virtualize_request_packet(std::move(*base_data_arr[i].cpy_arg.base())));
                     }
 
                     this->ob_packet_container->push(std::make_move_iterator(pkt_data_arr.get()), sz, exception_arr.get());
@@ -8719,13 +8758,13 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
-            for (size_t i = 0u; i < num_kernel_rescue_worker; ++i){
-                auto worker_ins     = worker::ComponentFactory::get_kernel_rescue_worker(ob_packet_container_sp, rescue_post_sp, krescue_packet_generator_sp, 
-                                                                                         rescue_dispatch_threshold, rescue_packet_sz);
+            // for (size_t i = 0u; i < num_kernel_rescue_worker; ++i){
+            //     auto worker_ins     = worker::ComponentFactory::get_kernel_rescue_worker(ob_packet_container_sp, rescue_post_sp, krescue_packet_generator_sp, 
+            //                                                                              rescue_dispatch_threshold, rescue_packet_sz);
 
-                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
-                daemon_vec.emplace_back(std::move(daemon_handle));
-            }
+            //     auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
+            //     daemon_vec.emplace_back(std::move(daemon_handle));
+            // }
 
             for (size_t i = 0u; i < num_retry_worker; ++i){
                 auto worker_ins     = worker::ComponentFactory::get_retransmission_worker(retransmission_controller_sp, ob_packet_container_sp, retransmission_consumption_cap,
