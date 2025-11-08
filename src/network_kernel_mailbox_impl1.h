@@ -97,6 +97,8 @@ namespace dg::network_kernel_mailbox_impl1::types{
 
     template <class T>
     using internal_vector = dg::network_kernel_mailbox_impl1::allocation::internal_vector<T>;
+    // template <class T>
+    // using internal_vector = std::vector<T>;
 }
 
 namespace dg::network_kernel_mailbox_impl1::model{
@@ -120,12 +122,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(ip_buf);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(ip_buf);
         }
     };
@@ -139,12 +141,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(ip_buf);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(ip_buf);
         }
     };
@@ -185,12 +187,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(ip);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(ip);
         }
     };
@@ -200,12 +202,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         uint16_t port;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(ip, port);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(ip, port);
         }
     };
@@ -215,12 +217,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         factory_id_t factory_id;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(local_packet_id, factory_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(local_packet_id, factory_id);
         }
     };
@@ -230,12 +232,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         uint8_t kind;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(id, kind);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(id, kind);
         }
     };
@@ -249,12 +251,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         uint8_t priority;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(id, retransmission_count, priority);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(id, retransmission_count, priority);
         }
     };
@@ -264,12 +266,12 @@ namespace dg::network_kernel_mailbox_impl1::model{
         Address to_addr;
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(static_cast<const PacketBase&>(*this), fr_addr, to_addr);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(static_cast<PacketBase&>(*this), fr_addr, to_addr);
         }
     };
@@ -388,7 +390,7 @@ namespace dg::network_kernel_mailbox_impl1::constants{
 
     static inline constexpr size_t MAXIMUM_MSG_SIZE                     = size_t{1} << 12;
     static inline constexpr size_t MAX_REQUEST_PACKET_CONTENT_SIZE      = size_t{1} << 10;
-    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 1;
+    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 3;
     static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
     static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 8;
     static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 8;
@@ -1952,6 +1954,46 @@ namespace dg::network_kernel_mailbox_impl1::socket_service{
 
         return dg::network_exception::SUCCESS;
     }
+
+    static auto batchrecv_block_x(const SocketHandle& sock,
+                                  void ** dst,
+                                  size_t * dst_sz_arr,
+                                  size_t * dst_cap_arr,
+                                  size_t& arr_sz,
+                                  size_t arr_cap) noexcept -> exception_t
+    {
+        arr_sz = 0u; 
+
+        while (true)
+        {
+            if (arr_sz == arr_cap)
+            {
+                return dg::network_exception::SUCCESS;
+            }
+
+            void ** tmp_dst             = std::next(dst, arr_sz);
+            size_t * tmp_dst_sz_arr     = std::next(dst_sz_arr, arr_sz);
+            size_t * tmp_dst_cap_arr    = std::next(dst_cap_arr, arr_sz);
+            size_t tmp_sz               = {};
+            size_t tmp_arr_cap          = arr_cap - arr_sz;
+
+            exception_t tmp_err         = batchrecv_block(sock, tmp_dst, tmp_dst_sz_arr, tmp_dst_cap_arr, tmp_sz, tmp_arr_cap);
+
+            if (dg::network_exception::is_failed(tmp_err))
+            {
+                if (arr_sz != 0u)
+                {
+                    return dg::network_exception::SUCCESS;
+                }
+                else
+                {
+                    return tmp_err;
+                }
+            }
+
+            arr_sz += tmp_sz;
+        }
+    }
 }
 
 namespace dg::network_kernel_mailbox_impl1::data_structure{
@@ -2468,6 +2510,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
 
     static auto deserialize_ack_packet(internal_kernel_buffer bstream) noexcept -> std::expected<AckPacket, exception_t>{
 
+        // return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
         return dg::network_exception::to_cstyle_function(dg::network_compact_serializer::dgstd_deserialize<AckPacket, internal_kernel_buffer>)(bstream, ACK_PACKET_SERIALIZATION_SECRET); //
     }
 
@@ -7189,8 +7232,30 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> dh_mem(dh_allocation_cost);
                 auto delivery_handle                = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&delivery_resolutor, trimmed_delivery_handle_sz, dh_mem.get()));
 
+                //--------------------------------------
+
+                auto single_delivery_resolutor              = InternalSingleDeliveryResolutor{};
+                single_delivery_resolutor.dst               = this->outbound_packet_container.get();
+
+                size_t trimmed_single_delivery_handle_sz    = std::min(std::min(this->outbound_packet_container->max_consume_size(), packet_arr_sz), this->retransmission_accumulation_cap);
+                size_t sdh_allocation_cost                  = dg::network_producer_consumer::delvrsrv_allocation_cost(&single_delivery_resolutor, trimmed_single_delivery_handle_sz);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> sdh_mem(sdh_allocation_cost);
+                auto single_delivery_handle                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&single_delivery_resolutor, trimmed_single_delivery_handle_sz, sdh_mem.get())); 
+
                 for (size_t i = 0u; i < packet_arr_sz; ++i){
-                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(packet_arr[i]));
+                    std::expected<Packet, exception_t> retransmit_pkt = dg::network_exception::cstyle_initialize<Packet>(packet_arr[i]);
+
+                    if (!retransmit_pkt.has_value()){
+                        dg::network_producer_consumer::delvrsrv_deliver(single_delivery_handle.get(), std::move(packet_arr[i]));
+                        continue;
+                    }
+
+                    auto arg = DeliveryArgument{
+                        .container_pkt  = std::move(packet_arr[i]),
+                        .retransmit_pkt = std::move(retransmit_pkt.value())
+                    };
+
+                    dg::network_producer_consumer::delvrsrv_deliver(delivery_handle.get(), std::move(arg));
                 }
 
                 return packet_arr_sz >= this->busy_threshold_sz;
@@ -7198,19 +7263,31 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
         private:
 
-            struct InternalDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
+            struct DeliveryArgument{
+
+                Packet container_pkt;
+                Packet retransmit_pkt;
+            };
+
+            struct InternalDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<DeliveryArgument>{
 
                 packet_controller::RetransmissionControllerInterface * retransmit_dst;
                 packet_controller::PacketContainerInterface * container_dst;
 
-                void push(std::move_iterator<Packet *> packet_arr, size_t sz) noexcept{
+                void push(std::move_iterator<DeliveryArgument *> delivery_arg_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
-                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> cpy_packet_arr(sz); ////memory allocation, where? has to be on dedicated 1024 byte leaf allocation in order to avoid memory fragmentation
+                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> packet_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> cpy_packet_arr(sz);
 
-                    Packet * base_packet_arr = packet_arr.base();
-                    std::copy(base_packet_arr, std::next(base_packet_arr, sz), cpy_packet_arr.get());
-                    this->container_dst->push(std::make_move_iterator(base_packet_arr), sz, exception_arr.get());
+                    DeliveryArgument * base_delivery_arg_arr = delivery_arg_arr.base();
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        packet_arr[i]       = std::move(base_delivery_arg_arr[i].container_pkt);
+                        cpy_packet_arr[i]   = std::move(base_delivery_arg_arr[i].retransmit_pkt);
+                    }
+
+                    this->container_dst->push(std::make_move_iterator(packet_arr.get()), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -7219,6 +7296,24 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                     }
 
                     this->retransmit_dst->add_retriables(std::make_move_iterator(cpy_packet_arr.get()), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (dg::network_exception::is_failed(exception_arr[i])){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        }
+                    }
+                }
+            };
+
+            struct InternalSingleDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<Packet>{
+
+                packet_controller::PacketContainerInterface * dst;
+
+                void push(std::move_iterator<Packet *> pkt_arr, size_t sz) noexcept{
+
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+
+                    this->dst->push(pkt_arr, sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -7409,12 +7504,12 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 size_t arr_sz   = 0u;
                 size_t arr_cap  = str_arr_cap;
 
-                exception_t err = dg::network_kernel_mailbox_impl1::socket_service::batchrecv_block(sock,
-                                                                                                    buf_arr.get(),
-                                                                                                    buf_sz_arr.get(),
-                                                                                                    buf_cap_arr.get(),
-                                                                                                    arr_sz,
-                                                                                                    arr_cap);
+                exception_t err = dg::network_kernel_mailbox_impl1::socket_service::batchrecv_block_x(sock,
+                                                                                                      buf_arr.get(),
+                                                                                                      buf_sz_arr.get(),
+                                                                                                      buf_cap_arr.get(),
+                                                                                                      arr_sz,
+                                                                                                      arr_cap);
 
                 if (dg::network_exception::is_failed(err))
                 {

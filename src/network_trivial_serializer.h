@@ -262,7 +262,7 @@ namespace dg::network_trivial_serializer::archive{
                 rs += (Counter{}.count(std::forward<Args>(args)) + ...);
             };
 
-            static_assert(noexcept(data.dg_reflect(archiver)));
+            // static_assert(noexcept(data.dg_reflect(archiver)));
             data.dg_reflect(archiver);
 
             return rs;
@@ -332,7 +332,7 @@ namespace dg::network_trivial_serializer::archive{
                 (Self{}.put(buf, std::forward<Args>(args)), ...);
             };
 
-            static_assert(noexcept(data.dg_reflect(archiver)));
+            // static_assert(noexcept(data.dg_reflect(archiver)));
             data.dg_reflect(archiver);
         }
 
@@ -419,7 +419,7 @@ namespace dg::network_trivial_serializer::archive{
                 (Self().put(buf, std::forward<Args>(args)), ...);
             };
 
-            static_assert(noexcept(data.dg_reflect(archiver)));
+            // static_assert(noexcept(data.dg_reflect(archiver)));
             data.dg_reflect(archiver);
         }
 

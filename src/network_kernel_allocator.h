@@ -10,6 +10,7 @@
 #include "network_exception.h"
 #include "network_log.h"
 #include "network_concurrency.h"
+#include <stacktrace>
 
 namespace dg::network_kernel_allocator
 {
@@ -31,7 +32,7 @@ namespace dg::network_kernel_allocator
 
             virtual ~AllocatorInterface() noexcept = default;
             virtual auto malloc() noexcept -> std::expected<void *, exception_t> = 0;
-            virtual void free(void *) noexcept;
+            virtual void free(void *) noexcept = 0;
             virtual auto malloc_size() const noexcept -> size_t = 0;
     };
 

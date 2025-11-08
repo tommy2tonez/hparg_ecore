@@ -179,7 +179,7 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 
                     sock->send(std::next(str_vec.data(), first), (last - first), err_vec.data());
 
-                    std::this_thread::sleep_for(std::chrono::seconds(2));
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
                 }
             }
 
@@ -260,13 +260,13 @@ int main()
                                                                 .affined_free_vec_capacity = 1 << 6});
 
             auto sock = dg::network_kernel_mailbox_impl1::spawn(dg::network_kernel_mailbox_impl1::Config{
-                .num_kernel_inbound_worker = 8,
-                .num_process_inbound_worker = 8,
-                .num_outbound_worker = 8,
+                .num_kernel_inbound_worker = 16,
+                .num_process_inbound_worker = 16,
+                .num_outbound_worker = 16,
                 .num_kernel_rescue_worker = 1,
                 .num_retry_worker = 1,
 
-                .socket_concurrency_sz = 8,
+                .socket_concurrency_sz = 16,
                 .sin_fam = AF_INET,
                 .comm = SOCK_DGRAM,
                 .protocol = 0,
@@ -274,11 +274,11 @@ int main()
                 .host_port_inbound = 5000,
                 .host_port_outbound = 5001,
 
-                .retransmission_delay = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(4)),
+                .retransmission_delay = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)),
                 .retransmission_concurrency_sz = 1,
-                .retransmission_queue_cap = 1 << 20,
+                .retransmission_queue_cap = 1 << 12,
                 .retransmission_packet_cap = 10,
-                .retransmission_idhashset_cap = 1 << 14,
+                .retransmission_idhashset_cap = 1 << 20,
                 .retransmission_ticking_clock_resolution = 1 << 10,
                 .retransmission_has_react_pattern = false,
                 .retransmission_react_sz = 1 << 8,
@@ -304,7 +304,7 @@ int main()
                 .inbound_packet_has_react_pattern = true,
                 .inbound_packet_react_sz = 1 << 8,
                 .inbound_packet_react_queue_cap = 1 << 10,
-                .inbound_packet_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(1000)),
+                .inbound_packet_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
                 .inbound_packet_has_fair_redistribution = true,
                 .inbound_packet_fair_packet_queue_cap = 1 << 14,
                 .inbound_packet_fair_waiting_queue_cap = 1 << 10,
