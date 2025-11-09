@@ -390,7 +390,7 @@ namespace dg::network_kernel_mailbox_impl1::constants{
 
     static inline constexpr size_t MAXIMUM_MSG_SIZE                     = size_t{1} << 12;
     static inline constexpr size_t MAX_REQUEST_PACKET_CONTENT_SIZE      = size_t{1} << 10;
-    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 3;
+    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 4;
     static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
     static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 8;
     static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 8;
@@ -5454,7 +5454,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void update() noexcept{
 
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
-
+                
                 dg::network_stack_allocation::NoExceptAllocation<exception_t[]> ibapp_exception_arr(this->inbound_ip_side_set.size());
                 dg::network_stack_allocation::NoExceptAllocation<Address[]> ibapp_ip_arr(this->inbound_ip_side_set.size());
 
@@ -6027,7 +6027,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                    size_t max_retransmission_sz,
                                                                    size_t consume_factor = 4u) -> std::unique_ptr<RetransmissionControllerInterface>{
         
-            const size_t MIN_PKT_MAP_CAPACITY           = 1u;
+            const size_t MIN_PKT_MAP_CAPACITY           = 0u;
             const size_t MAX_PKT_MAP_CAPACITY           = size_t{1} << 25;
             const size_t MIN_ACKED_SET_CAPACITY         = 1u;
             const size_t MAX_ACKED_SET_CAPACITY         = size_t{1} << 25;

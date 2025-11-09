@@ -682,16 +682,10 @@ namespace dg::network_datastructure::cyclic_queue{
                 }
             }
 
-            constexpr nontrivial_pow2_cyclic_queue(self&& other) noexcept(true){
-
-                this->data_arr  = std::move(other.data_arr);
-                this->off       = other.off;
-                this->sz        = other.sz;
-                this->cap       = other.cap;
-                other.off       = 0u;
-                other.sz        = 0u;
-                other.cap       = 0u;
-            }
+            constexpr nontrivial_pow2_cyclic_queue(self&& other) noexcept(true): data_arr(std::move(other.data_arr)),
+                                                                                 off(std::exchange(other.off, 0u)),
+                                                                                 sz(std::exchange(other.sz, 0u)),
+                                                                                 cap(std::exchange(other.cap, 0u)){}
 
             constexpr ~nontrivial_pow2_cyclic_queue() noexcept{
 

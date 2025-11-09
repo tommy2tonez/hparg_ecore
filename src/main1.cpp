@@ -161,7 +161,7 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 
             std::cout << "<begin0>" << std::endl;
 
-            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec    = make_str_vec(size_t{1} << 9, size_t{1} << 20, 5000);
+            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec    = make_str_vec(size_t{1} << 9, size_t{1} << 17, 5000);
 
             dg::vector<exception_t> err_vec(str_vec.size());
 
@@ -179,7 +179,7 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 
                     sock->send(std::next(str_vec.data(), first), (last - first), err_vec.data());
 
-                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 }
             }
 
@@ -276,7 +276,7 @@ int main()
 
                 .retransmission_delay = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)),
                 .retransmission_concurrency_sz = 1,
-                .retransmission_queue_cap = 1 << 12,
+                .retransmission_queue_cap = 0,
                 .retransmission_packet_cap = 10,
                 .retransmission_idhashset_cap = 1 << 20,
                 .retransmission_ticking_clock_resolution = 1 << 10,
@@ -284,47 +284,47 @@ int main()
                 .retransmission_react_sz = 1 << 8,
                 .retransmission_react_queue_cap = 1 << 10,
                 .retransmission_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
-                .retransmission_has_exhaustion_control = true,
+                .retransmission_has_exhaustion_control = false,
 
                 .inbound_buffer_concurrency_sz = 32,
                 .inbound_buffer_container_cap = 1 << 14,
                 .inbound_buffer_has_react_pattern = true,
-                .inbound_buffer_react_sz = 1 << 8,
-                .inbound_buffer_react_queue_cap = 1 << 10,
+                .inbound_buffer_react_sz = 1 << 10,
+                .inbound_buffer_react_queue_cap = 1 << 12,
                 .inbound_buffer_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
                 .inbound_buffer_has_fair_redistribution = true,
                 .inbound_buffer_fair_distribution_queue_cap = 1 << 14,
                 .inbound_buffer_fair_waiting_queue_cap = 1 << 10,
                 .inbound_buffer_fair_leftover_queue_cap = 1 << 10,
-                .inbound_buffer_fair_unit_sz = 1 << 10,
+                .inbound_buffer_fair_unit_sz = 1 << 12,
                 .inbound_buffer_has_exhaustion_control = true,
 
                 .inbound_packet_concurrency_sz = 32,
                 .inbound_packet_container_cap = 1 << 14,
                 .inbound_packet_has_react_pattern = true,
-                .inbound_packet_react_sz = 1 << 8,
-                .inbound_packet_react_queue_cap = 1 << 10,
+                .inbound_packet_react_sz = 1 << 10,
+                .inbound_packet_react_queue_cap = 1 << 12,
                 .inbound_packet_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
                 .inbound_packet_has_fair_redistribution = true,
                 .inbound_packet_fair_packet_queue_cap = 1 << 14,
                 .inbound_packet_fair_waiting_queue_cap = 1 << 10,
                 .inbound_packet_fair_leftover_queue_cap = 1 << 10,
-                .inbound_packet_fair_unit_sz = 1 << 10,
+                .inbound_packet_fair_unit_sz = 1 << 12,
                 .inbound_packet_has_exhaustion_control = true, 
 
                 .inbound_idhashset_concurrency_sz = 32,
                 .inbound_idhashset_cap = 1 << 14,
 
-                .worker_inbound_buffer_fair_container_fr_warehouse_get_cap = 1 << 10,
-                .worker_inbound_buffer_fair_container_to_warehouse_push_cap = 1 << 10,
+                .worker_inbound_buffer_fair_container_fr_warehouse_get_cap = 1 << 12,
+                .worker_inbound_buffer_fair_container_to_warehouse_push_cap = 1 << 12,
                 .worker_inbound_buffer_fair_container_busy_threshold = 0u,
 
-                .worker_inbound_fair_packet_fr_warehouse_get_cap = 1 << 10,
-                .worker_inbound_fair_packet_to_warehouse_push_cap = 1 << 10,
+                .worker_inbound_fair_packet_fr_warehouse_get_cap = 1 << 12,
+                .worker_inbound_fair_packet_to_warehouse_push_cap = 1 << 12,
                 .worker_inbound_fair_packet_busy_threshold = 0u,
 
-                .worker_inbound_buffer_accumulation_sz = 1 << 10,
-                .worker_inbound_packet_consumption_cap = 1 << 10,
+                .worker_inbound_buffer_accumulation_sz = 1 << 12,
+                .worker_inbound_packet_consumption_cap = 1 << 12,
                 .worker_inbound_packet_busy_threshold_sz = 1,
                 .worker_rescue_packet_sz_per_transmit = 1 << 6,
                 .worker_kernel_rescue_dispatch_threshold = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),

@@ -21,6 +21,10 @@
 #include <exception>
 #include <thread>
 #include "assert.h"
+#include <sys/syscall.h>
+#include <linux/membarrier.h>
+// #include <linux/memory.h>
+// #include <linux/barrier.h>
 
 namespace stdx{
 
@@ -45,6 +49,23 @@ namespace stdx{
     inline __attribute__((always_inline)) void lock_yield(std::chrono::nanoseconds lapsed) noexcept{
 
         (void) lapsed;
+    }
+
+    static __attribute__((always_inline)) int membarrier(int cmd, unsigned int flags, int cpu_id) noexcept
+    {
+        return syscall(__NR_membarrier, cmd, flags, cpu_id);
+    }
+
+    static __attribute__((always_inline)) void hardsync() noexcept
+    {
+        asm volatile ("mfence" : : : "memory");
+        // membarrier(MEMBARRIER_CMD_GLOBAL, 0, 0);
+    }
+
+    static __attribute__((always_inline)) void hardsync2() noexcept
+    {
+        membarrier(MEMBARRIER_CMD_GLOBAL, 0, 0);
+        // smp_mb();
     }
 
     struct polymorphic_launderer{
@@ -475,6 +496,7 @@ namespace stdx{
 
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
+            hardsync();
         } else{
             std::atomic_thread_fence(on_success_memorder);
         }
@@ -545,6 +567,7 @@ namespace stdx{
 
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
+            hardsync();
         } else{
             std::atomic_thread_fence(std::memory_order_acquire);
         }
@@ -569,6 +592,7 @@ namespace stdx{
         if (!mtx->is_relaxed_lock)
         {
             if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+                hardsync();
                 std::atomic_thread_fence(std::memory_order_seq_cst);
             } else{
                 std::atomic_thread_fence(std::memory_order_release);
@@ -594,6 +618,7 @@ namespace stdx{
 
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
+            hardsync();
         } else{
             std::atomic_thread_fence(std::memory_order_acquire);
         }
@@ -622,6 +647,7 @@ namespace stdx{
 
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
             std::atomic_thread_fence(std::memory_order_seq_cst);
+            hardsync();
         } else{
             std::atomic_thread_fence(std::memory_order_acquire);
         }
@@ -630,6 +656,7 @@ namespace stdx{
     inline __attribute__((always_inline)) void atomic_flag_memsafe_unlock(std::atomic_flag * volatile mtx) noexcept{
         
         if constexpr(STRONG_MEMORY_ORDERING_FLAG){
+            hardsync();
             std::atomic_thread_fence(std::memory_order_seq_cst);
         } else{
             std::atomic_thread_fence(std::memory_order_release);
@@ -881,6 +908,22 @@ namespace stdx{
 
             memtransaction_guard& operator =(const memtransaction_guard&) = delete;
             memtransaction_guard& operator =(memtransaction_guard&&) = delete;
+    };
+
+    class hardsync_guard{
+
+        public:
+
+            inline __attribute__((always_inline)) hardsync_guard() noexcept{
+                stdx::hardsync2();
+            }
+
+            hardsync_guard(const hardsync_guard&) = delete;
+            hardsync_guard(hardsync_guard&&) = delete;
+
+            inline __attribute__((always_inline)) ~hardsync_guard() noexcept{
+                stdx::hardsync2();
+            }
     };
 
     inline __attribute__((always_inline)) void atomic_optional_thread_fence(std::memory_order order = std::memory_order_seq_cst) noexcept{
