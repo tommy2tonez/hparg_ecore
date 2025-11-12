@@ -141,6 +141,7 @@ namespace dg::network_concurrency_impl1_linux{
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 this->worker = std::move(worker);
+                stdx::hardsync2();
             }
 
             void infloop() noexcept{

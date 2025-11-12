@@ -8,7 +8,7 @@
 #include <thread>
 #include <mutex>
 #include "network_kernel_mailbox_impl1.h"
-// #include "network_kernel_mailbox_impl1_x.h"
+#include "network_kernel_mailbox_impl1_x.h"
 
 static inline std::mutex print_mtx;
 
@@ -161,7 +161,7 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 
             std::cout << "<begin0>" << std::endl;
 
-            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec    = make_str_vec(size_t{1} << 9, size_t{1} << 17, 5000);
+            dg::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> str_vec    = make_str_vec(size_t{1} << 7, size_t{1} << 17, 5000);
 
             dg::vector<exception_t> err_vec(str_vec.size());
 
@@ -169,7 +169,7 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
             
             while (true)
             {
-                size_t max_sz = size_t{1} << 17;
+                size_t max_sz = size_t{1} << 16;
                 size_t iterable_sz = str_vec.size() / max_sz + (str_vec.size() % max_sz != 0u); 
 
                 for (size_t i = 0u; i < iterable_sz; ++i)
@@ -179,7 +179,7 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 
                     sock->send(std::next(str_vec.data(), first), (last - first), err_vec.data());
 
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    std::this_thread::sleep_for(std::chrono::seconds(10));
                 }
             }
 
@@ -189,7 +189,7 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 
             while (true)
             {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
+                std::this_thread::sleep_for(std::chrono::seconds(10));
             }
 
             return true;
@@ -240,24 +240,44 @@ int main()
             .io_cpu_usage = 0.9,
             .transportation_cpu_usage = 0.1,
             .heartbeat_cpu_usage = 0.1,
-            .high_parallel_hyperthread_per_core = 20,
-            .high_compute_hyperthread_per_core = 10,
+            .high_parallel_hyperthread_per_core = 1,
+            .high_compute_hyperthread_per_core = 20,
             .uniform_affine_group = std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8}
         });
 
         {
             dg::network_stack_allocation::init(10000, size_t{1} << 25);
 
-            auto [retry_device_up, destructor] = dg::network_concurrency_infretry_x::get_infretry_machine(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(100))); 
+            auto [retry_device_up, destructor] = dg::network_concurrency_infretry_x::get_infretry_machine(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(1000))); 
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> retry_device = std::move(retry_device_up);
 
             std::cout << "making socket ..." << std::endl;
 
             dg::network_kernel_mailbox_impl1::allocation::init({.total_mempiece_count = 1 << 18,
                                                                 .mempiece_sz = 1 << 12,
-                                                                .affined_refill_sz = 1 << 6,
-                                                                .affined_mem_vec_capacity = 1 << 6,
-                                                                .affined_free_vec_capacity = 1 << 6});
+                                                                .affined_refill_sz = 1 << 8,
+                                                                .affined_mem_vec_capacity = 1 << 8,
+                                                                .affined_free_vec_capacity = 1 << 8});
+            
+            dg::network_kernel_mailbox_impl1_flash_streamx::init_memory(
+                                                            {.total_mempiece_count = 1 << 20,
+                                                             .mempiece_sz = 1 << 12,
+                                                             .affined_refill_sz = 1 << 8,
+                                                             .affined_mem_vec_capacity = 1 << 8,
+                                                             .affined_free_vec_capacity = 1 << 8}, 
+                                                            {
+                                                             .total_mempiece_count = 1 << 20,
+                                                             .mempiece_sz = 1 << 12,
+                                                             .affined_refill_sz = 1 << 8,
+                                                             .affined_mem_vec_capacity = 1 << 8,
+                                                             .affined_free_vec_capacity = 1 << 8
+                                                            },
+                                                            {.total_mempiece_count = 1 << 12,
+                                                             .mempiece_sz = 1 << 12,
+                                                             .affined_refill_sz = 1 << 8,
+                                                             .affined_mem_vec_capacity = 1 << 8,
+                                                             .affined_free_vec_capacity = 1 << 8
+                                                            });
 
             auto sock = dg::network_kernel_mailbox_impl1::spawn(dg::network_kernel_mailbox_impl1::Config{
                 .num_kernel_inbound_worker = 16,
@@ -266,7 +286,8 @@ int main()
                 .num_kernel_rescue_worker = 1,
                 .num_retry_worker = 1,
 
-                .socket_concurrency_sz = 16,
+                .inbound_socket_concurrency_sz = 16,
+                .outbound_socket_concurrency_sz = 16,
                 .sin_fam = AF_INET,
                 .comm = SOCK_DGRAM,
                 .protocol = 0,
@@ -274,17 +295,18 @@ int main()
                 .host_port_inbound = 5000,
                 .host_port_outbound = 5001,
 
+                .is_void_retransmission_controller = true,
                 .retransmission_delay = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)),
                 .retransmission_concurrency_sz = 1,
-                .retransmission_queue_cap = 0,
+                .retransmission_queue_cap = 1 << 10,
                 .retransmission_packet_cap = 10,
-                .retransmission_idhashset_cap = 1 << 20,
+                .retransmission_idhashset_cap = 1 << 25,
                 .retransmission_ticking_clock_resolution = 1 << 10,
                 .retransmission_has_react_pattern = false,
                 .retransmission_react_sz = 1 << 8,
                 .retransmission_react_queue_cap = 1 << 10,
                 .retransmission_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
-                .retransmission_has_exhaustion_control = false,
+                .retransmission_has_exhaustion_control = true,
 
                 .inbound_buffer_concurrency_sz = 32,
                 .inbound_buffer_container_cap = 1 << 14,
@@ -364,79 +386,79 @@ int main()
                 .retry_device = retry_device
             });
 
-            // auto sock2 = dg::network_kernel_mailbox_impl1_flash_streamx::spawn(dg::network_kernel_mailbox_impl1_flash_streamx::Config{
-            //     .factory_addr = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value(),
-            //                      .port = 5001},
-            //     .packetizer_segment_bsz = size_t{1} << 8,
-            //     .packetizer_max_bsz = size_t{1} << 20,
-            //     .packetizer_has_integrity_transmit = true,
+            auto sock2 = dg::network_kernel_mailbox_impl1_flash_streamx::spawn(dg::network_kernel_mailbox_impl1_flash_streamx::Config{
+                .factory_addr = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value(),
+                                 .port = 5001},
+                .packetizer_segment_bsz = size_t{1} << 8,
+                .packetizer_max_bsz = size_t{1} << 20,
+                .packetizer_has_integrity_transmit = true,
 
-            //     .gate_controller_ato_component_sz = 16,
-            //     .gate_controller_ato_map_capacity = size_t{1} << 20,
-            //     .gate_controller_ato_dur = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
-            //     .gate_controller_ato_keyvalue_feed_cap = size_t{1} << 10,
+                .gate_controller_ato_component_sz = 16,
+                .gate_controller_ato_map_capacity = size_t{1} << 20,
+                .gate_controller_ato_dur = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
+                .gate_controller_ato_keyvalue_feed_cap = size_t{1} << 10,
 
-            //     .gate_controller_blklst_component_sz = 16,
-            //     .gate_controller_blklst_bloomfilter_cap = size_t{1} << 24,
-            //     .gate_controller_blklst_bloomfilter_rehash_sz = 4,
-            //     .gate_controller_blklst_bloomfilter_reliability_decay_factor = 8,
-            //     .gate_controller_blklst_keyvalue_feed_cap = size_t{1} << 10,
+                .gate_controller_blklst_component_sz = 16,
+                .gate_controller_blklst_bloomfilter_cap = size_t{1} << 24,
+                .gate_controller_blklst_bloomfilter_rehash_sz = 4,
+                .gate_controller_blklst_bloomfilter_reliability_decay_factor = 8,
+                .gate_controller_blklst_keyvalue_feed_cap = size_t{1} << 10,
 
-            //     .latency_controller_component_sz = 16,
-            //     .latency_controller_queue_cap = size_t{1} << 20,
-            //     .latency_controller_unique_id_cap = size_t{1} << 20,
-            //     .latency_controller_expiry_period = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
-            //     .latency_controller_keyvalue_feed_cap = size_t{1} << 10,
-            //     .latency_controller_has_exhaustion_control = true,
+                .latency_controller_component_sz = 16,
+                .latency_controller_queue_cap = size_t{1} << 20,
+                .latency_controller_unique_id_cap = size_t{1} << 20,
+                .latency_controller_expiry_period = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
+                .latency_controller_keyvalue_feed_cap = size_t{1} << 10,
+                .latency_controller_has_exhaustion_control = true,
 
-            //     .packet_assembler_component_sz = 16,
-            //     .packet_assembler_map_cap = size_t{1} << 20,
-            //     .packet_assembler_global_segment_cap = size_t{1} << 20,
-            //     .packet_assembler_max_segment_per_stream = size_t{1} << 11,
-            //     .packet_assembler_keyvalue_feed_cap = size_t{1} << 10,
-            //     .packet_assembler_has_exhaustion_control = true,
+                .packet_assembler_component_sz = 16,
+                .packet_assembler_map_cap = size_t{1} << 20,
+                .packet_assembler_global_segment_cap = size_t{1} << 20,
+                .packet_assembler_max_segment_per_stream = size_t{1} << 11,
+                .packet_assembler_keyvalue_feed_cap = size_t{1} << 10,
+                .packet_assembler_has_exhaustion_control = true,
 
-            //     .inbound_container_component_sz = 16,
-            //     .inbound_container_cap = size_t{1} << 20,
-            //     .inbound_container_has_exhaustion_control = true,
-            //     .inbound_container_has_react_pattern = true,
-            //     .inbound_container_react_sz = size_t{1} << 10,
-            //     .inbound_container_subscriber_cap = size_t{1} << 10,
-            //     .inbound_container_react_latency = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(100)),
-            //     .inbound_container_has_redistributor = true,
-            //     .inbound_container_redistributor_distribution_queue_sz = size_t{1} << 20,
-            //     .inbound_container_redistributor_waiting_queue_sz = size_t{1} << 20,
-            //     .inbound_container_redistributor_concurrent_sz = size_t{1} << 20,
-            //     .inbound_container_redistributor_unit_sz = size_t{1} << 10,
+                .inbound_container_component_sz = 16,
+                .inbound_container_cap = size_t{1} << 20,
+                .inbound_container_has_exhaustion_control = true,
+                .inbound_container_has_react_pattern = true,
+                .inbound_container_react_sz = size_t{1} << 10,
+                .inbound_container_subscriber_cap = size_t{1} << 10,
+                .inbound_container_react_latency = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(100)),
+                .inbound_container_has_redistributor = true,
+                .inbound_container_redistributor_distribution_queue_sz = size_t{1} << 20,
+                .inbound_container_redistributor_waiting_queue_sz = size_t{1} << 20,
+                .inbound_container_redistributor_concurrent_sz = size_t{1} << 20,
+                .inbound_container_redistributor_unit_sz = size_t{1} << 6,
 
-            //     .expiry_worker_count = 1,
-            //     .expiry_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
-            //     .expiry_worker_consume_sz = size_t{1} << 10,
-            //     .expiry_worker_busy_consume_sz = 1,
+                .expiry_worker_count = 1,
+                .expiry_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
+                .expiry_worker_consume_sz = size_t{1} << 10,
+                .expiry_worker_busy_consume_sz = 1,
 
-            //     .inbound_worker_count = 16,
-            //     .inbound_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
-            //     .inbound_worker_inbound_gate_vectorization_sz = size_t{1} << 10,
-            //     .inbound_worker_blacklist_gate_vectorization_sz = size_t{1} << 10,
-            //     .inbound_worker_latency_controller_vectorization_sz = size_t{1} << 10,
-            //     .inbound_worker_inbound_container_vectorization_sz = size_t{1} << 10,
-            //     .inbound_worker_consume_sz = size_t{1} << 16,
-            //     .inbound_worker_busy_consume_sz = 1,
-            //     .inbound_redistributor_worker_suck_cap = size_t{1} << 10,
-            //     .inbound_redistributor_worker_push_cap = size_t{1} << 10,
-            //     .inbound_redistributor_worker_busy_threshold = 1,
+                .inbound_worker_count = 1,
+                .inbound_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_inbound_gate_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_blacklist_gate_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_latency_controller_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_inbound_container_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_consume_sz = size_t{1} << 10,
+                .inbound_worker_busy_consume_sz = 1,
+                .inbound_redistributor_worker_suck_cap = size_t{1} << 10,
+                .inbound_redistributor_worker_push_cap = size_t{1} << 10,
+                .inbound_redistributor_worker_busy_threshold = 1,
 
-            //     .mailbox_transmission_vectorization_sz = size_t{1} << 10,
+                .mailbox_transmission_vectorization_sz = size_t{1} << 10,
 
-            //     .outbound_rule = dg::network_kernel_mailbox_impl1_flash_streamx::get_empty_outbound_rule(),
-            //     .infretry_device = retry_device,
-            //     .base = std::move(sock)
-            // });
+                .outbound_rule = dg::network_kernel_mailbox_impl1_flash_streamx::get_empty_outbound_rule(),
+                .infretry_device = retry_device,
+                .base = std::move(sock)
+            });
 
             std::cout << "made socket ..." << std::endl;
 
-            auto recv_worker = std::make_unique<RecvWorker>(sock.get());
-            auto send_worker = std::make_unique<SendWorker>(sock.get());
+            auto recv_worker = std::make_unique<RecvWorker>(sock2.get());
+            auto send_worker = std::make_unique<SendWorker>(sock2.get());
             // auto hello_world_worker = std::make_unique<HelloWorldWorker>(sock.get());
 
             dg::network_concurrency::daemon_register(dg::network_concurrency::COMPUTING_DAEMON, std::move(send_worker));

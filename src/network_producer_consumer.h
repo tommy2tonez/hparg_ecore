@@ -540,8 +540,65 @@ namespace dg::network_producer_consumer{
     template <class = void>
     static constexpr bool FALSE_VAL = false;
 
+    template <class T>
+    class KeyValueConventionalAllocator
+    {
+        private:
+
+            char ** preallocated_buf;
+
+        public:
+
+            constexpr KeyValueConventionalAllocator() noexcept: preallocated_buf(nullptr){}
+
+            constexpr KeyValueConventionalAllocator(char ** buf) noexcept: preallocated_buf(buf){}
+
+            template <class ...Args>
+            constexpr KeyValueConventionalAllocator(const KeyValueConventionalAllocator<Args...>& other): preallocated_buf(other.preallocated_buf){}
+
+            auto allocate(std::size_t n) -> T *
+            {
+                if (this->preallocated_buf == nullptr)
+                {
+                    return static_cast<T *>(new char[n]);
+                }
+
+                char *& char_reference  = *this->preallocated_buf;
+                char * ret_char         = char_reference;
+
+                std::advance(char_reference, n);
+
+                return static_cast<T *>(ret_char);
+            }
+
+            void deallocate(T * p, std::size_t n)
+            {
+                if (this->preallocated_buf == nullptr)
+                {
+                    delete[] static_cast<char *>(p);
+                }
+            }
+
+            template <class U, class ...Args>
+            void construct(U * p, Args&& ...args)
+            {
+                new (p) U(std::forward<Args>(args)...);
+            }
+
+            template <class U>
+            void destroy(U * p)
+            {
+                std::destroy_at(p);
+            }
+    };
+
     template <class KeyType, class MappedType>
-    using kv_feed_unordered_map_t = dg::network_datastructure::unordered_map_variants::unordered_node_map<KeyType, MappedType, std::size_t, std::integral_constant<bool, true>, dg::network_hash_factory::default_hasher<KeyType>, dg::network_hash_factory::default_equal_to<KeyType>>;
+    using kv_feed_unordered_map_t = dg::network_datastructure::unordered_map_variants::unordered_node_map<KeyType,
+                                                                                                          MappedType,
+                                                                                                          std::size_t,
+                                                                                                          std::integral_constant<bool, true>,
+                                                                                                          dg::network_hash_factory::default_hasher<KeyType>,
+                                                                                                          dg::network_hash_factory::default_equal_to<KeyType>>;
 
     template<class KeyType, class EventType>
     struct KVDeliveryHandle{

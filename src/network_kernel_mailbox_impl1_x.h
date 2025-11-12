@@ -17,444 +17,495 @@
 #include "network_chrono.h"
 #include "network_sock_traffic_status_controller.h"
 
-namespace dg::network_kernel_mailbox_impl1_meterlogx{
+// namespace dg::network_kernel_mailbox_impl1_meterlogx{
 
-    using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
-    using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
+//     using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
+//     using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
 
-    struct MeterInterface{
-        virtual ~MeterInterface() noexcept = default;
-        virtual void tick(size_t) noexcept = 0;
-        virtual auto get_count() noexcept -> size_t = 0;
-        virtual auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock> = 0;  
-        virtual void reset() noexcept = 0;
-    };
+//     struct MeterInterface{
+//         virtual ~MeterInterface() noexcept = default;
+//         virtual void tick(size_t) noexcept = 0;
+//         virtual auto get_count() noexcept -> size_t = 0;
+//         virtual auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock> = 0;  
+//         virtual void reset() noexcept = 0;
+//     };
 
-    struct MessageStreamerInterface{
-        virtual ~MessageStreamerInterface() noexcept = default;
-        virtual void stream(std::string_view) noexcept = 0;
-    };
+//     struct MessageStreamerInterface{
+//         virtual ~MessageStreamerInterface() noexcept = default;
+//         virtual void stream(std::string_view) noexcept = 0;
+//     };
 
-    class AtomicMeter: public virtual MeterInterface{
+//     class AtomicMeter: public virtual MeterInterface{
 
-        private:
+//         private:
 
-            //alright, people would argue that this is hardware_destructive_interference_sz, for best practices, I agree
+//             //alright, people would argue that this is hardware_destructive_interference_sz, for best practices, I agree
 
-            stdx::inplace_hdi_container<std::atomic<size_t>> count;
-            stdx::inplace_hdi_container<std::atomic<std::chrono::time_point<std::chrono::steady_clock>>> since;
+//             stdx::inplace_hdi_container<std::atomic<size_t>> count;
+//             stdx::inplace_hdi_container<std::atomic<std::chrono::time_point<std::chrono::steady_clock>>> since;
 
-        public:
+//         public:
 
-            AtomicMeter() noexcept: count(std::in_place_t{}, 0u),
-                                    since(std::in_place_t{}, std::chrono::steady_clock::now()){};
+//             AtomicMeter() noexcept: count(std::in_place_t{}, 0u),
+//                                     since(std::in_place_t{}, std::chrono::steady_clock::now()){};
 
-            void tick(size_t incoming_sz) noexcept{
+//             void tick(size_t incoming_sz) noexcept{
 
-                this->count.value.fetch_add(incoming_sz, std::memory_order_relaxed);
-            }
+//                 this->count.value.fetch_add(incoming_sz, std::memory_order_relaxed);
+//             }
 
-            auto get_count() noexcept -> size_t{
+//             auto get_count() noexcept -> size_t{
 
-                return this->count.value.load(std::memory_order_relaxed);
-            }
+//                 return this->count.value.load(std::memory_order_relaxed);
+//             }
 
-            auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
+//             auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
 
-                return this->since.value.load(std::memory_order_relaxed);
-            }
+//                 return this->since.value.load(std::memory_order_relaxed);
+//             }
 
-            void reset() noexcept{
+//             void reset() noexcept{
 
-                stdx::seq_cst_guard seqcst_tx;
+//                 stdx::seq_cst_guard seqcst_tx;
 
-                this->count.value.exchange(0u, std::memory_order_relaxed);
-                this->since.value.exchange(std::chrono::steady_clock::now(), std::memory_order_relaxed);
-            }
-    };
+//                 this->count.value.exchange(0u, std::memory_order_relaxed);
+//                 this->since.value.exchange(std::chrono::steady_clock::now(), std::memory_order_relaxed);
+//             }
+//     };
 
-    class RandomDistributedMeter: public virtual MeterInterface{
+//     class RandomDistributedMeter: public virtual MeterInterface{
 
-        private:
+//         private:
 
-            std::unique_ptr<std::unique_ptr<MeterInterface>[]> base_arr;
-            size_t pow2_base_arr_sz;
+//             std::unique_ptr<std::unique_ptr<MeterInterface>[]> base_arr;
+//             size_t pow2_base_arr_sz;
         
-        public:
+//         public:
 
-            RandomDistributedMeter(std::unique_ptr<std::unique_ptr<MeterInterface>[]> base_arr,
-                                   size_t pow2_base_arr_sz) noexcept: base_arr(std::move(base_arr)),
-                                                                      pow2_base_arr_sz(pow2_base_arr_sz){}
+//             RandomDistributedMeter(std::unique_ptr<std::unique_ptr<MeterInterface>[]> base_arr,
+//                                    size_t pow2_base_arr_sz) noexcept: base_arr(std::move(base_arr)),
+//                                                                       pow2_base_arr_sz(pow2_base_arr_sz){}
 
-            void tick(size_t incoming_sz) noexcept{
+//             void tick(size_t incoming_sz) noexcept{
 
-                size_t random_value = dg::network_randomizer::randomize_int<size_t>();
-                size_t random_idx   = random_value & (this->pow2_base_arr_sz - 1u);
+//                 size_t random_value = dg::network_randomizer::randomize_int<size_t>();
+//                 size_t random_idx   = random_value & (this->pow2_base_arr_sz - 1u);
 
-                this->base_arr[random_idx]->tick(incoming_sz);
-            }
+//                 this->base_arr[random_idx]->tick(incoming_sz);
+//             }
 
-            auto get_count() noexcept -> size_t{
+//             auto get_count() noexcept -> size_t{
 
-                size_t total_sz = 0u;
+//                 size_t total_sz = 0u;
 
-                for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i){
-                    total_sz += this->base_arr[i]->get_count();
-                }
+//                 for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i){
+//                     total_sz += this->base_arr[i]->get_count();
+//                 }
 
-                return total_sz;
-            }
+//                 return total_sz;
+//             }
 
-            auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
+//             auto get_count_since() noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
 
-                std::chrono::time_point<std::chrono::steady_clock> since = this->base_arr[0]->get_count_since();
+//                 std::chrono::time_point<std::chrono::steady_clock> since = this->base_arr[0]->get_count_since();
 
-                for (size_t i = 1u; i < this->pow2_base_arr_sz; ++i){
-                    since = std::min(since, this->base_arr[i]->get_count_since());
-                }
+//                 for (size_t i = 1u; i < this->pow2_base_arr_sz; ++i){
+//                     since = std::min(since, this->base_arr[i]->get_count_since());
+//                 }
 
-                return since;
-            }
+//                 return since;
+//             }
 
-            void reset() noexcept{
+//             void reset() noexcept{
 
-                for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i){
-                    this->base_arr[i]->reset();
-                }
-            }
-    };
+//                 for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i){
+//                     this->base_arr[i]->reset();
+//                 }
+//             }
+//     };
 
-    class MeterLogWorker: public virtual dg::network_concurrency::WorkerInterface{
+//     class MeterLogWorker: public virtual dg::network_concurrency::WorkerInterface{
 
-        private:
+//         private:
 
-            dg::string device_id;
-            std::shared_ptr<MeterInterface> send_meter;
-            std::shared_ptr<MeterInterface> recv_meter;
-            std::shared_ptr<MessageStreamerInterface> msg_streamer;
-            std::chrono::nanoseconds meter_dur;
+//             dg::string device_id;
+//             std::shared_ptr<MeterInterface> send_meter;
+//             std::shared_ptr<MeterInterface> recv_meter;
+//             std::shared_ptr<MessageStreamerInterface> msg_streamer;
+//             std::chrono::nanoseconds meter_dur;
 
-        public:
+//         public:
 
-            MeterLogWorker(dg::string device_id,
-                           std::shared_ptr<MeterInterface> send_meter, 
-                           std::shared_ptr<MeterInterface> recv_meter,
-                           std::shared_ptr<MessageStreamerInterface> msg_streamer,
-                           std::chrono::nanoseconds meter_dur) noexcept: device_id(std::move(device_id)),
-                                                                         send_meter(std::move(send_meter)),
-                                                                         recv_meter(std::move(recv_meter)),
-                                                                         msg_streamer(std::move(msg_streamer)),
-                                                                         meter_dur(meter_dur){}
+//             MeterLogWorker(dg::string device_id,
+//                            std::shared_ptr<MeterInterface> send_meter, 
+//                            std::shared_ptr<MeterInterface> recv_meter,
+//                            std::shared_ptr<MessageStreamerInterface> msg_streamer,
+//                            std::chrono::nanoseconds meter_dur) noexcept: device_id(std::move(device_id)),
+//                                                                          send_meter(std::move(send_meter)),
+//                                                                          recv_meter(std::move(recv_meter)),
+//                                                                          msg_streamer(std::move(msg_streamer)),
+//                                                                          meter_dur(meter_dur){}
 
-            bool run_one_epoch() noexcept{
+//             bool run_one_epoch() noexcept{
  
-                std::expected<dg::string, exception_t> send_msg = this->make_send_meter_msg(this->send_meter->get_count(), this->send_meter->get_count_since());
-                std::expected<dg::string, exception_t> recv_msg = this->make_recv_meter_msg(this->recv_meter->get_count(), this->recv_meter->get_count_since());
+//                 std::expected<dg::string, exception_t> send_msg = this->make_send_meter_msg(this->send_meter->get_count(), this->send_meter->get_count_since());
+//                 std::expected<dg::string, exception_t> recv_msg = this->make_recv_meter_msg(this->recv_meter->get_count(), this->recv_meter->get_count_since());
 
-                if (!send_msg.has_value()){
-                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(send_msg.error()));
-                    return false;
-                }
+//                 if (!send_msg.has_value()){
+//                     dg::network_log_stackdump::error_fast(dg::network_exception::verbose(send_msg.error()));
+//                     return false;
+//                 }
 
-                if (!recv_msg.has_value()){
-                    dg::network_log_stackdump::error_fast(dg::network_exception::verbose(recv_msg.error()));
-                    return false;
-                }
+//                 if (!recv_msg.has_value()){
+//                     dg::network_log_stackdump::error_fast(dg::network_exception::verbose(recv_msg.error()));
+//                     return false;
+//                 }
 
-                this->msg_streamer->stream(send_msg.value());
-                this->msg_streamer->stream(recv_msg.value());
+//                 this->msg_streamer->stream(send_msg.value());
+//                 this->msg_streamer->stream(recv_msg.value());
 
-                this->send_meter->reset();
-                this->recv_meter->reset();
-                std::this_thread::sleep_for(this->meter_dur);
+//                 this->send_meter->reset();
+//                 this->recv_meter->reset();
+//                 std::this_thread::sleep_for(this->meter_dur);
 
-                return true;
-            }
+//                 return true;
+//             }
         
-        private:
+//         private:
 
-            auto make_send_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> since) noexcept -> std::expected<dg::string, exception_t>{
+//             auto make_send_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> since) noexcept -> std::expected<dg::string, exception_t>{
 
-                auto now        = std::chrono::steady_clock::now();
-                auto dur_in_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - since);
-                size_t tick_sz  = dur_in_ms.count();
+//                 auto now        = std::chrono::steady_clock::now();
+//                 auto dur_in_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - since);
+//                 size_t tick_sz  = dur_in_ms.count();
 
-                if (tick_sz == 0u){
-                    return {};
-                    // return stdx::expected_format("[METER_REPORT] low meter precision resolution (device_id: {}, part: send_meter)", this->device_id);
-                } 
+//                 if (tick_sz == 0u){
+//                     return {};
+//                     // return stdx::expected_format("[METER_REPORT] low meter precision resolution (device_id: {}, part: send_meter)", this->device_id);
+//                 } 
 
-                size_t bsz_per_ms   = bsz / tick_sz;
-                size_t bsz_per_s    = bsz_per_ms * 1000u;
+//                 size_t bsz_per_ms   = bsz / tick_sz;
+//                 size_t bsz_per_s    = bsz_per_ms * 1000u;
 
-                // return stdx::expected_format("[METER_REPORT] {} bytes/s sent to {}", bsz_per_s, this->device_id);
-                return {};
-            }
+//                 // return stdx::expected_format("[METER_REPORT] {} bytes/s sent to {}", bsz_per_s, this->device_id);
+//                 return {};
+//             }
 
-            auto make_recv_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> since) noexcept -> std::expected<dg::string, exception_t>{
+//             auto make_recv_meter_msg(size_t bsz, std::chrono::time_point<std::chrono::steady_clock> since) noexcept -> std::expected<dg::string, exception_t>{
 
-                auto now        = std::chrono::steady_clock::now();
-                auto dur_in_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - since);
-                size_t tick_sz  = dur_in_ms.count();
+//                 auto now        = std::chrono::steady_clock::now();
+//                 auto dur_in_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - since);
+//                 size_t tick_sz  = dur_in_ms.count();
 
-                if (tick_sz == 0u){
-                    // return stdx::expected_format("[METER_REPORT] low meter precision resolution (device_id: {}, part: recv_meter)", this->device_id);
-                    return {};
-                }
+//                 if (tick_sz == 0u){
+//                     // return stdx::expected_format("[METER_REPORT] low meter precision resolution (device_id: {}, part: recv_meter)", this->device_id);
+//                     return {};
+//                 }
 
-                size_t bsz_per_ms   = bsz / tick_sz;
-                size_t bsz_per_s    = bsz_per_ms * 1000u;
+//                 size_t bsz_per_ms   = bsz / tick_sz;
+//                 size_t bsz_per_s    = bsz_per_ms * 1000u;
 
-                // return stdx::expected_format("[METER_REPORT] {} bytes/s recv from {}", bsz_per_s, this->device_id);
-                return {};
-            }
-    };
+//                 // return stdx::expected_format("[METER_REPORT] {} bytes/s recv from {}", bsz_per_s, this->device_id);
+//                 return {};
+//             }
+//     };
 
-    class MeteredMailBox: public virtual dg::network_kernel_mailbox_impl1::core::MailboxInterface{
+//     class MeteredMailBox: public virtual dg::network_kernel_mailbox_impl1::core::MailboxInterface{
 
-        private:
+//         private:
 
-            dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
-            std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
-            std::shared_ptr<MeterInterface> send_meter;
-            std::shared_ptr<MeterInterface> recv_meter;
+//             dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec;
+//             std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
+//             std::shared_ptr<MeterInterface> send_meter;
+//             std::shared_ptr<MeterInterface> recv_meter;
         
-        public:
+//         public:
 
-            MeteredMailBox(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec, 
-                           std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
-                           std::shared_ptr<MeterInterface> send_meter,
-                           std::shared_ptr<MeterInterface> recv_meter): daemon_vec(std::move(daemon_vec)),
-                                                                        base(std::move(base)),
-                                                                        send_meter(std::move(send_meter)),
-                                                                        recv_meter(std::move(recv_meter)){}
+//             MeteredMailBox(dg::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec, 
+//                            std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+//                            std::shared_ptr<MeterInterface> send_meter,
+//                            std::shared_ptr<MeterInterface> recv_meter): daemon_vec(std::move(daemon_vec)),
+//                                                                         base(std::move(base)),
+//                                                                         send_meter(std::move(send_meter)),
+//                                                                         recv_meter(std::move(recv_meter)){}
 
-            void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
+//             void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
                 
-                MailBoxArgument * base_data_arr = data_arr.base();
-                size_t total_sz = 0u;
+//                 MailBoxArgument * base_data_arr = data_arr.base();
+//                 size_t total_sz = 0u;
 
-                for (size_t i = 0u; i < sz; ++i){
-                    total_sz += base_data_arr[i].content.size();
-                }
+//                 for (size_t i = 0u; i < sz; ++i){
+//                     total_sz += base_data_arr[i].content.size();
+//                 }
 
-                this->base->send(std::make_move_iterator(base_data_arr), sz, exception_arr);
+//                 this->base->send(std::make_move_iterator(base_data_arr), sz, exception_arr);
 
-                for (size_t i = 0u; i < sz; ++i){
-                    if (dg::network_exception::is_failed(exception_arr[i])){
-                        total_sz -= base_data_arr[i].content.size();
-                    }
-                }
+//                 for (size_t i = 0u; i < sz; ++i){
+//                     if (dg::network_exception::is_failed(exception_arr[i])){
+//                         total_sz -= base_data_arr[i].content.size();
+//                     }
+//                 }
 
-                this->send_meter->tick(total_sz);
-            }
+//                 this->send_meter->tick(total_sz);
+//             }
 
-            void recv(dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept{
+//             void recv(dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept{
 
-                this->base->recv(output_arr, output_arr_sz, output_arr_cap);
-                size_t total_sz = 0u;
+//                 this->base->recv(output_arr, output_arr_sz, output_arr_cap);
+//                 size_t total_sz = 0u;
 
-                for (size_t i = 0u; i < output_arr_sz; ++i){
-                    total_sz += output_arr[i].size();
-                }
+//                 for (size_t i = 0u; i < output_arr_sz; ++i){
+//                     total_sz += output_arr[i].size();
+//                 }
 
-                this->recv_meter->tick(total_sz);
-            }
+//                 this->recv_meter->tick(total_sz);
+//             }
 
-            auto max_consume_size() noexcept -> size_t{
+//             auto max_consume_size() noexcept -> size_t{
 
-                return this->base->max_consume_size();
-            }
-    };
+//                 return this->base->max_consume_size();
+//             }
+//     };
 
-    struct ComponentFactory{
+//     struct ComponentFactory{
 
-        template <class T, class ...Args>
-        static auto to_dg_vector(std::vector<T, Args...> vec) -> dg::vector<T>{
+//         template <class T, class ...Args>
+//         static auto to_dg_vector(std::vector<T, Args...> vec) -> dg::vector<T>{
 
-            dg::vector<T> rs{};
+//             dg::vector<T> rs{};
 
-            for (size_t i = 0u; i < vec.size(); ++i){
-                rs.emplace_back(std::move(vec[i]));
-            }
+//             for (size_t i = 0u; i < vec.size(); ++i){
+//                 rs.emplace_back(std::move(vec[i]));
+//             }
 
-            return rs;
-        }
+//             return rs;
+//         }
 
-        static auto to_dg_string(std::string_view inp) -> dg::string{
+//         static auto to_dg_string(std::string_view inp) -> dg::string{
 
-            dg::string rs{};
-            std::copy(inp.begin(), inp.end(), std::back_inserter(rs));
+//             dg::string rs{};
+//             std::copy(inp.begin(), inp.end(), std::back_inserter(rs));
 
-            return rs;
-        }
+//             return rs;
+//         }
 
-        static auto get_meter() -> std::unique_ptr<MeterInterface>{
+//         static auto get_meter() -> std::unique_ptr<MeterInterface>{
 
-            return std::make_unique<AtomicMeter>();
-        }
+//             return std::make_unique<AtomicMeter>();
+//         }
 
-        static auto get_distributed_meter(size_t tentative_concurrent_meter_sz) -> std::unique_ptr<MeterInterface>{
+//         static auto get_distributed_meter(size_t tentative_concurrent_meter_sz) -> std::unique_ptr<MeterInterface>{
 
-            const size_t MIN_CONCURRENT_METER_SZ    = size_t{1};
-            const size_t MAX_CONCURRENT_METER_SZ    = size_t{1} << 20; 
+//             const size_t MIN_CONCURRENT_METER_SZ    = size_t{1};
+//             const size_t MAX_CONCURRENT_METER_SZ    = size_t{1} << 20; 
 
-            if (std::clamp(tentative_concurrent_meter_sz, MIN_CONCURRENT_METER_SZ, MAX_CONCURRENT_METER_SZ) != tentative_concurrent_meter_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+//             if (std::clamp(tentative_concurrent_meter_sz, MIN_CONCURRENT_METER_SZ, MAX_CONCURRENT_METER_SZ) != tentative_concurrent_meter_sz){
+//                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+//             }
 
-            size_t meter_arr_sz = stdx::ceil2(tentative_concurrent_meter_sz);
-            auto meter_arr      = std::make_unique<std::unique_ptr<MeterInterface>[]>(meter_arr_sz);
+//             size_t meter_arr_sz = stdx::ceil2(tentative_concurrent_meter_sz);
+//             auto meter_arr      = std::make_unique<std::unique_ptr<MeterInterface>[]>(meter_arr_sz);
 
-            for (size_t i = 0u; i < meter_arr_sz; ++i){
-                meter_arr[i] = ComponentFactory::get_meter();
-            }
+//             for (size_t i = 0u; i < meter_arr_sz; ++i){
+//                 meter_arr[i] = ComponentFactory::get_meter();
+//             }
 
-            return std::make_unique<RandomDistributedMeter>(std::move(meter_arr), meter_arr_sz);
-        }
+//             return std::make_unique<RandomDistributedMeter>(std::move(meter_arr), meter_arr_sz);
+//         }
 
-        static auto get_meter_log_worker(std::string device_id,
-                                         std::shared_ptr<MeterInterface> send_meter,
-                                         std::shared_ptr<MeterInterface> recv_meter,
-                                         std::shared_ptr<MessageStreamerInterface> msg_stream,
-                                         std::chrono::nanoseconds meter_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
+//         static auto get_meter_log_worker(std::string device_id,
+//                                          std::shared_ptr<MeterInterface> send_meter,
+//                                          std::shared_ptr<MeterInterface> recv_meter,
+//                                          std::shared_ptr<MessageStreamerInterface> msg_stream,
+//                                          std::chrono::nanoseconds meter_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
             
-            const size_t MIN_DEVICE_ID_SZ                   = size_t{0u};
-            const size_t MAX_DEVICE_ID_SZ                   = size_t{1} << 10;
-            const std::chrono::nanoseconds MIN_METER_DUR    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(1));
-            const std::chrono::nanoseconds MAX_METER_DUR    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
+//             const size_t MIN_DEVICE_ID_SZ                   = size_t{0u};
+//             const size_t MAX_DEVICE_ID_SZ                   = size_t{1} << 10;
+//             const std::chrono::nanoseconds MIN_METER_DUR    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(1));
+//             const std::chrono::nanoseconds MAX_METER_DUR    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
 
-            if (std::clamp(static_cast<size_t>(device_id.size()), MIN_DEVICE_ID_SZ, MAX_DEVICE_ID_SZ) != device_id.size()){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (std::clamp(static_cast<size_t>(device_id.size()), MIN_DEVICE_ID_SZ, MAX_DEVICE_ID_SZ) != device_id.size()){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            if (send_meter == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (send_meter == nullptr){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            if (recv_meter == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (recv_meter == nullptr){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            if (msg_stream == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (msg_stream == nullptr){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            if (std::clamp(meter_dur, MIN_METER_DUR, MAX_METER_DUR) != meter_dur){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (std::clamp(meter_dur, MIN_METER_DUR, MAX_METER_DUR) != meter_dur){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            return std::make_unique<MeterLogWorker>(ComponentFactory::to_dg_string(device_id), 
-                                                    std::move(send_meter), 
-                                                    std::move(recv_meter),
-                                                    std::move(msg_stream),
-                                                    meter_dur);
-        }
+//             return std::make_unique<MeterLogWorker>(ComponentFactory::to_dg_string(device_id), 
+//                                                     std::move(send_meter), 
+//                                                     std::move(recv_meter),
+//                                                     std::move(msg_stream),
+//                                                     meter_dur);
+//         }
 
-        static auto get_metered_mailbox(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
-                                        std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
-                                        std::shared_ptr<MeterInterface> send_meter,
-                                        std::shared_ptr<MeterInterface> recv_meter) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+//         static auto get_metered_mailbox(std::vector<dg::network_concurrency::daemon_raii_handle_t> daemon_vec,
+//                                         std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base,
+//                                         std::shared_ptr<MeterInterface> send_meter,
+//                                         std::shared_ptr<MeterInterface> recv_meter) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
 
-            if (daemon_vec.empty()){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (daemon_vec.empty()){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            if (base == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (base == nullptr){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            if (send_meter == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (send_meter == nullptr){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            if (recv_meter == nullptr){
-                dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
-            }
+//             if (recv_meter == nullptr){
+//                 dg::network_exception::throw_exception(dg::network_exception::INTERNAL_CORRUPTION);
+//             }
 
-            return std::make_unique<MeteredMailBox>(ComponentFactory::to_dg_vector(std::move(daemon_vec)),
-                                                    std::move(base),
-                                                    std::move(send_meter),
-                                                    std::move(recv_meter));
-        }
-    };
+//             return std::make_unique<MeteredMailBox>(ComponentFactory::to_dg_vector(std::move(daemon_vec)),
+//                                                     std::move(base),
+//                                                     std::move(send_meter),
+//                                                     std::move(recv_meter));
+//         }
+//     };
 
-    struct Config{
-        std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
-        uint32_t concurrent_recv_meter_sz;
-        uint32_t concurrent_send_meter_sz;
-        std::string device_id;
-        std::shared_ptr<MessageStreamerInterface> msg_streamer;
-        std::chrono::nanoseconds meter_dur;
-    };
+//     struct Config{
+//         std::shared_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface> base;
+//         uint32_t concurrent_recv_meter_sz;
+//         uint32_t concurrent_send_meter_sz;
+//         std::string device_id;
+//         std::shared_ptr<MessageStreamerInterface> msg_streamer;
+//         std::chrono::nanoseconds meter_dur;
+//     };
 
-    struct ConfigMaker{
+//     struct ConfigMaker{
         
-        private:
+//         private:
 
-            static auto make_recv_meter(Config config) -> std::unique_ptr<MeterInterface>{
+//             static auto make_recv_meter(Config config) -> std::unique_ptr<MeterInterface>{
                 
-                if (config.concurrent_recv_meter_sz == 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
+//                 if (config.concurrent_recv_meter_sz == 0u){
+//                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+//                 }
 
-                if (config.concurrent_recv_meter_sz == 1u){
-                    return ComponentFactory::get_meter();
-                }
+//                 if (config.concurrent_recv_meter_sz == 1u){
+//                     return ComponentFactory::get_meter();
+//                 }
 
-                return ComponentFactory::get_distributed_meter(config.concurrent_recv_meter_sz);
-            }
+//                 return ComponentFactory::get_distributed_meter(config.concurrent_recv_meter_sz);
+//             }
 
-            static auto make_send_meter(Config config) -> std::unique_ptr<MeterInterface>{
+//             static auto make_send_meter(Config config) -> std::unique_ptr<MeterInterface>{
 
-                if (config.concurrent_send_meter_sz == 0u){
-                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-                }
+//                 if (config.concurrent_send_meter_sz == 0u){
+//                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+//                 }
 
-                if (config.concurrent_send_meter_sz == 1u){
-                    return ComponentFactory::get_meter();
-                }
+//                 if (config.concurrent_send_meter_sz == 1u){
+//                     return ComponentFactory::get_meter();
+//                 }
 
-                return ComponentFactory::get_distributed_meter(config.concurrent_send_meter_sz);
-            }
+//                 return ComponentFactory::get_distributed_meter(config.concurrent_send_meter_sz);
+//             }
 
-            static auto make_workers(Config config, 
-                                     std::shared_ptr<MeterInterface> send_meter, 
-                                     std::shared_ptr<MeterInterface> recv_meter) -> std::vector<dg::network_concurrency::daemon_raii_handle_t>{
+//             static auto make_workers(Config config, 
+//                                      std::shared_ptr<MeterInterface> send_meter, 
+//                                      std::shared_ptr<MeterInterface> recv_meter) -> std::vector<dg::network_concurrency::daemon_raii_handle_t>{
 
-                std::unique_ptr<dg::network_concurrency::WorkerInterface> worker = ComponentFactory::get_meter_log_worker(config.device_id, send_meter, recv_meter, config.msg_streamer, config.meter_dur);
+//                 std::unique_ptr<dg::network_concurrency::WorkerInterface> worker = ComponentFactory::get_meter_log_worker(config.device_id, send_meter, recv_meter, config.msg_streamer, config.meter_dur);
 
-                auto daemon_vec     = std::vector<dg::network_concurrency::daemon_raii_handle_t>();
-                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(worker)));
-                daemon_vec.emplace_back(std::move(daemon_handle));
+//                 auto daemon_vec     = std::vector<dg::network_concurrency::daemon_raii_handle_t>();
+//                 auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::HEARTBEAT_DAEMON, std::move(worker)));
+//                 daemon_vec.emplace_back(std::move(daemon_handle));
 
-                return daemon_vec;
-            }
+//                 return daemon_vec;
+//             }
 
-        public:
+//         public:
 
-            static auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+//             static auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
 
-                std::shared_ptr<MeterInterface> send_meter  = ConfigMaker::make_send_meter(config);
-                std::shared_ptr<MeterInterface> recv_meter  = ConfigMaker::make_recv_meter(config);
+//                 std::shared_ptr<MeterInterface> send_meter  = ConfigMaker::make_send_meter(config);
+//                 std::shared_ptr<MeterInterface> recv_meter  = ConfigMaker::make_recv_meter(config);
 
-                return ComponentFactory::get_metered_mailbox(ConfigMaker::make_workers(config, send_meter, recv_meter),
-                                                             std::move(config.base),
-                                                             send_meter,
-                                                             recv_meter);
-            }
-    };
+//                 return ComponentFactory::get_metered_mailbox(ConfigMaker::make_workers(config, send_meter, recv_meter),
+//                                                              std::move(config.base),
+//                                                              send_meter,
+//                                                              recv_meter);
+//             }
+//     };
 
-    extern auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
+//     extern auto make(Config config) -> std::unique_ptr<dg::network_kernel_mailbox_impl1::core::MailboxInterface>{
 
-        return ConfigMaker::make(std::move(config));
-    }
-}
+//         return ConfigMaker::make(std::move(config));
+//     }
+// }
 
 namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
-    using Address           = dg::network_kernel_mailbox_impl1::model::Address; 
-    using MailBoxArgument   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
+    struct Signature{};
+    struct Signature2{};
+    struct Signature3{};
+
+    using MemoryConfig                      = dg::network_kernel_allocator_singleton::Config;
+    using HugeAllocatorInstance             = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature>;
+    using HugeStaticWrappedAllocator        = dg::network_kernel_allocator_singleton::StaticWrappedAllocator<HugeAllocatorInstance>; 
+
+    template <class T>
+    using HugeStdWrappedAllocator           = dg::network_kernel_allocator_singleton::StdWrappedAllocator<T, HugeAllocatorInstance>;
+
+    using SegmentAllocatorInstance          = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature2>;
+    using SegmentStaticWrappedAllocator     = dg::network_kernel_allocator_singleton::StaticWrappedAllocator<SegmentAllocatorInstance>;
+
+    template <class T>
+    using SegmentStdWrappedAllocator        = dg::network_kernel_allocator_singleton::StdWrappedAllocator<T, SegmentAllocatorInstance>;
+
+    using UrgentAllocatorInstance           = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature3>;
+    using UrgentStaticWrappedAllocator      = dg::network_kernel_allocator_singleton::StaticWrappedAllocator<UrgentAllocatorInstance>;
+    
+    template <class T>
+    using UrgentStdWrappedAllocator         = dg::network_kernel_allocator_singleton::StdWrappedAllocator<T, UrgentAllocatorInstance>;
+
+    void init_memory(MemoryConfig big_packet_config,
+                     MemoryConfig segment_packet_config,
+                     MemoryConfig urgent_packet_config)
+    {
+        HugeAllocatorInstance::init(big_packet_config);
+        SegmentAllocatorInstance::init(segment_packet_config);
+        UrgentAllocatorInstance::init(urgent_packet_config);
+    }
+
+    void deinit_memory() noexcept
+    {
+        HugeAllocatorInstance::deinit();
+        SegmentAllocatorInstance::deinit();
+        UrgentAllocatorInstance::deinit();
+    }
+
+    using internal_huge_kernel_buffer       = dg::network_kernel_buffer::kernel_string<HugeStaticWrappedAllocator>;
+    using internal_segment_kernel_buffer    = dg::network_kernel_buffer::kernel_string<SegmentStaticWrappedAllocator>; 
+
+    template <class T>
+    using internal_vector                   = std::vector<T, HugeStdWrappedAllocator<T>>;
+
+    template <class T, class ...Args>
+    auto urgent_make_shared(Args&& ...args){
+
+        return std::allocate_shared<T>(UrgentStdWrappedAllocator<T>{}, std::forward<Args>(args)...);
+    } 
+
+    using Address                           = dg::network_kernel_mailbox_impl1::model::Address; 
+    using MailBoxArgument                   = dg::network_kernel_mailbox_impl1::model::MailBoxArgument;
 
     static inline constexpr size_t DEFAULT_KEYVALUE_FEED_SIZE               = size_t{1} << 10; 
     static inline constexpr size_t DEFAULT_KEY_FEED_SIZE                    = size_t{1} << 8;
@@ -467,19 +518,19 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         std::pair<uint64_t, uint64_t> local_id; //avoid __uint128_t
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) const noexcept{
+        constexpr void dg_reflect(const Reflector& reflector) const{
             reflector(addr, local_id);
         }
 
         template <class Reflector>
-        constexpr void dg_reflect(const Reflector& reflector) noexcept{
+        constexpr void dg_reflect(const Reflector& reflector){
             reflector(addr, local_id);
         }
     };
 
     //OK
     struct PacketSegment{
-        dg::string buf;
+        internal_segment_kernel_buffer buf;
         GlobalIdentifier id;
         uint64_t segment_idx;
         uint64_t segment_sz;
@@ -490,7 +541,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     //OK
     struct AssembledPacket{
-        dg::vector<std::optional<dg::string>> data;
+        internal_vector<std::optional<internal_segment_kernel_buffer>> data;
         size_t collected_segment_sz;
         size_t total_segment_sz;
         uint64_t mm_integrity_value;
@@ -498,7 +549,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     };
 
     //OK
-    static auto serialize_packet_segment(PacketSegment&& segment) noexcept -> std::expected<dg::string, exception_t>{
+    static auto serialize_packet_segment(PacketSegment&& segment) noexcept -> std::expected<internal_segment_kernel_buffer, exception_t>{
 
         using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t, uint64_t, bool>; //
 
@@ -510,14 +561,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         try{
             segment.buf.resize(new_sz);
             dg::network_compact_trivial_serializer::serialize_into(std::next(segment.buf.data(), old_sz), header, PACKET_SEGMENT_SERIALIZATION_SECRET);
-            return std::expected<dg::string, exception_t>(std::move(segment.buf));
+            return std::expected<internal_segment_kernel_buffer, exception_t>(std::move(segment.buf));
         } catch (...){
             return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
         }
     }
 
     //OK
-    static auto deserialize_packet_segment(dg::string&& buf) noexcept -> std::expected<PacketSegment, exception_t>{
+    static auto deserialize_packet_segment(internal_segment_kernel_buffer&& buf) noexcept -> std::expected<PacketSegment, exception_t>{
 
         using header_t      = std::tuple<GlobalIdentifier, uint64_t, uint64_t, uint64_t, bool>; //
 
@@ -548,7 +599,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     }
 
     //OK
-    static auto internal_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
+    static auto internal_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<internal_huge_kernel_buffer, exception_t>{
 
         if (pkt.total_segment_sz != pkt.collected_segment_sz){
             return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET);
@@ -559,7 +610,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         if (pkt.total_segment_sz == 0u){
-            return dg::string();
+            return internal_huge_kernel_buffer();
         }
 
         if (pkt.total_segment_sz == 1u){
@@ -567,7 +618,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 return std::unexpected(dg::network_exception::SOCKET_STREAM_CORRUPTED_PACKET);
             }
 
-            return std::expected<dg::string, exception_t>(std::move(pkt.data.front().value()));
+            return std::expected<internal_huge_kernel_buffer, exception_t>(std::move(pkt.data.front().value()));
         }
 
         size_t total_bsz = 0u;
@@ -580,7 +631,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             total_bsz += pkt.data[i]->size();
         }
 
-        std::expected<dg::string, exception_t> rs = dg::network_exception::cstyle_initialize<dg::string>(total_bsz, 0);
+        std::expected<internal_huge_kernel_buffer, exception_t> rs = dg::network_exception::cstyle_initialize<internal_huge_kernel_buffer>(total_bsz);
 
         if (!rs.has_value()){
             return std::unexpected(rs.error());
@@ -596,11 +647,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     }
 
     //OK
-    static auto internal_integrity_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<dg::string, exception_t>{
+    static auto internal_integrity_assembled_packet_to_buffer(AssembledPacket&& pkt) noexcept -> std::expected<internal_huge_kernel_buffer, exception_t>{
 
-        uint64_t mm_integrity_value                 = pkt.mm_integrity_value;
-        bool has_mm_integrity_value                 = pkt.has_mm_integrity_value;
-        std::expected<dg::string, exception_t> rs   = internal_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(pkt));
+        uint64_t mm_integrity_value                                 = pkt.mm_integrity_value;
+        bool has_mm_integrity_value                                 = pkt.has_mm_integrity_value;
+        std::expected<internal_huge_kernel_buffer, exception_t> rs  = internal_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(pkt));
 
         if (!rs.has_value()){
             return std::unexpected(rs.error());
@@ -640,7 +691,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //OK
     struct PacketizerInterface{
         virtual ~PacketizerInterface() noexcept = default;
-        virtual auto packetize(dg::string&&) noexcept -> std::expected<dg::vector<PacketSegment>, exception_t> = 0;
+        virtual auto packetize(internal_segment_kernel_buffer&&) noexcept -> std::expected<internal_vector<PacketSegment>, exception_t> = 0;
         virtual auto segment_byte_size() const noexcept -> size_t = 0;
         virtual auto max_packet_size() const noexcept -> size_t = 0;
         virtual auto max_segment_count() const noexcept -> size_t = 0;
@@ -709,8 +760,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //OK
     struct InBoundContainerInterface{
         virtual ~InBoundContainerInterface() noexcept = default;
-        virtual void push(std::move_iterator<dg::string *> arr, size_t sz, exception_t * exception_arr) noexcept = 0;
-        virtual void pop(dg::string * output_arr, size_t& sz, size_t cap) noexcept = 0;
+        virtual void push(std::move_iterator<internal_huge_kernel_buffer *> arr, size_t sz, exception_t * exception_arr) noexcept = 0;
+        virtual void pop(internal_huge_kernel_buffer * output_arr, size_t& sz, size_t cap) noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
@@ -1127,7 +1178,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     return;
                 }
 
-                std::shared_ptr<dg_binary_semaphore> waiting_smp = dg::network_allocation::make_shared<dg_binary_semaphore>(0);
+                std::shared_ptr<dg_binary_semaphore> waiting_smp = dg::network_kernel_mailbox_impl1_flash_streamx::urgent_make_shared<dg_binary_semaphore>(0);
 
                 [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(this->mtx_mtx_queue);
@@ -1585,7 +1636,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                         pow2_max_stream_bsz(pow2_max_stream_bsz),
                                                         has_mm_integrity(has_mm_integrity){}
 
-            auto packetize(dg::string&& buf) noexcept -> std::expected<dg::vector<PacketSegment>, exception_t>{
+            auto packetize(internal_segment_kernel_buffer&& buf) noexcept -> std::expected<internal_vector<PacketSegment>, exception_t>{
 
                 if (buf.size() > this->pow2_max_stream_bsz){
                     return std::unexpected(dg::network_exception::SOCKET_STREAM_BAD_BUFFER_LENGTH);
@@ -1596,7 +1647,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 size_t segment_odd_sz   = size_t{(static_cast<size_t>(buf.size()) & (segment_bsz - 1u)) != 0u};
                 size_t segment_sz       = segment_even_sz + segment_odd_sz;
 
-                std::expected<dg::vector<PacketSegment>, exception_t> rs = dg::network_exception::cstyle_initialize<dg::vector<PacketSegment>>(std::max(size_t{1}, segment_sz));
+                std::expected<internal_vector<PacketSegment>, exception_t> rs = dg::network_exception::cstyle_initialize<internal_vector<PacketSegment>>(std::max(size_t{1}, segment_sz));
 
                 if (!rs.has_value()){
                     return std::unexpected(rs.error());
@@ -1641,7 +1692,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     segment.segment_sz                              = segment_sz;
                     segment.mm_integrity_value                      = integrity_value;
                     segment.has_mm_integrity_value                  = this->has_mm_integrity;
-                    std::expected<dg::string, exception_t> app_buf  = dg::network_exception::cstyle_initialize<dg::string>((last - first), 0); 
+                    std::expected<internal_segment_kernel_buffer, exception_t> app_buf  = dg::network_exception::cstyle_initialize<internal_segment_kernel_buffer>((last - first)); 
 
                     if (!app_buf.has_value()){
                         return std::unexpected(app_buf.error()); //leaking ids
@@ -1673,8 +1724,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         
         private:
 
-            template <class ...Args>
-            auto integrity_encode(const std::basic_string<Args...>& buf, bool has_integrity_encode) noexcept -> uint64_t{
+            auto integrity_encode(std::string_view buf, bool has_integrity_encode) noexcept -> uint64_t{
 
                 if (!has_integrity_encode){
                     return 0u;
@@ -2141,7 +2191,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                              uint64_t mm_integrity_value,
                                              bool has_mm_integrity_value) noexcept -> std::expected<AssembledPacket, exception_t>{
 
-                auto vec            = dg::network_exception::cstyle_initialize<dg::vector<std::optional<dg::string>>>(segment_sz);
+                auto vec            = dg::network_exception::cstyle_initialize<internal_vector<std::optional<internal_segment_kernel_buffer>>>(segment_sz);
 
                 if (!vec.has_value()){
                     return std::unexpected(vec.error());
@@ -2363,14 +2413,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            dg::pow2_cyclic_queue<dg::string> buffer_vec;
+            dg::pow2_cyclic_queue<internal_huge_kernel_buffer> buffer_vec;
             size_t buffer_vec_capacity;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
-            BufferFIFOContainer(dg::pow2_cyclic_queue<dg::string> buffer_vec,
+            BufferFIFOContainer(dg::pow2_cyclic_queue<internal_huge_kernel_buffer> buffer_vec,
                                 size_t buffer_vec_capacity,
                                 std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                 stdx::hdi_container<size_t> consume_sz_per_load) noexcept: buffer_vec(std::move(buffer_vec)),
@@ -2378,7 +2428,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                                            mtx(std::move(mtx)),
                                                                                            consume_sz_per_load(std::move(consume_sz_per_load)){}
 
-            void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void push(std::move_iterator<internal_huge_kernel_buffer *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
@@ -2401,7 +2451,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
             }
 
-            void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
+            void pop(internal_huge_kernel_buffer * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
@@ -2436,11 +2486,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                                                                                 executor(std::move(executor)),
                                                                                                                                 exhaustion_controller(std::move(exhaustion_controller)){}
 
-            void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void push(std::move_iterator<internal_huge_kernel_buffer *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                dg::string * buffer_arr_base        = buffer_arr.base();
-                dg::string * buffer_arr_first       = buffer_arr_base;
-                dg::string * buffer_arr_last        = std::next(buffer_arr_first, sz);
+                internal_huge_kernel_buffer * buffer_arr_base        = buffer_arr.base();
+                internal_huge_kernel_buffer * buffer_arr_first       = buffer_arr_base;
+                internal_huge_kernel_buffer * buffer_arr_last        = std::next(buffer_arr_first, sz);
                 exception_t * exception_arr_first   = exception_arr;
                 exception_t * exception_arr_last    = std::next(exception_arr_first, sz);
                 size_t sliding_window_sz            = sz;
@@ -2471,7 +2521,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 this->executor->exec(virtual_task);
             }
 
-            void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
+            void pop(internal_huge_kernel_buffer * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 this->base->pop(output_buffer_arr, sz, output_buffer_arr_cap);
             }
@@ -2499,7 +2549,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                                  pow2_buffer_container_vec_sz(pow2_buffer_container_vec_sz),
                                                                                  consume_sz_per_load(consume_sz_per_load){}
 
-            void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void push(std::move_iterator<internal_huge_kernel_buffer *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -2514,7 +2564,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 this->buffer_container_vec[random_idx]->push(buffer_arr, sz, exception_arr);
             }
 
-            void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
+            void pop(internal_huge_kernel_buffer * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 sz = 0u; 
                 size_t seed = dg::network_randomizer::randomize_int<size_t>() >> 1; 
@@ -2527,7 +2577,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
 
                     size_t idx = (seed + i) & (this->pow2_buffer_container_vec_sz - 1u);
-                    dg::string * tmp_output_buffer_arr = std::next(output_buffer_arr, sz);
+                    internal_huge_kernel_buffer * tmp_output_buffer_arr = std::next(output_buffer_arr, sz);
                     size_t tmp_sz{};
                     this->buffer_container_vec[i]->pop(tmp_output_buffer_arr, tmp_sz, remaining_cap);
                     sz += tmp_sz;
@@ -2564,14 +2614,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                      ease_threshold(ease_threshold),
                                                                      busy_threshold(busy_threshold){}
 
-            void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void push(std::move_iterator<internal_huge_kernel_buffer *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 this->base->push(buffer_arr, sz, exception_arr);
                 size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
                 this->reactor->increment(thru_sz);
             }
 
-            void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
+            void pop(internal_huge_kernel_buffer * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 std::atomic_signal_fence(std::memory_order_seq_cst);
                 this->reactor->subscribe(this->max_wait_time);
@@ -2603,17 +2653,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            dg::pow2_cyclic_queue<dg::vector<dg::string>> distribution_queue;
-            dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, dg_binary_semaphore *>> waiting_queue;
-            dg::pow2_cyclic_queue<dg::vector<dg::string>> leftover_queue;
+            dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>> distribution_queue;
+            dg::pow2_cyclic_queue<std::pair<std::optional<internal_vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>> waiting_queue;
+            dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>> leftover_queue;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
         
         public:
 
-            FairInBoundBufferContainer(dg::pow2_cyclic_queue<dg::vector<dg::string>> distribution_queue,
-                                       dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, dg_binary_semaphore *>> waiting_queue,
-                                       dg::pow2_cyclic_queue<dg::vector<dg::string>> leftover_queue,
+            FairInBoundBufferContainer(dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>> distribution_queue,
+                                       dg::pow2_cyclic_queue<std::pair<std::optional<internal_vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>> waiting_queue,
+                                       dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>> leftover_queue,
                                        std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                        size_t consume_sz_per_load): distribution_queue(std::move(distribution_queue)),
                                                                     waiting_queue(std::move(waiting_queue)),
@@ -2621,7 +2671,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                     mtx(std::move(mtx)),
                                                                     consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
 
-            void push(std::move_iterator<dg::string *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void push(std::move_iterator<internal_huge_kernel_buffer *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 if constexpr(DEBUG_MODE_FLAG){
                     if (sz > this->max_consume_size()){
@@ -2634,9 +2684,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     return;
                 }
 
-                dg::string * base_buffer_arr = buffer_arr.base();
-                dg::vector<dg::string> buffer_vec = dg::network_exception_handler::nothrow_log(dg::network_exception::cstyle_initialize<dg::vector<dg::string>>(std::make_move_iterator(base_buffer_arr),
-                                                                                                                                                                std::next(std::make_move_iterator(base_buffer_arr), sz)));                
+                internal_huge_kernel_buffer * base_buffer_arr = buffer_arr.base();
+                std::expected<internal_vector<internal_huge_kernel_buffer>, exception_t> buffer_vec = dg::network_exception::cstyle_initialize<internal_vector<internal_huge_kernel_buffer>>(std::make_move_iterator(base_buffer_arr),
+                                                                                                                                                                                             std::next(std::make_move_iterator(base_buffer_arr), sz));
+
+                if (!buffer_vec.has_value()){
+                    std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::RESOURCE_EXHAUSTION);
+                    return;
+                }
+
                 dg_binary_semaphore * releasing_smp = nullptr;
 
                 exception_t err = [&, this]() noexcept{
@@ -2645,14 +2701,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     if (!this->waiting_queue.empty()){
                         auto [dst, smp] = this->waiting_queue.front();
                         this->waiting_queue.pop_front();
-                        *dst = std::move(buffer_vec);
+                        *dst = std::move(buffer_vec.value());
                         releasing_smp = smp;
 
                         return dg::network_exception::SUCCESS;
                     }
 
                     if (this->distribution_queue.size() != this->distribution_queue.capacity()){
-                        dg::network_exception_handler::nothrow_log(this->distribution_queue.push_back(std::move(buffer_vec)));
+                        dg::network_exception_handler::nothrow_log(this->distribution_queue.push_back(std::move(buffer_vec.value())));
                         return dg::network_exception::SUCCESS;
                     }
 
@@ -2660,7 +2716,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }();
 
                 if (dg::network_exception::is_failed(err)){
-                    std::copy(std::make_move_iterator(buffer_vec.begin()), std::make_move_iterator(buffer_vec.end()), base_buffer_arr);
+                    std::copy(std::make_move_iterator(buffer_vec->begin()), std::make_move_iterator(buffer_vec->end()), base_buffer_arr);
                     std::fill(exception_arr, std::next(exception_arr, sz), err);
                     return;
                 }
@@ -2672,11 +2728,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
             }
 
-            void pop(dg::string * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
+            void pop(internal_huge_kernel_buffer * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
-                std::optional<dg::vector<dg::string>> str_vec(std::nullopt); 
+                std::optional<internal_vector<internal_huge_kernel_buffer>> str_vec(std::nullopt); 
                 dg_binary_semaphore smp(0);
-                
+
                 bool is_acquire_required = [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
@@ -2755,7 +2811,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             bool run_one_epoch() noexcept{
 
-                dg::network_stack_allocation::NoExceptAllocation<dg::string[]> recv_buf_arr(this->fr_warehouse_get_cap);
+                dg::network_stack_allocation::NoExceptAllocation<internal_huge_kernel_buffer[]> recv_buf_arr(this->fr_warehouse_get_cap);
                 size_t fr_warehouse_get_sz = 0u;
 
                 this->fr_warehouse->pop(recv_buf_arr.get(), fr_warehouse_get_sz, this->fr_warehouse_get_cap);
@@ -2777,11 +2833,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            struct InternalDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<dg::string>{
+            struct InternalDeliveryResolutor: dg::network_producer_consumer::ConsumerInterface<internal_huge_kernel_buffer>{
 
                 InBoundContainerInterface * dst;
 
-                void push(std::move_iterator<dg::string *> data_arr, size_t data_arr_sz) noexcept{
+                void push(std::move_iterator<internal_huge_kernel_buffer *> data_arr, size_t data_arr_sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(data_arr_sz);
                     this->dst->push(data_arr, data_arr_sz, exception_arr.get());
@@ -2981,9 +3037,22 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 size_t consuming_sz     = 0u;
                 size_t consuming_cap    = this->upstream_consume_sz;
-                dg::network_stack_allocation::NoExceptAllocation<dg::string[]> buf_arr(consuming_cap);
-                
-                this->base->recv(buf_arr.get(), consuming_sz, consuming_cap); 
+
+                dg::network_stack_allocation::NoExceptAllocation<internal_segment_kernel_buffer[]> buf_arr(consuming_cap);
+
+                try
+                {
+                    for (size_t i = 0u; i < consuming_cap; ++i)
+                    {
+                        buf_arr[i].resize(base->max_content_size());
+                    }
+                }
+                catch (...)
+                {
+                    return false;
+                }
+
+                this->recv(buf_arr.get(), consuming_sz, consuming_cap);
 
                 auto et_feed_resolutor                      = InternalEntranceFeedResolutor{};
                 et_feed_resolutor.entrance_controller       = this->entrance_controller.get();
@@ -3045,6 +3114,25 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         
         private:
 
+            void recv(internal_segment_kernel_buffer * arr, size_t& sz, size_t cap) noexcept{
+
+                dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<void>[]> addr_arr(cap);
+                dg::network_stack_allocation::NoExceptAllocation<size_t[]> capacity_arr(cap);
+                dg::network_stack_allocation::NoExceptAllocation<size_t[]> sz_arr(cap);
+
+                for (size_t i = 0u; i < cap; ++i){
+                    addr_arr[i]     = arr[i].data();
+                    capacity_arr[i] = arr[i].size();
+                    sz_arr[i]       = 0u;
+                }
+
+                this->base->recv(addr_arr.get(), capacity_arr.get(), sz_arr.get(), sz, cap);
+
+                for (size_t i = 0u; i < sz; ++i){
+                    arr[i].resize(sz_arr[i]);
+                }
+            }
+
             struct InternalEntranceFeedResolutor: dg::network_producer_consumer::ConsumerInterface<GlobalIdentifier>{
 
                 EntranceControllerInterface * entrance_controller;
@@ -3062,11 +3150,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
             };
 
-            struct InternalInBoundFeedResolutor: dg::network_producer_consumer::ConsumerInterface<dg::string>{
+            struct InternalInBoundFeedResolutor: dg::network_producer_consumer::ConsumerInterface<internal_huge_kernel_buffer>{
 
                 InBoundContainerInterface * inbound_container;
 
-                void push(std::move_iterator<dg::string *> data_arr, size_t sz) noexcept{
+                void push(std::move_iterator<internal_huge_kernel_buffer *> data_arr, size_t sz) noexcept{
 
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
                     this->inbound_container->push(data_arr, sz, exception_arr.get());
@@ -3083,7 +3171,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 PacketAssemblerInterface * packet_assembler;
                 dg::network_producer_consumer::DeliveryHandle<GlobalIdentifier> * entrance_feeder;
-                dg::network_producer_consumer::DeliveryHandle<dg::string> * inbound_feeder;
+                dg::network_producer_consumer::DeliveryHandle<internal_huge_kernel_buffer> * inbound_feeder;
 
                 void push(std::move_iterator<PacketSegment *> data_arr, size_t sz) noexcept{
 
@@ -3106,7 +3194,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (assembled_arr[i].has_value()){
-                            std::expected<dg::string, exception_t> buf = internal_integrity_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(assembled_arr[i].value())); 
+                            std::expected<internal_huge_kernel_buffer, exception_t> buf = internal_integrity_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(assembled_arr[i].value())); 
 
                             if (!buf.has_value()){
                                 dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(buf.error()));
@@ -3178,9 +3266,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                     outbound_rule(std::move(outbound_rule)),
                                                                     transmission_vectorization_sz(transmission_vectorization_sz){}
 
-            void send(std::move_iterator<MailBoxArgument *> data_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void send(MailBoxArgument * data_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                MailBoxArgument * base_data_arr = data_arr.base();
+                MailBoxArgument * base_data_arr = data_arr;
 
                 auto feed_resolutor             = InternalFeedResolutor{};
                 feed_resolutor.dst              = this->base.get(); 
@@ -3205,7 +3293,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         continue;
                     }
 
-                    std::expected<dg::vector<PacketSegment>, exception_t> segment_vec = this->packetizer->packetize(static_cast<dg::string&&>(base_data_arr[i].content));
+                    std::expected<internal_segment_kernel_buffer, exception_t> buf          = dg::network_exception::cstyle_initialize<internal_segment_kernel_buffer>(std::string_view(static_cast<const char *>(base_data_arr[i].content),
+                                                                                                                                                                                        base_data_arr[i].content_sz));
+                    
+                    if (!buf.has_value()){
+                        exception_arr[i] = buf.error();
+                        continue;
+                    }
+
+                    std::expected<internal_vector<PacketSegment>, exception_t> segment_vec  = this->packetizer->packetize(std::move(buf.value()));
 
                     if (!segment_vec.has_value()){
                         exception_arr[i] = segment_vec.error();
@@ -3218,14 +3314,32 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
             }
 
-            void recv(dg::string * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept{
+            void recv(std::add_pointer_t<void> * output_arr,
+                      size_t * output_cap_arr,
+                      size_t * output_sz_arr,
+                      size_t& output_arr_sz,
+                      size_t output_arr_cap) noexcept{
 
-                return this->inbound_container->pop(output_arr, output_arr_sz, output_arr_cap);
+                dg::network_stack_allocation::NoExceptAllocation<internal_huge_kernel_buffer[]> buffer_arr(output_arr_cap);                
+                this->inbound_container->pop(buffer_arr.get(), output_arr_sz, output_arr_cap);
+
+                for (size_t i = 0u; i < output_arr_sz; ++i)
+                {
+                    size_t trimmed_buffer_sz    = std::min(buffer_arr[i].size(), output_cap_arr[i]);
+                    output_sz_arr[i]            = trimmed_buffer_sz;
+
+                    std::copy(buffer_arr[i].begin(), std::next(buffer_arr[i].begin(), trimmed_buffer_sz), static_cast<char *>(output_arr[i]));
+                }
             }
 
             auto max_consume_size() noexcept -> size_t{
 
                 return this->base->max_consume_size();
+            }
+
+            auto max_content_size() const noexcept -> size_t{
+
+                return this->packetizer->max_packet_size();
             }
 
         private:
@@ -3242,21 +3356,24 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                     dg::network_stack_allocation::NoExceptAllocation<MailBoxArgument[]> mailbox_arg_arr(arr_cap);
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(arr_cap);
+                    dg::network_stack_allocation::NoExceptAllocation<internal_segment_kernel_buffer[]> segment_arr(arr_cap);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        std::expected<dg::string, exception_t> serialized = serialize_packet_segment(static_cast<PacketSegment&&>(base_data_arr[i]));
+                        std::expected<internal_segment_kernel_buffer, exception_t> serialized = serialize_packet_segment(static_cast<PacketSegment&&>(base_data_arr[i]));
 
                         if (!serialized.has_value()){
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(serialized.error()));
                             continue;
                         }
 
-                        mailbox_arg_arr[arr_sz].content = std::move(serialized.value());
-                        mailbox_arg_arr[arr_sz].to      = to;
-                        arr_sz                          += 1;
+                        segment_arr[arr_sz]                 = std::move(serialized.value());
+                        mailbox_arg_arr[arr_sz].content     = segment_arr[arr_sz].data();
+                        mailbox_arg_arr[arr_sz].content_sz  = segment_arr[arr_sz].size();
+                        mailbox_arg_arr[arr_sz].to          = to;
+                        arr_sz                              += 1;
                     }
 
-                    this->dst->send(std::make_move_iterator(mailbox_arg_arr.get()), arr_sz, exception_arr.get());
+                    this->dst->send(mailbox_arg_arr.get(), arr_sz, exception_arr.get());
 
                     for (size_t i = 0u; i < arr_sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -3676,7 +3793,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             size_t consume_sz                   = std::max(tentative_consume_sz, size_t{1u});
             size_t upqueue_cap                  = stdx::ceil2(buffer_capacity);
 
-            return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<dg::string>(stdx::ulog2(upqueue_cap)),
+            return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<internal_huge_kernel_buffer>(stdx::ulog2(upqueue_cap)),
                                                          upqueue_cap,
                                                          stdx::make_unique_fair_atomic_flag(),
                                                          stdx::hdi_container<size_t>{consume_sz});
@@ -3776,9 +3893,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
-                                                                dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<dg::string>> *, dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
-                                                                dg::pow2_cyclic_queue<dg::vector<dg::string>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
+            return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
+                                                                dg::pow2_cyclic_queue<std::pair<std::optional<internal_vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
+                                                                dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
                                                                 stdx::make_unique_fair_atomic_flag(),
                                                                 unit_sz);
         }

@@ -1613,6 +1613,20 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 return this->bucket_vec.size();
             }
+            
+            static constexpr auto allocation_size(size_t bucket_count) noexcept -> size_type{
+
+                constexpr size_t EXTRA_SZ   = 1u; 
+
+                size_t up_ceil_bucket_count = unordered_map_variants::ceil2(bucket_count) + EXTRA_SZ; 
+                size_t vec_cap              = self::right_capacity_to_size(up_ceil_bucket_count) + EXTRA_SZ;
+
+                size_t bucket_allocation_sz = up_ceil_bucket_count * sizeof(decltype(bucket_vec)::value_type) + alignof(decltype(bucket_vec)::value_type);
+                size_t node_allocation_sz   = vec_cap * sizeof(decltype(virtual_storage_vec)::value_type) + alignof(decltype(virtual_storage_vec)::value_type);
+                size_t total_allocation_sz  = bucket_allocation_sz + node_allocation_sz;
+
+                return total_allocation_sz;
+            } 
 
             static consteval auto min_capacity() -> size_type{
 
@@ -1730,14 +1744,14 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto internal_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
+            constexpr auto internal_find_bucket_reference(const KeyLike& key) const noexcept(true) -> const virtual_addr_t *{
 
                 //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
                 //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
 
-                size_t hashed_value         = this->_hasher(key);
-                size_t bucket_idx           = this->to_bucket_index(hashed_value);
-                virtual_addr_t * current    = &this->bucket_vec[bucket_idx];
+                size_t hashed_value             = this->_hasher(key);
+                size_t bucket_idx               = this->to_bucket_index(hashed_value);
+                const virtual_addr_t * current  = &this->bucket_vec[bucket_idx];
 
                 while (true){
                     if (*current == self::NULL_VIRTUAL_ADDR || this->pred(this->virtual_storage_vec[*current].first, key)){
@@ -1749,58 +1763,22 @@ namespace dg::network_datastructure::unordered_map_variants{
             }
 
             template <class KeyLike>
-            constexpr auto internal_exist_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
+            constexpr auto internal_find_bucket_reference(const KeyLike& key) noexcept(true) -> virtual_addr_t *{
 
-                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
-                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
-
-                size_t hashed_value         = this->_hasher(key);
-                size_t bucket_idx           = this->to_bucket_index(hashed_value);
-                virtual_addr_t * current    = &this->bucket_vec[bucket_idx];
-
-                if (this->pred(this->virtual_storage_vec[*current].first, key)){
-                    return current;
-                }
-
-                current = &this->virtual_storage_vec[*current].nxt_addr;
-
-                if (this->pred(this->virtual_storage_vec[*current].first, key)){
-                    return current;
-                }
-
-                current = &this->virtual_storage_vec[*current].nxt_addr;
-
-                while (true){
-                    if (this->pred(this->virtual_storage_vec[*current].first, key)) [[likely]]{
-                        return current;
-                    }
-
-                    current = &this->virtual_storage_vec[*current].nxt_addr;
-                }
+                return const_cast<virtual_addr_t *>(static_cast<const self *>(this)->internal_find_bucket_reference(key));
             }
 
             template <class KeyLike>
             constexpr auto internal_find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
-                //static_assert(noexcept(this->_hasher(key))); TODOs: compile time validation
-                //static_assert(noexcept(this->pred(this->virtual_storage_vec[*current].first, key))) TODOs: compile time validation
+                const virtual_addr_t * addr = this->internal_find_bucket_reference(key);
 
-                size_t hashed_value                 = this->_hasher(key);
-                size_t bucket_idx                   = this->to_bucket_index(hashed_value);
-                virtual_addr_t node_virtual_addr    = this->bucket_vec[bucket_idx]; 
-
-                while (true){
-                    if (node_virtual_addr == self::NULL_VIRTUAL_ADDR){
-                        return this->virtual_storage_vec.end();
-                    }
-
-                    if (this->pred(this->virtual_storage_vec[node_virtual_addr].first, key)){
-                        return std::next(this->virtual_storage_vec.begin(), node_virtual_addr);
-                    }
-
-                    node_virtual_addr = this->virtual_storage_vec[node_virtual_addr].nxt_addr;
+                if (*addr == self::NULL_VIRTUAL_ADDR){
+                    return this->virtual_storage_vec.cend();
                 }
-            }
+
+                return std::next(this->virtual_storage_vec.cbegin(), *addr);
+            } 
 
             template <class ValueLike>
             constexpr auto internal_insert(ValueLike&& value) -> std::pair<iterator, bool>{
@@ -1814,9 +1792,8 @@ namespace dg::network_datastructure::unordered_map_variants{
                 if (*insert_reference == self::NULL_VIRTUAL_ADDR){
                     *insert_reference   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
                     this->virtual_storage_vec.emplace_back(std::forward<ValueLike>(value));
-                    auto rs             = std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), true);
 
-                    return rs;
+                    return std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), true);
                 }
 
                 return std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), false);
@@ -1825,22 +1802,14 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class ValueLike>
             constexpr auto internal_insert_or_assign(ValueLike&& value) -> std::pair<iterator, bool>{
 
-                if (this->virtual_storage_vec.size() == this->virtual_storage_vec.capacity()) [[unlikely]]{ //strong guarantee, might corrupt vector_capacity <-> bucket_vec_size ratio, signals an uphash
-                    this->rehash(this->bucket_vec.size() << self::POW2_GROWTH_FACTOR);
+                auto [it, status] = this->internal_insert(std::forward<ValueLike>(value));
+
+                if (!status)
+                {
+                    it->second = dg_forward_like<ValueLike>(value.second);
                 }
 
-                virtual_addr_t * insert_reference   = this->internal_find_bucket_reference(value.first);
-
-                if (*insert_reference == self::NULL_VIRTUAL_ADDR){
-                    *insert_reference   = static_cast<virtual_addr_t>(this->virtual_storage_vec.size());
-                    this->virtual_storage_vec.emplace_back(std::forward<ValueLike>(value));
-                    auto rs             = std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), true);
-
-                    return rs;
-                }
-
-                this->virtual_storage_vec[*insert_reference].second = dg_forward_like<ValueLike>(value.second);
-                return std::make_pair(std::next(this->virtual_storage_vec.begin(), *insert_reference), false);
+                return {it, status};
             }
 
             template <class KeyLike>
@@ -1857,7 +1826,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 //alright, we have provided all the arguments we could to the compiler, it's up to the randomness of the wild to render things now
 
-                virtual_addr_t * swapping_reference = this->internal_exist_find_bucket_reference(this->virtual_storage_vec.back().first); 
+                virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.back().first); 
     
                 if (swapping_reference == key_reference) [[unlikely]]{
                     *key_reference = this->virtual_storage_vec[*key_reference].nxt_addr;
