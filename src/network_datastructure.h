@@ -1320,12 +1320,14 @@ namespace dg::network_datastructure::unordered_map_variants{
     template <class Flag, class key_t, class mapped_t, class virtual_addr_t>
     using Node = typename NodeChooser<Flag, key_t, mapped_t, virtual_addr_t>::type;
 
-    template <class Key, class Mapped, class VirtualAddrType = std::size_t, class HasStructureReordering = std::integral_constant<bool, true>, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<7, 8>>
+    template <class Key, class Mapped, class VirtualAddrType = std::size_t, class HasStructureReordering = std::integral_constant<bool, true>, class Hasher = std::hash<Key>, class Pred = std::equal_to<Key>, class StdCompatibleAllocator = std::allocator<std::pair<const Key, Mapped>>, class LoadFactor = std::ratio<7, 8>>
     class unordered_node_map{
 
         private:
 
-            std::vector<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>> virtual_storage_vec;
+            using Allocator = typename std::allocator_traits<StdCompatibleAllocator>::template rebind_alloc<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>;
+
+            std::vector<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>, Allocator> virtual_storage_vec;
             std::vector<VirtualAddrType, typename std::allocator_traits<Allocator>::template rebind_alloc<VirtualAddrType>> bucket_vec;
             Hasher _hasher;
             Pred pred;
@@ -1343,8 +1345,8 @@ namespace dg::network_datastructure::unordered_map_variants{
             using const_reference           = const value_type&;
             using pointer                   = typename std::allocator_traits<Allocator>::pointer;
             using const_pointer             = typename std::allocator_traits<Allocator>::const_pointer;
-            using iterator                  = typename std::vector<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>>::iterator;
-            using const_iterator            = typename std::vector<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>, typename std::allocator_traits<Allocator>::template rebind_alloc<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>>::const_iterator;
+            using iterator                  = typename decltype(virtual_storage_vec)::iterator;
+            using const_iterator            = typename decltype(virtual_storage_vec)::const_iterator;
             using size_type                 = std::size_t;
             using difference_type           = std::intmax_t;
             using self                      = unordered_node_map;
@@ -1616,17 +1618,30 @@ namespace dg::network_datastructure::unordered_map_variants{
             
             static constexpr auto allocation_size(size_t bucket_count) noexcept -> size_type{
 
-                constexpr size_t EXTRA_SZ   = 1u; 
+                size_t up_ceil_bucket_count = unordered_map_variants::ceil2(bucket_count); 
+                size_t vec_cap              = self::right_capacity_to_size(up_ceil_bucket_count);
 
-                size_t up_ceil_bucket_count = unordered_map_variants::ceil2(bucket_count) + EXTRA_SZ; 
-                size_t vec_cap              = self::right_capacity_to_size(up_ceil_bucket_count) + EXTRA_SZ;
-
-                size_t bucket_allocation_sz = up_ceil_bucket_count * sizeof(decltype(bucket_vec)::value_type) + alignof(decltype(bucket_vec)::value_type);
-                size_t node_allocation_sz   = vec_cap * sizeof(decltype(virtual_storage_vec)::value_type) + alignof(decltype(virtual_storage_vec)::value_type);
+                size_t bucket_allocation_sz = up_ceil_bucket_count * sizeof(typename decltype(bucket_vec)::value_type) + alignof(typename decltype(bucket_vec)::value_type);
+                size_t node_allocation_sz   = vec_cap * sizeof(typename decltype(virtual_storage_vec)::value_type) + alignof(typename decltype(virtual_storage_vec)::value_type);
                 size_t total_allocation_sz  = bucket_allocation_sz + node_allocation_sz;
 
                 return total_allocation_sz;
-            } 
+            }
+
+            static constexpr auto bucket_count_for_size_of(size_t element_sz) noexcept -> size_type{
+
+                if (element_sz == 0u)
+                {
+                    return min_capacity();
+                }
+
+                size_t upround_element_sz   = (((element_sz - 1u) / load_factor_ratio::num) + 1u) * load_factor_ratio::num;
+                size_t sufficient_capacity  = self::right_size_to_capacity(upround_element_sz);
+                size_t tentative_capacity   = unordered_map_variants::ceil2(sufficient_capacity);
+                size_t actual_capacity      = std::clamp(tentative_capacity, self::min_capacity(), self::max_capacity());
+
+                return actual_capacity; 
+            }
 
             static consteval auto min_capacity() -> size_type{
 

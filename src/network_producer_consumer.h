@@ -20,6 +20,7 @@
 #include "network_exception_handler.h"
 #include "network_type_traits_x.h"
 #include "network_hash_factory.h"
+#include "network_memult.h"
 
 namespace dg::network_producer_consumer{
 
@@ -313,7 +314,7 @@ namespace dg::network_producer_consumer{
     auto delvrsrv_allocation_cost(ConsumerInterface<event_t> * consumer, size_t deliverable_cap) noexcept -> size_t{
 
         return network_producer_consumer::inplace_construct_size<event_t[]>(deliverable_cap) 
-               + network_producer_consumer::inplace_construct_size<DeliveryHandle<event_t>>(DeliveryHandle<event_t>{});
+               + network_producer_consumer::inplace_construct_size<DeliveryHandle<event_t>>();
     }
 
     template <class event_t>
@@ -453,7 +454,7 @@ namespace dg::network_producer_consumer{
 
     auto bump_allocator_allocation_cost(size_t buf_sz) noexcept -> size_t{
 
-        return buf_sz + inplace_construct_size<BumpAllocatorResource>(BumpAllocatorResource{});
+        return buf_sz + inplace_construct_size<BumpAllocatorResource>();
     }
 
     void bump_allocator_reset(BumpAllocatorResource * bump_allocator) noexcept{
@@ -547,7 +548,12 @@ namespace dg::network_producer_consumer{
 
             char ** preallocated_buf;
 
+            template <class U>
+            friend class KeyValueConventionalAllocator;
+
         public:
+
+            using value_type = T;
 
             constexpr KeyValueConventionalAllocator() noexcept: preallocated_buf(nullptr){}
 
@@ -558,24 +564,44 @@ namespace dg::network_producer_consumer{
 
             auto allocate(std::size_t n) -> T *
             {
-                if (this->preallocated_buf == nullptr)
+                if (n == 0u || sizeof(T) == 0u)
                 {
-                    return static_cast<T *>(new char[n]);
+                    return nullptr;
                 }
 
-                char *& char_reference  = *this->preallocated_buf;
-                char * ret_char         = char_reference;
+                char * raw_buf; 
 
-                std::advance(char_reference, n);
+                if (this->preallocated_buf == nullptr)
+                {
+                    raw_buf = static_cast<char *>(std::aligned_alloc(alignof(T), n * sizeof(T)));
 
-                return static_cast<T *>(ret_char);
+                    if (raw_buf == nullptr)
+                    {
+                        throw std::bad_alloc();
+                    }
+                }
+                else
+                {
+                    size_t allocation_sz    = n * sizeof(T) + alignof(T); 
+                    char *& char_reference  = *this->preallocated_buf;
+                    raw_buf                 = dg::memult::align(std::add_pointer_t<char>(char_reference), std::integral_constant<size_t, alignof(T)>{});
+
+                    std::advance(char_reference, allocation_sz);
+                }
+
+                return static_cast<T *>(static_cast<void *>(raw_buf));
             }
 
             void deallocate(T * p, std::size_t n)
             {
+                if (p == nullptr)
+                {
+                    return;
+                }
+
                 if (this->preallocated_buf == nullptr)
                 {
-                    delete[] static_cast<char *>(p);
+                    std::free(static_cast<void *>(p));
                 }
             }
 
@@ -592,13 +618,27 @@ namespace dg::network_producer_consumer{
             }
     };
 
+
+    template <typename ...Args, typename ...Args1>
+    bool operator==(const KeyValueConventionalAllocator<Args...>&, const KeyValueConventionalAllocator<Args1...>&)
+    {
+        return true;
+    }
+
+    template <typename ...Args, typename ...Args1>
+    bool operator!=(const KeyValueConventionalAllocator<Args...>&, const KeyValueConventionalAllocator<Args1...>&)
+    {
+        return false;
+    }
+
     template <class KeyType, class MappedType>
     using kv_feed_unordered_map_t = dg::network_datastructure::unordered_map_variants::unordered_node_map<KeyType,
                                                                                                           MappedType,
                                                                                                           std::size_t,
                                                                                                           std::integral_constant<bool, true>,
                                                                                                           dg::network_hash_factory::default_hasher<KeyType>,
-                                                                                                          dg::network_hash_factory::default_equal_to<KeyType>>;
+                                                                                                          dg::network_hash_factory::default_equal_to<KeyType>,
+                                                                                                          KeyValueConventionalAllocator<std::pair<const KeyType, MappedType>>>;
 
     template<class KeyType, class EventType>
     struct KVDeliveryHandle{
@@ -699,7 +739,8 @@ namespace dg::network_producer_consumer{
 
             auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_deinitialize(bump_allocator.value());});
 
-            auto key_event_map      = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>(deliverable_cap);
+            size_t bucket_count     = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>::bucket_count_for_size_of(deliverable_cap + 1u);
+            auto key_event_map      = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>(bucket_count);
             size_t deliverable_sz   = 0u;
             auto delivery_handle    = std::unique_ptr<KVDeliveryHandle<key_t, event_t>>(new KVDeliveryHandle<key_t, event_t>{bump_allocator.value(), deliverable_sz, deliverable_cap, consumer, std::move(key_event_map)});
             auto rs                 = delivery_handle.get();
@@ -715,7 +756,9 @@ namespace dg::network_producer_consumer{
 
     //clear
     template <class key_t, class event_t>
-    auto delvrsrv_kv_open_preallocated_handle(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap, char * preallocated_buf) noexcept -> std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t>{
+    auto delvrsrv_kv_open_preallocated_handle(KVConsumerInterface<key_t, event_t> * consumer,
+                                              size_t deliverable_cap,
+                                              char * preallocated_buf) noexcept -> std::expected<KVDeliveryHandle<key_t, event_t> *, exception_t>{
 
         const size_t MIN_DELIVERABLE_CAP    = 0u;
         const size_t MAX_DELIVERABLE_CAP    = size_t{1} << 30;
@@ -728,21 +771,53 @@ namespace dg::network_producer_consumer{
             return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
         }
 
-        try{
-            auto bump_allocator     = bump_allocator_preallocated_initialize(delvrsrv_kv_get_event_container_memory_total_bcap<event_t>(deliverable_cap), preallocated_buf);
+        size_t bucket_count = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>::bucket_count_for_size_of(deliverable_cap + 1u);
+        char * map_buf      = preallocated_buf;
+        char * ptr_buf      = std::next(map_buf, kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>::allocation_size(bucket_count));
 
-            if (!bump_allocator.has_value()){
-                return std::unexpected(bump_allocator.error());
+        try
+        {
+            BumpAllocatorResource * bump_allocator;
+
+            {
+                size_t bump_allocator_mem_sz = delvrsrv_kv_get_event_container_memory_total_bcap<event_t>(deliverable_cap);
+                std::expected<BumpAllocatorResource *, exception_t> decoy_bump_allocator = bump_allocator_preallocated_initialize(bump_allocator_mem_sz, ptr_buf);
+
+                if (!decoy_bump_allocator.has_value())
+                {
+                    return std::unexpected(decoy_bump_allocator.error());
+                }
+
+                bump_allocator = decoy_bump_allocator.value();
+                dg::network_exception_handler::nothrow_log(bump_allocator_align(bump_allocator, alignof(event_t)));
+
+                std::advance(ptr_buf, bump_allocator_allocation_cost(bump_allocator_mem_sz));
             }
 
-            dg::network_exception_handler::nothrow_log(bump_allocator_align(bump_allocator.value(), alignof(event_t)));
+            auto resource_guard = stdx::resource_guard([&]() noexcept{bump_allocator_preallocated_deinitialize(bump_allocator);});
 
-            auto resource_guard     = stdx::resource_guard([&]() noexcept{bump_allocator_preallocated_deinitialize(bump_allocator.value());});
+            std::optional<kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>> key_event_map;
 
-            auto key_event_map      = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>(deliverable_cap);
-            size_t deliverable_sz   = 0u;
-            auto delivery_handle    = inplace_construct<KVDeliveryHandle<key_t, event_t>>(std::next(preallocated_buf, bump_allocator_allocation_cost(delvrsrv_kv_get_event_container_memory_total_bcap<event_t>(deliverable_cap))),
-                                                                                          KVDeliveryHandle<key_t, event_t>{bump_allocator.value(), deliverable_sz, deliverable_cap, consumer, std::move(key_event_map)});
+            {
+                char ** preallocated_buffer = inplace_construct<std::add_pointer_t<char>>(ptr_buf, std::add_pointer_t<char>(map_buf));
+                key_event_map               = kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>(bucket_count,
+                                                                                                        KeyValueConventionalAllocator<void *>(preallocated_buffer));
+
+                std::advance(ptr_buf, inplace_construct_size<std::add_pointer_t<char>>());
+            }
+
+            KVDeliveryHandle<key_t, event_t> * delivery_handle;
+
+            {
+                delivery_handle =  inplace_construct<KVDeliveryHandle<key_t, event_t>>(ptr_buf,
+                                                                                       KVDeliveryHandle<key_t, event_t>{.bump_allocator     = bump_allocator,
+                                                                                                                        .deliverable_sz     = 0u,
+                                                                                                                        .deliverable_cap    = deliverable_cap,
+                                                                                                                        .consumer           = consumer,
+                                                                                                                        .key_event_map      = std::move(key_event_map.value())});
+
+                std::advance(ptr_buf, inplace_construct_size<KVDeliveryHandle<key_t, event_t>>());
+            }
 
             resource_guard.release();
 
@@ -755,9 +830,11 @@ namespace dg::network_producer_consumer{
     //clear
     template <class key_t, class event_t>
     auto delvrsrv_kv_allocation_cost(KVConsumerInterface<key_t, event_t> * consumer, size_t deliverable_cap) noexcept -> size_t{
-
-        return bump_allocator_allocation_cost(delvrsrv_kv_get_event_container_memory_total_bcap<event_t>(deliverable_cap)) 
-               + inplace_construct_size<KVDeliveryHandle<key_t, event_t>>(KVDeliveryHandle<key_t, event_t>{});
+ 
+        return bump_allocator_allocation_cost(delvrsrv_kv_get_event_container_memory_total_bcap<event_t>(deliverable_cap))
+                + kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>::allocation_size(kv_feed_unordered_map_t<key_t, KVEventContainer<event_t>>::bucket_count_for_size_of(deliverable_cap + 1u))
+                + inplace_construct_size<std::add_pointer_t<char>>()
+                + inplace_construct_size<KVDeliveryHandle<key_t, event_t>>();
     }
 
     //clear

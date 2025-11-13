@@ -169,7 +169,7 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
             
             while (true)
             {
-                size_t max_sz = size_t{1} << 16;
+                size_t max_sz = size_t{1} << 17;
                 size_t iterable_sz = str_vec.size() / max_sz + (str_vec.size() % max_sz != 0u); 
 
                 for (size_t i = 0u; i < iterable_sz; ++i)
@@ -386,79 +386,79 @@ int main()
                 .retry_device = retry_device
             });
 
-            auto sock2 = dg::network_kernel_mailbox_impl1_flash_streamx::spawn(dg::network_kernel_mailbox_impl1_flash_streamx::Config{
-                .factory_addr = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value(),
-                                 .port = 5001},
-                .packetizer_segment_bsz = size_t{1} << 8,
-                .packetizer_max_bsz = size_t{1} << 20,
-                .packetizer_has_integrity_transmit = true,
+            // auto sock2 = dg::network_kernel_mailbox_impl1_flash_streamx::spawn(dg::network_kernel_mailbox_impl1_flash_streamx::Config{
+            //     .factory_addr = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value(),
+            //                      .port = 5001},
+            //     .packetizer_segment_bsz = size_t{1} << 8,
+            //     .packetizer_max_bsz = size_t{1} << 20,
+            //     .packetizer_has_integrity_transmit = true,
 
-                .gate_controller_ato_component_sz = 16,
-                .gate_controller_ato_map_capacity = size_t{1} << 20,
-                .gate_controller_ato_dur = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
-                .gate_controller_ato_keyvalue_feed_cap = size_t{1} << 10,
+            //     .gate_controller_ato_component_sz = 16,
+            //     .gate_controller_ato_map_capacity = size_t{1} << 20,
+            //     .gate_controller_ato_dur = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
+            //     .gate_controller_ato_keyvalue_feed_cap = size_t{1} << 10,
 
-                .gate_controller_blklst_component_sz = 16,
-                .gate_controller_blklst_bloomfilter_cap = size_t{1} << 24,
-                .gate_controller_blklst_bloomfilter_rehash_sz = 4,
-                .gate_controller_blklst_bloomfilter_reliability_decay_factor = 8,
-                .gate_controller_blklst_keyvalue_feed_cap = size_t{1} << 10,
+            //     .gate_controller_blklst_component_sz = 16,
+            //     .gate_controller_blklst_bloomfilter_cap = size_t{1} << 24,
+            //     .gate_controller_blklst_bloomfilter_rehash_sz = 4,
+            //     .gate_controller_blklst_bloomfilter_reliability_decay_factor = 8,
+            //     .gate_controller_blklst_keyvalue_feed_cap = size_t{1} << 10,
 
-                .latency_controller_component_sz = 16,
-                .latency_controller_queue_cap = size_t{1} << 20,
-                .latency_controller_unique_id_cap = size_t{1} << 20,
-                .latency_controller_expiry_period = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
-                .latency_controller_keyvalue_feed_cap = size_t{1} << 10,
-                .latency_controller_has_exhaustion_control = true,
+            //     .latency_controller_component_sz = 16,
+            //     .latency_controller_queue_cap = size_t{1} << 20,
+            //     .latency_controller_unique_id_cap = size_t{1} << 20,
+            //     .latency_controller_expiry_period = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
+            //     .latency_controller_keyvalue_feed_cap = size_t{1} << 10,
+            //     .latency_controller_has_exhaustion_control = true,
 
-                .packet_assembler_component_sz = 16,
-                .packet_assembler_map_cap = size_t{1} << 20,
-                .packet_assembler_global_segment_cap = size_t{1} << 20,
-                .packet_assembler_max_segment_per_stream = size_t{1} << 11,
-                .packet_assembler_keyvalue_feed_cap = size_t{1} << 10,
-                .packet_assembler_has_exhaustion_control = true,
+            //     .packet_assembler_component_sz = 16,
+            //     .packet_assembler_map_cap = size_t{1} << 20,
+            //     .packet_assembler_global_segment_cap = size_t{1} << 20,
+            //     .packet_assembler_max_segment_per_stream = size_t{1} << 11,
+            //     .packet_assembler_keyvalue_feed_cap = size_t{1} << 10,
+            //     .packet_assembler_has_exhaustion_control = true,
 
-                .inbound_container_component_sz = 16,
-                .inbound_container_cap = size_t{1} << 20,
-                .inbound_container_has_exhaustion_control = true,
-                .inbound_container_has_react_pattern = true,
-                .inbound_container_react_sz = size_t{1} << 10,
-                .inbound_container_subscriber_cap = size_t{1} << 10,
-                .inbound_container_react_latency = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(100)),
-                .inbound_container_has_redistributor = true,
-                .inbound_container_redistributor_distribution_queue_sz = size_t{1} << 20,
-                .inbound_container_redistributor_waiting_queue_sz = size_t{1} << 20,
-                .inbound_container_redistributor_concurrent_sz = size_t{1} << 20,
-                .inbound_container_redistributor_unit_sz = size_t{1} << 6,
+            //     .inbound_container_component_sz = 16,
+            //     .inbound_container_cap = size_t{1} << 20,
+            //     .inbound_container_has_exhaustion_control = true,
+            //     .inbound_container_has_react_pattern = true,
+            //     .inbound_container_react_sz = size_t{1} << 10,
+            //     .inbound_container_subscriber_cap = size_t{1} << 10,
+            //     .inbound_container_react_latency = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(100)),
+            //     .inbound_container_has_redistributor = true,
+            //     .inbound_container_redistributor_distribution_queue_sz = size_t{1} << 20,
+            //     .inbound_container_redistributor_waiting_queue_sz = size_t{1} << 20,
+            //     .inbound_container_redistributor_concurrent_sz = size_t{1} << 20,
+            //     .inbound_container_redistributor_unit_sz = size_t{1} << 6,
 
-                .expiry_worker_count = 1,
-                .expiry_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
-                .expiry_worker_consume_sz = size_t{1} << 10,
-                .expiry_worker_busy_consume_sz = 1,
+            //     .expiry_worker_count = 1,
+            //     .expiry_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
+            //     .expiry_worker_consume_sz = size_t{1} << 10,
+            //     .expiry_worker_busy_consume_sz = 1,
 
-                .inbound_worker_count = 1,
-                .inbound_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
-                .inbound_worker_inbound_gate_vectorization_sz = size_t{1} << 10,
-                .inbound_worker_blacklist_gate_vectorization_sz = size_t{1} << 10,
-                .inbound_worker_latency_controller_vectorization_sz = size_t{1} << 10,
-                .inbound_worker_inbound_container_vectorization_sz = size_t{1} << 10,
-                .inbound_worker_consume_sz = size_t{1} << 10,
-                .inbound_worker_busy_consume_sz = 1,
-                .inbound_redistributor_worker_suck_cap = size_t{1} << 10,
-                .inbound_redistributor_worker_push_cap = size_t{1} << 10,
-                .inbound_redistributor_worker_busy_threshold = 1,
+            //     .inbound_worker_count = 1,
+            //     .inbound_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
+            //     .inbound_worker_inbound_gate_vectorization_sz = size_t{1} << 10,
+            //     .inbound_worker_blacklist_gate_vectorization_sz = size_t{1} << 10,
+            //     .inbound_worker_latency_controller_vectorization_sz = size_t{1} << 10,
+            //     .inbound_worker_inbound_container_vectorization_sz = size_t{1} << 10,
+            //     .inbound_worker_consume_sz = size_t{1} << 10,
+            //     .inbound_worker_busy_consume_sz = 1,
+            //     .inbound_redistributor_worker_suck_cap = size_t{1} << 10,
+            //     .inbound_redistributor_worker_push_cap = size_t{1} << 10,
+            //     .inbound_redistributor_worker_busy_threshold = 1,
 
-                .mailbox_transmission_vectorization_sz = size_t{1} << 10,
+            //     .mailbox_transmission_vectorization_sz = size_t{1} << 10,
 
-                .outbound_rule = dg::network_kernel_mailbox_impl1_flash_streamx::get_empty_outbound_rule(),
-                .infretry_device = retry_device,
-                .base = std::move(sock)
-            });
+            //     .outbound_rule = dg::network_kernel_mailbox_impl1_flash_streamx::get_empty_outbound_rule(),
+            //     .infretry_device = retry_device,
+            //     .base = std::move(sock)
+            // });
 
             std::cout << "made socket ..." << std::endl;
 
-            auto recv_worker = std::make_unique<RecvWorker>(sock2.get());
-            auto send_worker = std::make_unique<SendWorker>(sock2.get());
+            auto recv_worker = std::make_unique<RecvWorker>(sock.get());
+            auto send_worker = std::make_unique<SendWorker>(sock.get());
             // auto hello_world_worker = std::make_unique<HelloWorldWorker>(sock.get());
 
             dg::network_concurrency::daemon_register(dg::network_concurrency::COMPUTING_DAEMON, std::move(send_worker));

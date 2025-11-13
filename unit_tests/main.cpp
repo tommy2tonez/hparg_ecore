@@ -14,7 +14,7 @@
 int main(){
 
     // keyfeed_test::run();
-    // kvfeed_test::run();
+    kvfeed_test::run();
     // pow2_cyclic_queue_test::run();    
     // fileio_test::run();
 
