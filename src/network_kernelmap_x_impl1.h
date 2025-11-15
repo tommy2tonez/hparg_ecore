@@ -14,7 +14,6 @@
 #include "network_std_container.h"
 #include "network_pointer.h"
 #include <memory>
-#include "network_fileio.h"
 #include "network_memult.h"
 #include <random>
 
@@ -24,7 +23,7 @@ namespace dg::network_kernelmap_x_impl1::model{
 
     using fsys_ptr_t    = dg::network_pointer::fsys_ptr_t;
     using Lock          = std::conditional_t<IS_SPINLOCK_PREFERRED,
-                                             std::atomic_flag,
+                                             stdx::fair_atomic_flag,
                                              std::mutex>;  
 
     static inline constexpr fsys_ptr_t NULL_FSYS_PTR = dg::network_pointer::NULL_FSYS_PTR; 
@@ -71,6 +70,12 @@ namespace dg::network_kernelmap_x_impl1::interface{
 
     using namespace network_kernelmap_x_impl1::model; 
 
+    struct KernelDiskIODeviceInterface{
+        virtual ~KernelDiskIODeviceInterface() noexcept = default;
+        virtual auto read_binary(const std::filesystem::path& src, void * dst, size_t bsz) noexcept -> exception_t = 0;
+        virtual auto write_binary(const std::filesystem::path& dst, void * src, size_t bsz) noexcept -> exception_t = 0; 
+    };
+
     struct FsysLoaderInterface{
         virtual ~FsysLoaderInterface() noexcept = default;
         virtual auto load(MemoryNode&, fsys_ptr_t, size_t) noexcept -> exception_t = 0;
@@ -114,12 +119,15 @@ namespace dg::network_kernelmap_x_impl1::implementation{
         private:
 
             dg::unordered_unstable_map<fsys_ptr_t, std::filesystem::path> alias_dict; //this is actually an easy fix - just have virtual filepath and rid of the pollution problem
+            std::shared_ptr<KernelDiskIODeviceInterface> kernel_disk_io_device;
             size_t memregion_sz;
 
         public:
 
             FsysLoader(dg::unordered_unstable_map<fsys_ptr_t, std::filesystem::path> alias_dict,
+                       std::shared_ptr<KernelDiskIODeviceInterface> kernel_disk_io_device,
                        size_t memregion_sz) noexcept: alias_dict(std::move(alias_dict)),
+                                                      kernel_disk_io_device(std::move(kernel_disk_io_device)),
                                                       memregion_sz(memregion_sz){}
 
             auto load(MemoryNode& root, fsys_ptr_t region, size_t sz) noexcept -> exception_t{
@@ -145,7 +153,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 const std::filesystem::path& inpath = dict_ptr->second;
                 const char * cstr_path              = inpath.c_str();
                 void * dst                          = root.cptr.get();
-                exception_t read_err                = dg::network_fileio::dg_read_binary(cstr_path, dst, sz); 
+                exception_t read_err                = this->kernel_disk_io_device->read_binary(cstr_path, dst, sz); 
 
                 if (dg::network_exception::is_failed(read_err)){
                     return read_err;
@@ -180,7 +188,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 const char * cstr_path              = opath.c_str();
                 void * src                          = root.cptr.get();
                 size_t cpy_sz                       = root.mem_sz;
-                dg::network_exception_handler::nothrow_log(dg::network_fileio::dg_write_binary(cstr_path, src, cpy_sz)); //this has to be a nothrow-ops - I don't like inverse operation to be throw-able - recoverability is unified-fsys's responsibility
+                dg::network_exception_handler::nothrow_log(this->kernel_disk_io_device->write_binary(cstr_path, src, cpy_sz)); //this has to be a nothrow-ops - I don't like inverse operation to be throw-able - recoverability is unified-fsys's responsibility
                 root.fsys_ptr                       = NULL_FSYS_PTR;
                 root.mem_sz                         = 0u;
             }
@@ -281,9 +289,6 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 size_t ptr_offset       = dg::memult::region_offset(ptr, this->memregion_sz.value);
                 auto dict_ptr           = this->allocation_dict.find(ptr_region);
 
-                //found cache_map
-                //cache map entry guarantees that the page is valid, increment + update mofidication time return MapResource 
-
                 if (dict_ptr != this->allocation_dict.end()){
                     HeapNode * found_node       = dict_ptr->second;
                     found_node->reference       += 1;
@@ -297,8 +302,6 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                                        .fsys_ptr        = ptr_region};
                 }
 
-                //did not find the associated cache page, the page is in the file system
-
                 HeapNode * cand = this->priority_queue[0].get();
 
                 if (cand->fsys_ptr != NULL_FSYS_PTR){
@@ -306,22 +309,15 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                         return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION); //OK
                     }
 
-                    //load into the memory node, memory node is guaranteed to be empty
                     exception_t err = this->fsys_loader->load(this->tmp_space, ptr_region, this->memregion_sz.value);
 
                     if (dg::network_exception::is_failed(err)){
-                        return std::unexpected(err); //OK, no actions on internal states, returns unexpected(err);
+                        return std::unexpected(err);
                     }
 
-                    //data is loaded
-                    //we'll try to make the tx atomic
-
-                    //--confusing--
                     fsys_ptr_t removing_region = cand->fsys_ptr;
                     this->fsys_loader->unload(*cand); //unload the cache page
                     size_t rm_sz = this->allocation_dict.erase(removing_region); //evict the cache page from the allocation dict
-
-                    //at this point, in the perspective of cand, we are in a valid state as if the cache page (or fsys_ptr) was never loaded, this is a perfect inverse operation
 
                     if constexpr(DEBUG_MODE_FLAG){
                         if (rm_sz != 1u){
@@ -330,7 +326,6 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                         }
                     }
 
-                    //the current top node is associated with the ptr_region, do cache page registration
                     auto [_, status] = this->allocation_dict.insert(std::make_pair(ptr_region, cand));
 
                     if constexpr(DEBUG_MODE_FLAG){
@@ -340,10 +335,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                         }
                     }
 
-                    //this is the buggy part (we'll attempt to swap the resource of tmp_space and cand, new tmp_space is guaranteed to be empty, and cand to represents the tmp_space)
-                    //this only works if <cptr[], mem_sz> is not a problem to other problems, this is a bad assumption
                     std::swap(static_cast<MemoryNode&>(*cand), this->tmp_space);
-                    //--end-of-confusing--
 
                     cand->reference += 1;
                     cand->last_modified = std::chrono::steady_clock::now();
@@ -359,10 +351,9 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 exception_t err = this->fsys_loader->load(*cand, ptr_region, this->memregion_sz.value);
 
                 if (dg::network_exception::is_failed(err)){
-                    return std::unexpected(err); //OK, cand internal state atomicity is guaranteed by the callee
+                    return std::unexpected(err);
                 }
 
-                //attempt to register ptr_region -> cand
                 auto [_, status] = this->allocation_dict.insert(std::make_pair(ptr_region, cand));
 
                 if constexpr(DEBUG_MODE_FLAG){
@@ -489,25 +480,63 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
     struct Factory{
 
-        static auto off_sptr(std::shared_ptr<char[]> sptr, size_t off) -> std::shared_ptr<char[]>{
+        static auto aligned_alloc_sptr(size_t alignment_sz, size_t blk_sz) -> std::shared_ptr<char[]>
+        {
+            if (!dg::memult::is_pow2(alignment_sz))
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
 
-            auto destructor = [sptr](char *) noexcept{};
-            char * new_ptr  = stdx::advance(sptr.get(), off);
+            if (blk_sz == 0u)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            void * memptr = std::aligned_alloc(alignment_sz, blk_sz);
             
-            return std::unique_ptr<char[], decltype(destructor)>(new_ptr, destructor);
-        }
+            if (memptr == nullptr)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::RESOURCE_EXHAUSTION);
+            }
 
-        static auto spawn_fsys_loader(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map, size_t memregion_sz) -> std::unique_ptr<FsysLoaderInterface>{
+            return std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(memptr), std::free);
+        } 
+
+        static auto spawn_fsys_loader(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map,
+                                      std::shared_ptr<KernelDiskIODeviceInterface> kernel_io_device,
+                                      size_t memregion_sz) -> std::unique_ptr<FsysLoaderInterface>{
             
             if (!dg::memult::is_pow2(memregion_sz)){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            auto alias_fast_map = dg::unordered_unstable_map<fsys_ptr_t, std::filesystem::path>(alias_map.begin(), alias_map.end());
-            return std::make_unique<FsysLoader>(std::move(alias_fast_map), memregion_sz);
+            if (kernel_io_device == nullptr){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            for (const auto& alias: alias_map){
+                uintptr_t uptr = dg::pointer_cast<uintptr_t>(alias.first);
+
+                if (uptr == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (uptr % memregion_sz != 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+            }
+
+            auto alias_fast_map = dg::unordered_unstable_map<fsys_ptr_t, std::filesystem::path>(alias_map.begin(), alias_map.end(), alias_map.size());
+
+            return std::make_unique<FsysLoader>(std::move(alias_fast_map),
+                                                std::move(kernel_io_device),
+                                                memregion_sz);
         }
 
-        static auto spawn_map(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map, size_t memregion_sz, size_t memory_node_count) -> std::unique_ptr<MapInterface>{
+        static auto spawn_map(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map,
+                              std::shared_ptr<KernelDiskIODeviceInterface> kernel_io_device,
+                              size_t memregion_sz,
+                              size_t memory_node_count) -> std::unique_ptr<MapInterface>{
 
             const size_t MIN_MEMORY_NODE_COUNT  = 1u;
             const size_t MAX_MEMORY_NODE_COUNT  = size_t{1} << 30;
@@ -519,42 +548,63 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             if (std::clamp(memory_node_count, MIN_MEMORY_NODE_COUNT, MAX_MEMORY_NODE_COUNT) != memory_node_count){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
-    
-            auto priority_queue                 = dg::vector<std::unique_ptr<HeapNode>>{};
-            std::shared_ptr<char[]> memblk      = std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(std::aligned_alloc(memregion_sz, memregion_sz * (memory_node_count + 1))), std::free);
+
+            auto priority_queue = dg::vector<std::unique_ptr<HeapNode>>{};
 
             for (size_t i = 0u; i < memory_node_count; ++i){
-                HeapNode node{};
+                HeapNode node       = {};
+ 
                 node.idx            = i;
-                node.cptr           = off_sptr(memblk, i * memregion_sz);
+                node.cptr           = aligned_alloc_sptr(memregion_sz, memregion_sz);
                 node.fsys_ptr       = NULL_FSYS_PTR;
                 node.reference      = 0u;
                 node.last_modified  = std::chrono::steady_clock::now();
+
                 priority_queue.push_back(std::make_unique<HeapNode>(std::move(node)));
             }
 
             dg::unordered_unstable_map<fsys_ptr_t, HeapNode *> allocation_dict{};
-            MemoryNode tmp{};
-            tmp.cptr            = off_sptr(memblk, memory_node_count * memregion_sz);
-            tmp.fsys_ptr        = NULL_FSYS_PTR;
-            tmp.reference       = 0u;
-            tmp.last_modified   = std::chrono::steady_clock::now(); 
-            auto lck            = std::make_unique<Lock>();
 
-            return std::make_unique<Map>(std::move(priority_queue), std::move(allocation_dict), spawn_fsys_loader(alias_map, memregion_sz), std::move(tmp), std::move(lck), memregion_sz);
+            MemoryNode tmp      = {};
+            tmp.cptr            = aligned_alloc_sptr(memregion_sz, memregion_sz);
+            tmp.fsys_ptr        = NULL_FSYS_PTR;
+
+            auto lck            = stdx::make_unique_fair_atomic_flag();
+
+            return std::make_unique<Map>(std::move(priority_queue),
+                                         std::move(allocation_dict),
+                                         spawn_fsys_loader(alias_map, kernel_io_device, memregion_sz),
+                                         std::move(tmp),
+                                         std::move(lck),
+                                         memregion_sz);
         }
 
-        static auto spawn_map_distributor(const dg::unordered_map<fsys_ptr_t, size_t>& region_id_dict, size_t memregion_sz) -> std::unique_ptr<MapDistributorInterface>{
+        static auto spawn_map_distributor(const dg::unordered_map<fsys_ptr_t, size_t>& region_id_dict,
+                                          size_t memregion_sz) -> std::unique_ptr<MapDistributorInterface>{
 
             if (!dg::memult::is_pow2(memregion_sz)){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            dg::unordered_unstable_map<fsys_ptr_t, size_t> region_id_fastdict(region_id_dict.begin(), region_id_dict.end());
+            for (const auto& region_id: region_id_dict){
+                uintptr_t uptr = dg::pointer_cast<uintptr_t>(region_id.first);
+
+                if (uptr == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                if (uptr % memregion_sz != 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+            }
+
+            dg::unordered_unstable_map<fsys_ptr_t, size_t> region_id_fastdict(region_id_dict.begin(), region_id_dict.end(), region_id_dict.size());
+
             return std::make_unique<StdMapDistributor>(std::move(region_id_fastdict), memregion_sz);
         } 
 
-        static auto spawn_concurrent_map(dg::vector<std::unique_ptr<MapInterface>> map_table, std::unique_ptr<MapDistributorInterface> map_distributor) -> std::unique_ptr<ConcurrentMapInterface>{
+        static auto spawn_concurrent_map(dg::vector<std::unique_ptr<MapInterface>> map_table,
+                                         std::unique_ptr<MapDistributorInterface> map_distributor) -> std::unique_ptr<ConcurrentMapInterface>{
 
             if (std::find(map_table.begin(), map_table.end(), nullptr) != map_table.end()){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -570,69 +620,138 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
     struct ConcurrentMapMake{
 
-        static auto unifdist_map(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map, size_t distribution_factor) -> dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>>{
+        private:
 
-            if (alias_map.size() == 0u){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            const size_t MIN_DISTRIBUTION_FACTOR    = 1u;
-            const size_t MAX_DISTRIBUTION_FACTOR    = alias_map.size();
-
-            if (std::clamp(distribution_factor, MIN_DISTRIBUTION_FACTOR, MAX_DISTRIBUTION_FACTOR) != distribution_factor){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            auto rs             = dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>>{};
-            auto map_vec        = dg::vector<std::pair<fsys_ptr_t, std::filesystem::path>>(alias_map.begin(), alias_map.end());
-            size_t segment_sz   = map_vec.size() / distribution_factor;
-
-            std::shuffle(map_vec.begin(), map_vec.end(), std::mt19937{});
-
-            for (size_t i = 0u; i < distribution_factor; ++i){
-                size_t first    = segment_sz * i;
-                size_t last     = segment_sz * (i + 1);
-
-                if (i + 1 == distribution_factor){
-                    last = map_vec.size();
+            static auto unifdist_map(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map,
+                                    size_t distribution_factor) -> dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>>
+            {
+                if (alias_map.size() == 0u){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
 
-                auto appendee = dg::unordered_map<fsys_ptr_t, std::filesystem::path>(map_vec.begin() + first, map_vec.begin() + last); 
-                rs.push_back(std::move(appendee));
+                const size_t MIN_DISTRIBUTION_FACTOR    = 1u;
+                const size_t MAX_DISTRIBUTION_FACTOR    = size_t{1} << 30;
+
+                if (std::clamp(distribution_factor, MIN_DISTRIBUTION_FACTOR, MAX_DISTRIBUTION_FACTOR) != distribution_factor){
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                auto rs             = dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>>{};
+                auto map_vec        = dg::vector<std::pair<fsys_ptr_t, std::filesystem::path>>(alias_map.begin(), alias_map.end());
+
+                std::shuffle(map_vec.begin(), map_vec.end(), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+
+                size_t segment_sz   = map_vec.size() / distribution_factor + static_cast<size_t>(map_vec.size() % distribution_factor != 0u);
+
+                for (size_t i = 0u; i < distribution_factor; ++i){
+                    
+                    size_t first    = std::min(static_cast<size_t>(segment_sz * i), map_vec.size());
+                    size_t last     = std::min(static_cast<size_t>(segment_sz * (i + 1)), map_vec.size());
+
+                    auto appendee   = dg::unordered_map<fsys_ptr_t, std::filesystem::path>(std::next(map_vec.begin(), first),
+                                                                                           std::next(map_vec.begin(), last)); 
+
+                    rs.push_back(std::move(appendee));
+                }
+
+                return rs;
             }
 
-            return rs;
-        }
+            static void prereq_check(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map,
+                                    std::shared_ptr<KernelDiskIODeviceInterface> kernel_io_device,
+                                    size_t memregion_sz,
+                                    double ram_to_disk_ratio,
+                                    size_t distribution_factor)
+            {
+                const double MIN_RAM_TO_DISK_RATIO      = double{0};
+                const double MAX_RAM_TO_DISK_RATIO      = double{1};
+                const size_t MIN_DISTRIBUTION_FACTOR    = size_t{1};
+                const size_t MAX_DISTRIBUTION_FACTOR    = size_t{1} << 30;
 
-        static auto make(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map,
-                         size_t memregion_sz,
-                         double ram_to_disk_ratio,
-                         size_t distribution_factor) -> std::unique_ptr<interface::ConcurrentMapInterface>{
-            
-            const double MIN_RAM_TO_DISK_RATIO  = double{0.001};
-            const double MAX_RAM_TO_DISK_RATIO  = double{0.999};
+                if (kernel_io_device == nullptr)
+                {
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
 
-            if (std::clamp(ram_to_disk_ratio, MIN_RAM_TO_DISK_RATIO, MAX_RAM_TO_DISK_RATIO) != ram_to_disk_ratio){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            } 
+                if (!dg::memult::is_pow2(memregion_sz))
+                {
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
 
-            dg::vector<std::unique_ptr<MapInterface>> map_table{};
-            dg::unordered_map<fsys_ptr_t, size_t> region_table_idx_map{};
-            dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>> distributed_map = unifdist_map(bijective_alias_map, distribution_factor); 
+                if (std::clamp(ram_to_disk_ratio, MIN_RAM_TO_DISK_RATIO, MAX_RAM_TO_DISK_RATIO) != ram_to_disk_ratio)
+                {
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                } 
 
-            for (const auto& raw_map: distributed_map){
-                size_t memory_node_count = raw_map.size() * ram_to_disk_ratio; //this is prolly the most problematic line
-                std::unique_ptr<MapInterface> map = Factory::spawn_map(raw_map, memregion_sz, memory_node_count);
-                map_table.push_back(std::move(map));
+                if (std::clamp(distribution_factor, MIN_DISTRIBUTION_FACTOR, MAX_DISTRIBUTION_FACTOR) != distribution_factor)
+                {
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
 
-                for (const auto& map_pair: raw_map){
-                    region_table_idx_map[std::get<0>(map_pair)] = map_table.size() - 1;
+                std::unordered_set<uintptr_t> fsys_ptr_set  = {};
+                std::unordered_set<std::string> path_set    = {};
+                
+                for (const auto& alias: bijective_alias_map)
+                {
+                    uintptr_t uptr = dg::pointer_cast<uintptr_t>(alias.first);
+
+                    if (uptr == 0u)
+                    {
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
+
+                    if (uptr % memregion_sz != 0u)
+                    {
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
+
+                    if (fsys_ptr_set.contains(uptr))
+                    {
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
+
+                    if (path_set.contains(alias.second.native()))
+                    {
+                        dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                    }
+
+                    fsys_ptr_set.insert(uptr);
+                    path_set.insert(alias.second.native());
                 }
             }
+        
+        public:
 
-            std::unique_ptr<MapDistributorInterface> map_distributor = Factory::spawn_map_distributor(std::move(region_table_idx_map), memregion_sz);
-            return Factory::spawn_concurrent_map(std::move(map_table), std::move(map_distributor));
-        }
+            static auto make(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map,
+                            std::shared_ptr<KernelDiskIODeviceInterface> kernel_io_device,
+                            size_t memregion_sz,
+                            double ram_to_disk_ratio,
+                            size_t distribution_factor) -> std::unique_ptr<interface::ConcurrentMapInterface>{
+                
+                prereq_check(bijective_alias_map, kernel_io_device, memregion_sz, ram_to_disk_ratio, distribution_factor);
+
+                dg::vector<std::unique_ptr<MapInterface>> map_table{};
+                dg::unordered_map<fsys_ptr_t, size_t> region_table_idx_map{};
+
+                dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>> distributed_map = unifdist_map(bijective_alias_map, distribution_factor); 
+                
+                for (const auto& raw_map: distributed_map){
+                    size_t tentative_memory_node_count = raw_map.size() * ram_to_disk_ratio; //this is prolly the most problematic line
+                    size_t memory_node_count = std::max(tentative_memory_node_count, size_t{1}); 
+
+                    std::unique_ptr<MapInterface> map = Factory::spawn_map(raw_map, kernel_io_device, memregion_sz, memory_node_count);
+
+                    map_table.push_back(std::move(map));
+
+                    for (const auto& map_pair: raw_map){
+                        region_table_idx_map[std::get<0>(map_pair)] = map_table.size() - 1;
+                    }
+                }
+
+                std::unique_ptr<MapDistributorInterface> map_distributor = Factory::spawn_map_distributor(std::move(region_table_idx_map), memregion_sz);
+
+                return Factory::spawn_concurrent_map(std::move(map_table), std::move(map_distributor));
+            }
     };
 }
 
@@ -640,12 +759,17 @@ namespace dg::network_kernelmap_x_impl1{
 
     using fsys_ptr_t = dg::network_pointer::fsys_ptr_t; 
 
-    extern auto make(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map, 
+    extern auto make(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map,
+                     std::shared_ptr<interface::KernelDiskIODeviceInterface> kernel_io_device,
                      size_t memregion_sz, 
                      double ram_to_disk_ratio, 
                      size_t distribution_factor) -> std::unique_ptr<interface::ConcurrentMapInterface>{
 
-        return implementation::ConcurrentMapMake::make(bijective_alias_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
+        return implementation::ConcurrentMapMake::make(bijective_alias_map,
+                                                       kernel_io_device,
+                                                       memregion_sz,
+                                                       ram_to_disk_ratio,
+                                                       distribution_factor);
     }
 }
 

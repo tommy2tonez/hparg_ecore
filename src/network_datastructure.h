@@ -1618,7 +1618,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             
             static constexpr auto allocation_size(size_t bucket_count) noexcept -> size_type{
 
-                size_t up_ceil_bucket_count = unordered_map_variants::ceil2(bucket_count); 
+                size_t up_ceil_bucket_count = std::clamp(unordered_map_variants::ceil2(bucket_count), self::min_capacity(), self::max_capacity());
                 size_t vec_cap              = self::right_capacity_to_size(up_ceil_bucket_count);
 
                 size_t bucket_allocation_sz = up_ceil_bucket_count * sizeof(typename decltype(bucket_vec)::value_type) + alignof(typename decltype(bucket_vec)::value_type);

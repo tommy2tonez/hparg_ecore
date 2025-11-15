@@ -10,13 +10,14 @@
 #include <stdint.h>
 #include "cyclic_queue_test.h"
 #include "fsys_test.h"
+#include "kernel_map_test.h"
 
 int main(){
 
     // keyfeed_test::run();
-    kvfeed_test::run();
+    // kvfeed_test::run();
     // pow2_cyclic_queue_test::run();    
     // fileio_test::run();
-
-    map_test::run();
+    // map_test::run();
+    kernel_map_test::run();
 }

@@ -1,3 +1,6 @@
+#ifndef __FSYS_TEST_H__
+#define __FSYS_TEST_H__
+
 #include "../src/network_fileio.h"
 #include "iostream"
 #include <random>
@@ -1650,11 +1653,29 @@ namespace fileio_test{
 
     void run(){
 
-        std::string folder_path = "/home/tommy2tonez/dg_projects/dg_polyobjects/unit_tests/fsys_test_folder";
-        std::filesystem::create_directory(folder_path);
-        fileio_base_test(folder_path);
-        fileio_chksum_test(folder_path);
-        fileio_unified_test(folder_path);
-        std::filesystem::remove(folder_path);
+        std::string folder_path = std::filesystem::temp_directory_path() / "fsys_test_folder";
+
+        bool rs = std::filesystem::create_directories(folder_path);
+
+        if (!rs)
+        {
+            throw std::runtime_error("unable to create directory");
+        }
+
+        try
+        {
+            fileio_base_test(folder_path);
+            fileio_chksum_test(folder_path);
+            fileio_unified_test(folder_path);
+        }
+        catch (...)
+        {
+            std::filesystem::remove_all(folder_path);
+            throw;
+        }
+
+        std::filesystem::remove_all(folder_path);
     }
 }
+
+#endif

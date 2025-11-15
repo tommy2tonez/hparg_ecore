@@ -32,9 +32,9 @@ namespace dg{
     static inline constexpr bool is_ptr_v = true;
 
     template <class T1, class T>
-    auto pointer_cast(T) noexcept -> T1{
+    auto pointer_cast(T lhs) noexcept -> T1{
 
-        return T1{};
+        return reinterpret_cast<T1>(lhs);
     }
 
     template <class T>

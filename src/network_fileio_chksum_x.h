@@ -89,14 +89,21 @@ namespace dg::network_fileio_chksum_x{
 
             struct Bucket{
                 dg::network_datastructure::unordered_map_variants::unordered_node_map<std::string, FileHeader> fileheader_map;
-                std::mutex mtx;
+                std::unique_ptr<stdx::fair_atomic_flag> mtx;
             };
 
             using self = DistributedFileHeaderMap;
 
             static inline std::unique_ptr<Bucket[]> bucket_array = []{
 
-                return std::make_unique<Bucket[]>(MAP_SZ);
+                std::unique_ptr<Bucket[]> rs = std::make_unique<Bucket[]>(MAP_SZ);
+
+                for (size_t i = 0u; i < MAP_SZ; ++i)
+                {
+                    rs[i].mtx = stdx::make_unique_fair_atomic_flag();
+                }
+
+                return rs;
             }();
 
         public:
@@ -108,7 +115,7 @@ namespace dg::network_fileio_chksum_x{
                 size_t bucket_idx       = hashed_value % MAP_SZ;
                 auto& bucket_ptr        = self::bucket_array[bucket_idx];
 
-                stdx::xlock_guard<std::mutex> lck_grd(bucket_ptr.mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*bucket_ptr.mtx);
 
                 auto map_ptr            = bucket_ptr.fileheader_map.find(fp_key);
 
@@ -126,7 +133,7 @@ namespace dg::network_fileio_chksum_x{
                 size_t bucket_idx       = hashed_value % MAP_SZ;
                 auto& bucket_ptr        = self::bucket_array[bucket_idx];
 
-                stdx::xlock_guard<std::mutex> lck_grd(bucket_ptr.mtx);
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*bucket_ptr.mtx);
 
                 try{
                     bucket_ptr.fileheader_map[fp_key] = header;

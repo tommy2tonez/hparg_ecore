@@ -55,10 +55,18 @@ namespace dg::network_kernelmap_x{
 
     inline dg::network_kernelmap_x_impl1::interface::ConcurrentMapInterface * volatile map_instance; //we are seriously reconsidering volatile (according to git pull requests) - because memory ordering might not work as well as we expect
 
-    void init(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map, size_t memregion_sz, double ram_to_disk_ratio, size_t distribution_factor){
+    void init(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& bijective_alias_map,
+              const std::shared_ptr<dg::network_kernelmap_x_impl1::interface::KernelDiskIODeviceInterface>& kernel_io_device,
+              size_t memregion_sz,
+              double ram_to_disk_ratio,
+              size_t distribution_factor){
 
         stdx::memtransaction_guard transaction_guard;
-        auto tmp_map_instance   = dg::network_kernelmap_x_impl1::make(bijective_alias_map, memregion_sz, ram_to_disk_ratio, distribution_factor);
+        auto tmp_map_instance   = dg::network_kernelmap_x_impl1::make(bijective_alias_map,
+                                                                      kernel_io_device,
+                                                                      memregion_sz,
+                                                                      ram_to_disk_ratio,
+                                                                      distribution_factor);
         map_instance            = tmp_map_instance.get();
         tmp_map_instance.release();
     }

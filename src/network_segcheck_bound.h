@@ -57,7 +57,7 @@ namespace dg::network_segcheck_bound{
 
             static inline auto access(ptr_t ptr) noexcept -> ptr_t{
                 
-                if (memult::ptrcmp_aligned(ptr, first) < 0 || memult::ptrcmp_aligned(ptr, last) >= 0){
+                if (memult::ptrcmp(ptr, first) < 0 || memult::ptrcmp(ptr, last) >= 0){
                     dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::SEGFAULT));
                     std::abort();
                 }

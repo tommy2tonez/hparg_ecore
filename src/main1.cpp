@@ -9,6 +9,7 @@
 #include <mutex>
 #include "network_kernel_mailbox_impl1.h"
 #include "network_kernel_mailbox_impl1_x.h"
+#include "network_kernelmap_x.h"
 
 static inline std::mutex print_mtx;
 
@@ -234,6 +235,10 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 
 int main()
 {
+    {
+        dg::network_kernelmap_x::init({}, {}, {}, {}, {});
+    }
+
     {
         dg::network_concurrency::init(dg::network_concurrency::Config{
             .computing_cpu_usage = 0.1,

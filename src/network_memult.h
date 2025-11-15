@@ -23,7 +23,7 @@ namespace dg::memult{
 
     constexpr auto is_pow2(size_t val) noexcept -> bool{ //type coercion - static_assert subset - 
 
-        return val != 0u && (val & (val - 1)) == 0u; 
+        return val != 0u && (val & static_cast<size_t>(val - 1u)) == 0u; 
     }
 
     constexpr auto pow2(size_t bit_offset) noexcept -> size_t{
@@ -31,41 +31,56 @@ namespace dg::memult{
         return size_t{1} << bit_offset;
     }
 
+    constexpr auto aligned_modulo(size_t lhs, size_t rhs) -> size_t 
+    {
+        assert(is_pow2(rhs));
+
+        return lhs & (rhs - 1u);
+    }
+
+    constexpr auto aligned_round_down(size_t lhs, size_t rhs) -> size_t
+    {
+        return lhs - aligned_modulo(lhs, rhs);
+    } 
+
     template <class ptr_t>
     constexpr auto is_region(ptr_t ptr, size_t memregion_sz) noexcept -> bool{
 
-        return {}; //TODOs:
+        uintptr_t uptr = dg::pointer_cast<uintptr_t>(ptr);
+
+        return aligned_modulo(static_cast<size_t>(uptr), memregion_sz) == 0u;
     }
 
     template <class ptr_t>
     constexpr auto region(ptr_t ptr, size_t memregion_sz) noexcept -> ptr_t{
 
-        return {}; //TODOs:
+        return dg::pointer_cast<ptr_t>(reinterpret_cast<uintptr_t>(aligned_round_down(static_cast<size_t>(dg::pointer_cast<uintptr_t>(ptr)), memregion_sz)));
     }
 
     template <class ptr_t>
     constexpr auto region_offset(ptr_t ptr, size_t memregion_sz) noexcept -> size_t{
 
-        return {}; //TODOs:
+        return aligned_modulo(static_cast<size_t>(dg::pointer_cast<uintptr_t>(ptr)), memregion_sz);
     }
 
     template <class ptr_t>
     constexpr auto distance(ptr_t first, ptr_t last) noexcept -> intmax_t{
 
-        return {}; //TODOs:
+        return dg::pointer_cast<intptr_t>(last) - dg::pointer_cast<intptr_t>(first);
+    }
+
+    template <class ptr_t>
+    constexpr auto next(ptr_t ptr, intmax_t dist) noexcept -> ptr_t{
+
+        return dg::pointer_cast<ptr_t>(dg::pointer_cast<intmax_t>(ptr) + dist);
     }
 
     template <class ptr_t>
     constexpr auto advance(ptr_t ptr, intmax_t dist) noexcept -> ptr_t{ //change sematics -> byte_advance - this is too ambiguous - and potentially buggy
 
-        return {};
+        return memult::next(ptr, dist);
     }
     
-    template <class ptr_t>
-    constexpr auto next(ptr_t ptr, intmax_t dist) noexcept -> ptr_t{
-
-    }
-
     // template <class T, std::enable_if_t<std::is_fundamental_v<T>, bool> = true> //UB-check for current implementation - forced to be is_fundamental_v only - this is DEFINED in C but not in C++ 
     
     template <class T>
@@ -98,13 +113,13 @@ namespace dg::memult{
     template <class T, size_t ALIGNMENT_SZ>
     constexpr auto align(T ptr, const std::integral_constant<size_t, ALIGNMENT_SZ>) noexcept -> T{
 
-        return reinterpret_cast<T>(internal_align(reinterpret_cast<uintptr_t>(ptr), std::integral_constant<size_t, ALIGNMENT_SZ>{}));
+        return dg::pointer_cast<T>(internal_align(dg::pointer_cast<uintptr_t>(ptr), std::integral_constant<size_t, ALIGNMENT_SZ>{}));
     }
 
     template <class T>
     constexpr auto align(T ptr, size_t alignment_sz) noexcept -> T{
 
-        return {};
+        return dg::pointer_cast<T>(align(dg::pointer_cast<uintptr_t>(ptr), alignment_sz));
     }
 
     template <class T>
@@ -118,54 +133,54 @@ namespace dg::memult{
         return simd_align_val<std::max_align_t>();
     }
 
-    //TODOs: 
-    
-    // template <class T>
-    // auto badvance() noexcept -> T{
+    template <class ptr_t>
+    static constexpr auto ptrcmp(ptr_t lhs, ptr_t rhs) noexcept -> int{
 
-    // }
+        uintptr_t lhs_uptr  = dg::pointer_cast<uintptr_t>(lhs);
+        uintptr_t rhs_uptr  = dg::pointer_cast<uintptr_t>(rhs);
 
-    // template <class T, std::enable_if_t<std::is_unsigned_v<T>, bool> = true> //
-    // static constexpr auto advance_fwd(T ptr, size_t sz) noexcept -> T{
+        if (*std::launder(&lhs_uptr) < *std::launder(&rhs_uptr))
+        {
+            return -1;
+        }
 
-    //     return static_cast<T>(static_cast<size_t>(ptr) + sz);
-    // }
+        if (*std::launder(&lhs_uptr) > *std::launder(&rhs_uptr))
+        {
+            return 1;
+        }
 
-    // template <class T, std::enable_if_t<std::is_pointer_v<T>, bool> = true> //
-    // static constexpr auto advance_fwd(T ptr, size_t sz) noexcept -> T{
-
-    //     return ptr + sz;
-    // }
-
-    // template <class PtrType, std::enable_if_t<dg::is_ptr_v<PtrType>, bool> = true>
-    // static constexpr auto is_nullptr(PtrType ptr) noexcept -> bool{
-
-    //     return ptr == dg::pointer_limits<PtrType>::null_value();
-    // }
-
-    // template <class PtrType, std::enable_if_t<dg::is_ptr_v<PtrType>, bool> = true>
-    // static constexpr auto is_validptr(PtrType ptr) noexcept -> bool{
-
-    //     return ptr != dg::pointer_limits<PtrType>::null_value();
-    // }
-
-    static constexpr auto ptrcmp_aligned(...) noexcept -> int{
-
-        return {};
+        return 0;
     }
 
-    static constexpr auto ptrcmp_less_equal(...) noexcept -> bool{
+    template <class ptr_t>
+    static constexpr auto ptrcmp_less_equal(ptr_t lhs, ptr_t rhs) noexcept -> bool{
 
-        return {};
+        uintptr_t lhs_uptr  = dg::pointer_cast<uintptr_t>(lhs);
+        uintptr_t rhs_uptr  = dg::pointer_cast<uintptr_t>(rhs); 
+
+        return *std::launder(&lhs_uptr) <= *std::launder(&rhs_uptr);
     }
 
-    static constexpr auto ptrcmp_less(...) noexcept -> bool{
-        
-        return {};
+    template <class ptr_t>
+    static constexpr auto ptrcmp_equal(ptr_t lhs, ptr_t rhs) noexcept -> bool{
+
+        uintptr_t lhs_uptr  = dg::pointer_cast<uintptr_t>(lhs);
+        uintptr_t rhs_uptr  = dg::pointer_cast<uintptr_t>(rhs);  
+
+        return *std::launder(&lhs_uptr) == *std::launder(&rhs_uptr);
     }
-    
+
+    template <class ptr_t>
+    static constexpr auto ptrcmp_less(ptr_t lhs, ptr_t rhs) noexcept -> bool{
+
+        uintptr_t lhs_uptr  = dg::pointer_cast<uintptr_t>(lhs);
+        uintptr_t rhs_uptr  = dg::pointer_cast<uintptr_t>(rhs);
+
+        return *std::launder(&lhs_uptr) < *std::launder(&rhs_uptr);
+    }
+
     static inline constexpr auto ptrcmpless_lambda = []<class U, class T>(U lhs, T rhs) noexcept -> bool{
-        return true;
+        return ptrcmp_less(lhs, rhs);
     };
 }
 
