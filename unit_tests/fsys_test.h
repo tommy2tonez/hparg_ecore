@@ -61,7 +61,7 @@ namespace fileio_test{
 
     auto make_buf(size_t alignment, size_t buf_sz) -> std::shared_ptr<char[]>{
 
-        void * buf = std::aligned_alloc(alignment, buf_sz);
+        void * buf = std::aligned_alloc(alignment, std::max(buf_sz, alignment));
 
         if (buf == nullptr){
             throw std::bad_alloc();
@@ -346,7 +346,7 @@ namespace fileio_test{
                         break;
                     }
 
-                    char * ptr                  = static_cast<char *>(std::aligned_alloc(dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ, fsz));
+                    char * ptr                  = static_cast<char *>(std::aligned_alloc(dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ, std::max(fsz, dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ)));
 
                     if (!ptr){
                         std::cout << "mayday, read_binary_direct_valid unexpected aligned_alloc error" << std::endl;
@@ -383,7 +383,7 @@ namespace fileio_test{
                         break;
                     }
 
-                    char * ptr                  = static_cast<char *>(std::aligned_alloc(dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ, fsz));
+                    char * ptr                  = static_cast<char *>(std::aligned_alloc(dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ, std::max(fsz, dg::network_fileio::DG_LEAST_DIRECTIO_BLK_SZ)));
 
                     if (!ptr){
                         std::cout << "mayday, read_binary_direct_unaligned_fsz unexpected aligned_alloc error" << std::endl;
@@ -1653,7 +1653,7 @@ namespace fileio_test{
 
     void run(){
 
-        std::string folder_path = std::filesystem::temp_directory_path() / "fsys_test_folder";
+        std::string folder_path = std::filesystem::path("/home/tommy2/polyobjects/hparg_ecore/unit_tests") / "fsys_test_folder";
 
         bool rs = std::filesystem::create_directories(folder_path);
 

@@ -236,10 +236,6 @@ class SendWorker: public virtual dg::network_concurrency::WorkerInterface
 int main()
 {
     {
-        dg::network_kernelmap_x::init({}, {}, {}, {}, {});
-    }
-
-    {
         dg::network_concurrency::init(dg::network_concurrency::Config{
             .computing_cpu_usage = 0.1,
             .io_cpu_usage = 0.9,
@@ -300,10 +296,10 @@ int main()
                 .host_port_inbound = 5000,
                 .host_port_outbound = 5001,
 
-                .is_void_retransmission_controller = true,
+                .is_void_retransmission_controller = false,
                 .retransmission_delay = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)),
                 .retransmission_concurrency_sz = 1,
-                .retransmission_queue_cap = 1 << 10,
+                .retransmission_queue_cap = 1 << 20,
                 .retransmission_packet_cap = 10,
                 .retransmission_idhashset_cap = 1 << 25,
                 .retransmission_ticking_clock_resolution = 1 << 10,

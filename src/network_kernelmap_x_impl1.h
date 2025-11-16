@@ -73,7 +73,7 @@ namespace dg::network_kernelmap_x_impl1::interface{
     struct KernelDiskIODeviceInterface{
         virtual ~KernelDiskIODeviceInterface() noexcept = default;
         virtual auto read_binary(const std::filesystem::path& src, void * dst, size_t bsz) noexcept -> exception_t = 0;
-        virtual auto write_binary(const std::filesystem::path& dst, void * src, size_t bsz) noexcept -> exception_t = 0; 
+        virtual auto write_binary(const std::filesystem::path& dst, const void * src, size_t bsz) noexcept -> exception_t = 0; 
     };
 
     struct FsysLoaderInterface{
@@ -316,6 +316,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                     }
 
                     fsys_ptr_t removing_region = cand->fsys_ptr;
+
                     this->fsys_loader->unload(*cand); //unload the cache page
                     size_t rm_sz = this->allocation_dict.erase(removing_region); //evict the cache page from the allocation dict
 
@@ -339,7 +340,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
                     cand->reference += 1;
                     cand->last_modified = std::chrono::steady_clock::now();
-
+ 
                     this->heap_push_down_at(0u);
 
                     return MapResource{.node            = cand, 
@@ -482,24 +483,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
         static auto aligned_alloc_sptr(size_t alignment_sz, size_t blk_sz) -> std::shared_ptr<char[]>
         {
-            if (!dg::memult::is_pow2(alignment_sz))
-            {
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (blk_sz == 0u)
-            {
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            void * memptr = std::aligned_alloc(alignment_sz, blk_sz);
-            
-            if (memptr == nullptr)
-            {
-                dg::network_exception::throw_exception(dg::network_exception::RESOURCE_EXHAUSTION);
-            }
-
-            return std::unique_ptr<char[], decltype(&std::free)>(static_cast<char *>(memptr), std::free);
+            return dg::memult::cpp_aligned_alloc(alignment_sz, blk_sz);
         } 
 
         static auto spawn_fsys_loader(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map,
@@ -558,6 +542,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
                 node.cptr           = aligned_alloc_sptr(memregion_sz, memregion_sz);
                 node.fsys_ptr       = NULL_FSYS_PTR;
                 node.reference      = 0u;
+                node.mem_sz         = 0u;
                 node.last_modified  = std::chrono::steady_clock::now();
 
                 priority_queue.push_back(std::make_unique<HeapNode>(std::move(node)));
@@ -568,6 +553,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
             MemoryNode tmp      = {};
             tmp.cptr            = aligned_alloc_sptr(memregion_sz, memregion_sz);
             tmp.fsys_ptr        = NULL_FSYS_PTR;
+            tmp.mem_sz          = 0u;
 
             auto lck            = stdx::make_unique_fair_atomic_flag();
 

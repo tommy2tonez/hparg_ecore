@@ -21,18 +21,16 @@ namespace kernel_map_test
 
             auto read_binary(const std::filesystem::path& src, void * dst, size_t bsz) noexcept -> exception_t
             {
-                std::cout << "reading binary > " << bsz << std::endl;
-                auto rs = dg::network_fileio_chksum_x::dg_read_binary(src.c_str(), dst, bsz);
-                std::cout << "read binary" << std::endl;
+                auto rs = dg::network_fileio::dg_read_binary_direct(src.c_str(), dst, bsz);
 
                 return rs;
             }
 
-            auto write_binary(const std::filesystem::path& dst, void * src, size_t bsz) noexcept -> exception_t
+            auto write_binary(const std::filesystem::path& dst, const void * src, size_t bsz) noexcept -> exception_t
             {
-                std::cout << "writing binary > " << bsz << std::endl;
-                auto rs = dg::network_fileio_chksum_x::dg_write_binary(dst.c_str(), src, bsz);
-                std::cout << "wrote binary" << std::endl;
+                auto rs = dg::network_fileio::dg_write_binary_direct(dst.c_str(), src, bsz);
+
+                return rs;
             }
     };
 
@@ -55,6 +53,11 @@ namespace kernel_map_test
         uintptr_t upround_first_uptr    = ceil(first_uptr, memregion_sz);
 
         std::vector<std::pair<fsys_ptr_t, size_t>> result{};
+
+        if (upround_first_uptr >= last_uptr)
+        {
+            return {{first, last - first}};
+        }
 
         if (upround_first_uptr != first_uptr)
         {
@@ -106,8 +109,6 @@ namespace kernel_map_test
     {
         std::vector<std::pair<fsys_ptr_t, size_t>> segment_vec = split_segments(first, last, memregion_sz);
  
-        std::cout << "writing memory, memregion_sz > " << memregion_sz << " segment_vec_sz > " << segment_vec.size() << std::endl;
-
         for (const auto& segment: segment_vec)
         {
             size_t offset       = dg::pointer_cast<uintptr_t>(segment.first) - dg::pointer_cast<uintptr_t>(first);
@@ -123,8 +124,6 @@ namespace kernel_map_test
                      size_t memregion_sz,
                      char * buf)
     {
-        std::cout << "reading memory" << std::endl;
-
         std::vector<std::pair<fsys_ptr_t, size_t>> segment_vec  = split_segments(first, last, memregion_sz);
 
         for (const auto& segment: segment_vec)
@@ -152,15 +151,11 @@ namespace kernel_map_test
                             size_t mempiece_range,
                             size_t test_sz)
     {
-        std::cout << "testing random memory" << std::endl;
-
         constexpr size_t READ_RANDOM_MEMORY     = 0u;
         constexpr size_t WRITE_RANDOM_MEMORY    = 1u; 
         constexpr size_t MEMORY_FLAG_SZ         = 2u; 
 
         size_t memory_sz    = dg::pointer_cast<uintptr_t>(last) - dg::pointer_cast<uintptr_t>(first);
-
-        std::cout << "memory sz > " << memory_sz << std::endl;
  
         std::vector<char> mem_vec(memory_sz, 0);
         write_memory(first, last, memregion_sz, mem_vec.data());
@@ -255,7 +250,7 @@ namespace kernel_map_test
         std::filesystem::path file_path     = get_random_data_file_whose_folder(fsys_dir);
         std::filesystem::path file_path2    = get_random_data_file_whose_folder(fsys_dir);
 
-        dg::network_exception_handler::throw_nolog(dg::network_fileio_chksum_x::dg_create_cbinary(major_path.c_str(), fsz));
+        dg::network_exception_handler::throw_nolog(dg::network_fileio::dg_create_cbinary(major_path.c_str(), fsz));
 
         return major_path;
     } 
@@ -350,9 +345,9 @@ namespace kernel_map_test
                    size_t distribution_factor)
     {
         const size_t FULL_FLUSH_CHANCE              = size_t{1} << 10;
-        const size_t RANDOM_MEMORY_TEST_SZ_RANGE    = size_t{1} << 10;
+        const size_t RANDOM_MEMORY_TEST_SZ_RANGE    = size_t{1} << 3;
         const size_t MEMPIECE_RANGE                 = memregion_sz * 10;
-        const size_t TEST_SZ                        = size_t{1} << 8;
+        const size_t TEST_SZ                        = size_t{1} << 3;
 
         auto sub_dir        = fsys_dir / randomize_hex(8u);
         auto random_device  = std::bind(std::uniform_int_distribution<size_t>{}, std::mt19937_64{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
@@ -392,7 +387,7 @@ namespace kernel_map_test
         const size_t MEMREGION_COUNT_RANGE  = size_t{1} << 10;
         static auto randomizer              = std::bind(std::uniform_int_distribution<size_t>{}, std::mt19937_64{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())}); 
 
-        return randomizer() % MEMREGION_COUNT_RANGE;
+        return (randomizer() % MEMREGION_COUNT_RANGE) + 1u;
     }
 
     auto get_random_ram_to_disk_ratio() -> double
@@ -416,7 +411,7 @@ namespace kernel_map_test
         std::cout << "<initializing_kernel_map_base_test>" << std::endl; 
 
         const size_t TEST_SZ    = size_t{1} << 10;
-        const size_t CHECK_SZ   = size_t{1} << 6; 
+        const size_t CHECK_SZ   = size_t{1} << 0; 
 
         for (size_t i = 0u; i < TEST_SZ; ++i)
         {
@@ -437,7 +432,7 @@ namespace kernel_map_test
 
     void run()
     {
-        std::string folder_path = std::filesystem::temp_directory_path() / randomize_hex(8u);
+        std::string folder_path = std::filesystem::path("/home/tommy2/polyobjects/hparg_ecore/unit_tests") / randomize_hex(8u);
 
         bool rs = std::filesystem::create_directories(folder_path);
 

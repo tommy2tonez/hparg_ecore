@@ -179,6 +179,30 @@ namespace dg::memult{
         return *std::launder(&lhs_uptr) < *std::launder(&rhs_uptr);
     }
 
+    static auto cpp_aligned_alloc(size_t alignment_sz, size_t blk_sz) -> std::shared_ptr<char[]>
+    {
+        if (!dg::memult::is_pow2(alignment_sz))
+        {
+            throw std::runtime_error("bad alignment");
+        }
+
+        if (blk_sz == 0u)
+        {
+            return nullptr;
+        }
+
+        size_t allocation_sz    = blk_sz + alignment_sz;
+        char * mem              = new char[allocation_sz];
+        char * ret_mem          = align(mem, alignment_sz); 
+
+        auto destructor         = [mem](char *) noexcept
+        {
+            delete[] mem;
+        };
+
+        return std::unique_ptr<char[], decltype(destructor)>(ret_mem, destructor);
+    } 
+
     static inline constexpr auto ptrcmpless_lambda = []<class U, class T>(U lhs, T rhs) noexcept -> bool{
         return ptrcmp_less(lhs, rhs);
     };

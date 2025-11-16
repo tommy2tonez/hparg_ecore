@@ -10,7 +10,7 @@
 #include "network_exception.h"
 #include "network_log.h"
 #include "network_concurrency.h"
-#include <stacktrace>
+// #include <stacktrace>
 
 namespace dg::network_kernel_allocator
 {

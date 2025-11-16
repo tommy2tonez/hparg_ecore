@@ -1846,6 +1846,10 @@ namespace dg::network_datastructure::unordered_map_variants{
                 if (swapping_reference == key_reference) [[unlikely]]{
                     *key_reference = this->virtual_storage_vec[*key_reference].nxt_addr;
                 } else [[likely]]{
+                    if (swapping_reference == &this->virtual_storage_vec[*key_reference].nxt_addr) [[unlikely]]{
+                        swapping_reference = key_reference;
+                    }
+
                     *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[*key_reference].nxt_addr); 
                     dg_restrict_swap_for_destroy(&this->virtual_storage_vec[*swapping_reference], &this->virtual_storage_vec.back());
                 }
@@ -2840,15 +2844,13 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.back().key);
 
-                //this is probably confusing 
-                //because key_reference == swapping_reference => *key_reference == *swapping_reference => removing bucket is the back bucket => we would attempt to move the key_reference -> the next guy
-                //if it is otherwise (they are pointing to two different valid buckets, due to the bijectiveness (bucket_addr <-> bucker_reference_addr or unique_ptr) of bucket definition), we'd attempt to move the chain to the next guy, the bucket is now a resource to be deallocated, we'd attempt to swap the bucket to the back bucket, and take care of the business there
-                    //the only guy the that was affected is the guy pointing to the back bucket, which we'd now point to the "supposedly deallocated" bucket 
-                    //because the resource is moved there, we wont even notice if that was changed
-
                 if (swapping_reference == key_reference){
                     *key_reference = this->virtual_storage_vec[*key_reference].nxt_addr;
                 } else{
+                    if (swapping_reference == &this->virtual_storage_vec[*key_reference].nxt_addr) [[unlikely]]{
+                        swapping_reference = key_reference;
+                    }
+
                     *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[*key_reference].nxt_addr);
                     dg_restrict_swap_for_destroy(&this->virtual_storage_vec[*swapping_reference], &this->virtual_storage_vec.back());
                 }
