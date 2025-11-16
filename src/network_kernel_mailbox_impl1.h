@@ -595,6 +595,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             virtual ~RetransmissionControllerInterface() noexcept = default;
             virtual void add_retriables(std::move_iterator<Packet *>, size_t, exception_t *) noexcept = 0;
             virtual void ack(global_packet_id_t *, size_t, exception_t *) noexcept = 0;
+
+            //assume that we have a hard cap at 100, actual cap at 130, and 10 concurrent worker pulling 1, it's impossible for the container to exceed 110 at any given time, because 111 - 100 == 11 => at least 1 worker push 2 times, worker has to see his previous transaction which is a contradiction
+            virtual void reentrant_add_retriables(std::move_iterator<Packet *>, size_t, exception_t *) noexcept = 0;
             virtual void get_retriables(Packet *, size_t&, size_t) noexcept = 0;
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
@@ -3302,6 +3305,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
             }
 
+            void reentrant_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+            }
+
             void ack(global_packet_id_t * id_arr, size_t id_arr_sz, exception_t * exception_arr) noexcept
             {
                 std::fill(exception_arr, std::next(exception_arr, id_arr_sz), dg::network_exception::SUCCESS);
@@ -3328,6 +3336,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator;
             size_t ticking_clock_resolution;
             size_t max_retransmission_sz;
+            size_t retriable_pkt_map_cap;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
@@ -3338,16 +3347,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                     std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator,
                                                     size_t ticking_clock_resolution,
                                                     size_t max_retransmission_sz,
+                                                    size_t retriable_pkt_map_cap,
                                                     std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                                     size_t consume_sz_per_load): pkt_map(std::move(pkt_map)),
                                                                                  acked_id_hashset(std::move(acked_id_hashset)),
                                                                                  delay_negotiator(std::move(delay_negotiator)),
                                                                                  ticking_clock_resolution(ticking_clock_resolution),
                                                                                  max_retransmission_sz(max_retransmission_sz),
+                                                                                 retriable_pkt_map_cap(retriable_pkt_map_cap),
                                                                                  mtx(std::move(mtx)),
                                                                                  consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
 
-            void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void internal_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr, size_t map_cap) noexcept{
 
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
@@ -3379,7 +3390,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         continue;
                     }
 
-                    if (this->pkt_map.size() == this->pkt_map.capacity()){
+                    if (this->pkt_map.size() >= map_cap){
                         exception_arr[i] = dg::network_exception::SOCKET_QUEUE_FULL;
                         continue;
                     }
@@ -3396,6 +3407,16 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                     exception_arr[i] = dg::network_exception::SUCCESS;
                 }
+            }
+
+            void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                this->internal_add_retriables(pkt_arr, sz, exception_arr, std::min(this->retriable_pkt_map_cap, this->pkt_map.capacity()));
+            }
+
+            void reentrant_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                this->internal_add_retriables(pkt_arr, sz, exception_arr, this->pkt_map.capacity());
             }
 
             void ack(global_packet_id_t * id_arr, size_t id_arr_sz, exception_t * exception_arr) noexcept{
@@ -3454,6 +3475,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             std::chrono::nanoseconds transmission_delay_time;
             size_t max_retransmission_sz;
             size_t pkt_deque_capacity;
+            size_t retriable_pkt_map_cap;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
@@ -3464,16 +3486,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                      std::chrono::nanoseconds transmission_delay_time,
                                      size_t max_retransmission_sz,
                                      size_t pkt_deque_capacity,
+                                     size_t retriable_pkt_map_cap,
                                      std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                      stdx::hdi_container<size_t> consume_sz_per_load) noexcept: pkt_deque(std::move(pkt_deque)),
                                                                                                 acked_id_hashset(std::move(acked_id_hashset)),
                                                                                                 transmission_delay_time(transmission_delay_time),
                                                                                                 max_retransmission_sz(max_retransmission_sz),
                                                                                                 pkt_deque_capacity(pkt_deque_capacity),
+                                                                                                retriable_pkt_map_cap(retriable_pkt_map_cap),
                                                                                                 mtx(std::move(mtx)),
                                                                                                 consume_sz_per_load(std::move(consume_sz_per_load)){}
 
-            void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
+            void internal_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr, size_t map_cap) noexcept{
 
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
@@ -3488,7 +3512,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 Packet * base_pkt_arr   = pkt_arr.base(); 
 
                 for (size_t i = 0u; i < sz; ++i){
-                    if (this->pkt_deque.size() == this->pkt_deque_capacity){
+                    if (this->pkt_deque.size() >= map_cap){
                         exception_arr[i] = dg::network_exception::SOCKET_QUEUE_FULL;
                         continue;
                     }
@@ -3506,6 +3530,16 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     dg::network_exception_handler::nothrow_log(this->pkt_deque.push_back(std::move(queued_pkt)));
                     exception_arr[i]                    = dg::network_exception::SUCCESS;
                 }
+            }
+
+            void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                this->internal_add_retriables(pkt_arr, sz, exception_arr, std::min(this->retriable_pkt_map_cap, this->pkt_deque.capacity()));
+            }
+
+            void reentrant_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                this->internal_add_retriables(pkt_arr, sz, exception_arr, this->pkt_deque.capacity());
             }
 
             void ack(global_packet_id_t * pkt_id_arr, size_t sz, exception_t * exception_arr) noexcept{
@@ -3626,6 +3660,11 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 this->executor->exec(virtual_task);
             }
 
+            void reentrant_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                this->base->reentrant_add_retriables(pkt_arr, sz, exception_arr);
+            }
+
             void ack(global_packet_id_t * packet_id_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 this->base->ack(packet_id_arr, sz, exception_arr);
@@ -3681,6 +3720,34 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                     size_t partitioned_idx          = hashed & (this->pow2_retransmission_controller_vec_sz - 1u);
 
                     auto delivery_argument          = InternalRetriableDeliveryArgument{};
+                    delivery_argument.pkt           = std::move(base_pkt_arr[i]);
+                    delivery_argument.fallback_pkt  = std::next(base_pkt_arr, i);
+                    delivery_argument.exception_ptr = std::next(exception_arr, i);
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(deliverer.get(), partitioned_idx, std::move(delivery_argument));
+                }
+            }
+
+            void reentrant_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                Packet * base_pkt_arr                       = pkt_arr.base();
+
+                auto internal_resolutor                     = InternalReentrantRetriableDeliveryResolutor{};
+                internal_resolutor.dst_vec                  = this->retransmission_controller_vec.get();
+
+                size_t trimmed_keyvalue_aggregation_cap     = std::min(this->keyvalue_aggregation_cap, sz);
+                size_t deliverer_allocation_cost            = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_keyvalue_aggregation_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> deliverer_mem(deliverer_allocation_cost);
+                auto deliverer                              = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&internal_resolutor, trimmed_keyvalue_aggregation_cap, deliverer_mem.get()));
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+
+                for (size_t i = 0u; i < sz; ++i)
+                {
+                    size_t hashed                   = dg::network_hash::hash_reflectible(base_pkt_arr[i].id);
+                    size_t partitioned_idx          = hashed & (this->pow2_retransmission_controller_vec_sz - 1u);
+
+                    auto delivery_argument          = InternalReentrantRetriableDeliveryArgument{};
                     delivery_argument.pkt           = std::move(base_pkt_arr[i]);
                     delivery_argument.fallback_pkt  = std::next(base_pkt_arr, i);
                     delivery_argument.exception_ptr = std::next(exception_arr, i);
@@ -3772,6 +3839,42 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 }
             };
 
+            struct InternalReentrantRetriableDeliveryArgument
+            {
+                Packet pkt;
+                Packet * fallback_pkt;
+                exception_t * exception_ptr;
+            };
+
+            struct InternalReentrantRetriableDeliveryResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, InternalReentrantRetriableDeliveryArgument>
+            {
+                std::unique_ptr<RetransmissionControllerInterface> * dst_vec;
+
+                void push(const size_t& idx, std::move_iterator<InternalReentrantRetriableDeliveryArgument *> data_arr, size_t sz) noexcept
+                {
+                    dg::network_stack_allocation::NoExceptAllocation<Packet[]> pkt_arr(sz);
+                    dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
+
+                    InternalReentrantRetriableDeliveryArgument * base_data_arr = data_arr.base();
+
+                    for (size_t i = 0u; i < sz; ++i)
+                    {
+                        pkt_arr[i] = std::move(base_data_arr[i].pkt);
+                    }
+
+                    this->dst_vec[idx]->reentrant_add_retriables(std::make_move_iterator(pkt_arr.get()), sz, exception_arr.get());
+
+                    for (size_t i = 0u; i < sz; ++i)
+                    {
+                        if (dg::network_exception::is_failed(exception_arr[i]))
+                        {
+                            *base_data_arr[i].fallback_pkt  = std::move(pkt_arr[i]);
+                            *base_data_arr[i].exception_ptr = exception_arr[i];
+                        }
+                    }
+                }
+            };
+            
             struct InternalAckDeliveryArgument{
                 global_packet_id_t pkt_id;
                 exception_t * exception_ptr;
@@ -3823,6 +3926,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept{
 
                 this->base->add_retriables(pkt_arr, sz, exception_arr);
+                size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+                this->reactor->increment(thru_sz);
+            }
+
+            void reentrant_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                this->base->reentrant_add_retriables(pkt_arr, sz, exception_arr);
                 size_t thru_sz = std::count(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
                 this->reactor->increment(thru_sz);
             }
@@ -6072,6 +6182,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                    std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator,
                                                                    size_t ticking_clock_resolution,
                                                                    size_t max_retransmission_sz,
+                                                                   size_t retriable_pkt_map_cap,
                                                                    size_t consume_factor = 4u) -> std::unique_ptr<RetransmissionControllerInterface>{
         
             const size_t MIN_PKT_MAP_CAPACITY           = 0u;
@@ -6082,6 +6193,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MAX_TICKING_CLOCK_RESOLUTION   = size_t{1} << 30;
             const size_t MIN_MAX_RETRANSMISSION_SZ      = 0u;
             const size_t MAX_MAX_RETRANSMISSION_SZ      = 256u;
+            const size_t MIN_RETRIABLE_PKT_MAP_CAP      = 1u;
+            const size_t MAX_RETRIABLE_PKT_MAP_CAP      = size_t{1} << 30;
 
             if (std::clamp(pkt_map_capacity, MIN_PKT_MAP_CAPACITY, MAX_PKT_MAP_CAPACITY) != pkt_map_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -6103,6 +6216,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(retriable_pkt_map_cap, MIN_RETRIABLE_PKT_MAP_CAP, MAX_RETRIABLE_PKT_MAP_CAP) != retriable_pkt_map_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             size_t tentative_pkt_map_consume_sz     = pkt_map_capacity >> consume_factor;
             size_t tentative_acked_set_consume_sz   = acked_set_capacity >> consume_factor;
             size_t consume_sz                       = std::max(std::min(tentative_pkt_map_consume_sz, tentative_acked_set_consume_sz), size_t{1u});
@@ -6112,6 +6229,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                              std::move(delay_negotiator),
                                                                              ticking_clock_resolution,
                                                                              max_retransmission_sz,
+                                                                             retriable_pkt_map_cap,
                                                                              stdx::make_unique_fair_atomic_flag(),
                                                                              consume_sz);
         }
@@ -6120,6 +6238,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                   size_t max_retransmission_sz, 
                                                   size_t idhashset_cap, 
                                                   size_t retransmission_queue_cap,
+                                                  size_t retriable_pkt_map_cap,
                                                   size_t consume_factor = 4u) -> std::unique_ptr<RetransmissionControllerInterface>{
 
             using namespace std::chrono_literals; 
@@ -6132,6 +6251,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MAX_IDHASHSET_CAP              = size_t{1} << 25; 
             const size_t MIN_RETRANSMISSION_QUEUE_CAP   = 1u;
             const size_t MAX_RETRANSMISSION_QUEUE_CAP   = size_t{1} << 25; 
+            const size_t MIN_RETRIABLE_PKT_MAP_CAP      = 1u;
+            const size_t MAX_RETRIABLE_PKT_MAP_CAP      = size_t{1} << 30;
 
             if (std::clamp(transmission_delay, MIN_DELAY, MAX_DELAY) != transmission_delay){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -6149,6 +6270,10 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(retriable_pkt_map_cap, MIN_RETRIABLE_PKT_MAP_CAP, MAX_RETRIABLE_PKT_MAP_CAP) != retriable_pkt_map_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             size_t tentative_retransmission_consume_sz  = retransmission_queue_cap >> consume_factor;
             size_t tentative_idhashset_consume_sz       = idhashset_cap >> consume_factor; 
             size_t consume_sz                           = std::max(std::min(tentative_retransmission_consume_sz, tentative_idhashset_consume_sz), size_t{1u});
@@ -6158,6 +6283,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                               transmission_delay,
                                                               max_retransmission_sz,
                                                               retransmission_queue_cap,
+                                                              retriable_pkt_map_cap,
                                                               stdx::make_unique_fair_atomic_flag(),
                                                               stdx::hdi_container<size_t>{consume_sz});
         }
@@ -7342,7 +7468,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                         }
                     }
 
-                    this->retransmit_dst->add_retriables(std::make_move_iterator(cpy_packet_arr.get()), sz, exception_arr.get());
+                    this->retransmit_dst->reentrant_add_retriables(std::make_move_iterator(cpy_packet_arr.get()), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
@@ -8905,13 +9031,13 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
-            for (size_t i = 0u; i < num_kernel_rescue_worker; ++i){
-                auto worker_ins     = worker::ComponentFactory::get_kernel_rescue_worker(ob_packet_container_sp, rescue_post_sp, krescue_packet_generator_sp, 
-                                                                                         rescue_dispatch_threshold, rescue_packet_sz);
+            // for (size_t i = 0u; i < num_kernel_rescue_worker; ++i){
+            //     auto worker_ins     = worker::ComponentFactory::get_kernel_rescue_worker(ob_packet_container_sp, rescue_post_sp, krescue_packet_generator_sp, 
+            //                                                                              rescue_dispatch_threshold, rescue_packet_sz);
 
-                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
-                daemon_vec.emplace_back(std::move(daemon_handle));
-            }
+            //     auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
+            //     daemon_vec.emplace_back(std::move(daemon_handle));
+            // }
 
             for (size_t i = 0u; i < num_retry_worker; ++i){
                 auto worker_ins     = worker::ComponentFactory::get_retransmission_worker(retransmission_controller_sp, ob_packet_container_sp, retransmission_consumption_cap,
@@ -9007,6 +9133,7 @@ namespace dg::network_kernel_mailbox_impl1{
         std::chrono::nanoseconds retransmission_delay;
         uint32_t retransmission_concurrency_sz;
         uint32_t retransmission_queue_cap;
+        uint32_t retransmission_user_queue_cap;
         uint32_t retransmission_packet_cap;
         uint32_t retransmission_idhashset_cap;
         uint32_t retransmission_ticking_clock_resolution;
@@ -9321,7 +9448,8 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                                                                                                                             config.retransmission_idhashset_cap,
                                                                                                                                                                                                             packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
                                                                                                                                                                                                             config.retransmission_ticking_clock_resolution,
-                                                                                                                                                                                                            config.retransmission_packet_cap),
+                                                                                                                                                                                                            config.retransmission_packet_cap,
+                                                                                                                                                                                                            config.retransmission_user_queue_cap),
                                                                                                                         config.retry_device,
                                                                                                                         packet_controller::ComponentFactory::get_default_exhaustion_controller());
                     }
@@ -9330,7 +9458,8 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                                config.retransmission_idhashset_cap,
                                                                                                                packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
                                                                                                                config.retransmission_ticking_clock_resolution,
-                                                                                                               config.retransmission_packet_cap);
+                                                                                                               config.retransmission_packet_cap,
+                                                                                                               config.retransmission_user_queue_cap);
                 }
 
                 std::vector<std::unique_ptr<packet_controller::RetransmissionControllerInterface>> retransmission_controller_vec{};
@@ -9343,7 +9472,8 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                                                                                                                                                          config.retransmission_idhashset_cap,
                                                                                                                                                                                                                                          packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
                                                                                                                                                                                                                                          config.retransmission_ticking_clock_resolution,
-                                                                                                                                                                                                                                         config.retransmission_packet_cap),
+                                                                                                                                                                                                                                         config.retransmission_packet_cap,
+                                                                                                                                                                                                                                         config.retransmission_user_queue_cap),
                                                                                                                                                      config.retry_device,
                                                                                                                                                      packet_controller::ComponentFactory::get_default_exhaustion_controller()); 
                     } else{
@@ -9351,7 +9481,8 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                                                                 config.retransmission_idhashset_cap,
                                                                                                                                                 packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
                                                                                                                                                 config.retransmission_ticking_clock_resolution,
-                                                                                                                                                config.retransmission_packet_cap);
+                                                                                                                                                config.retransmission_packet_cap,
+                                                                                                                                                config.retransmission_user_queue_cap);
                     }
 
                     retransmission_controller_vec.push_back(std::move(current_retransmission_controller));
