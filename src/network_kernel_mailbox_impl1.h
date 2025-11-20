@@ -404,9 +404,9 @@ namespace dg::network_kernel_mailbox_impl1::constants{
         krescue = 2u
     };
 
-    static inline constexpr size_t MAXIMUM_MSG_SIZE                     = size_t{1} << 12;
+    static inline constexpr size_t MAXIMUM_MSG_SIZE                     = size_t{1} << 10;
     static inline constexpr size_t MAX_REQUEST_PACKET_CONTENT_SIZE      = size_t{1} << 9;
-    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 4;
+    static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 2;
     static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
     static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 10;
     static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 8;
@@ -2137,14 +2137,13 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                 this->erase_heap_node_at(idx);
             }
 
-            auto get_expired_packet(std::chrono::nanoseconds expiry_window) noexcept -> std::optional<Packet>{
+            auto get_expired_packet(std::chrono::time_point<std::chrono::utc_clock> time_bar) noexcept -> std::optional<Packet>{
 
                 if (this->temporal_heap_sz == 0u){
                     return std::nullopt;
                 }
 
                 std::unique_ptr<HeapNode>& front_value = this->temporal_heap.front();
-                std::chrono::time_point<std::chrono::utc_clock> time_bar = std::chrono::utc_clock::now() - expiry_window;
 
                 if (front_value->sched_time >= time_bar){
                     return std::nullopt;
@@ -2159,14 +2158,13 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
                 return std::optional<Packet>(std::move(result));
             }
 
-            auto has_expired_packet(std::chrono::nanoseconds expiry_window) const noexcept -> bool{
+            auto has_expired_packet(std::chrono::time_point<std::chrono::utc_clock> time_bar) const noexcept -> bool{
 
                 if (this->temporal_heap_sz == 0u){
                     return false;
                 }
 
                 const std::unique_ptr<HeapNode>& front_value = this->temporal_heap.front();
-                std::chrono::time_point<std::chrono::utc_clock> time_bar = std::chrono::utc_clock::now() - expiry_window;
 
                 if (front_value->sched_time >= time_bar){
                     return false;
@@ -2343,7 +2341,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_service{
     //this passes code review, we are to not worry about allocations dg::string uses a special no-fragmenented finite pool of heap memory that's never gonna run out
     //packet_polymorphic_t is no-optional because we adhere to the virtues, it's better that way
 
-    static inline constexpr uint32_t REQUEST_PACKET_SERIALIZATION_SECRET    = static_cast<uint32_t>(0xF) - 1u;
+    static inline constexpr uint32_t REQUEST_PACKET_SERIALIZATION_SECRET    = 3130801039UL;
     static inline constexpr uint32_t ACK_PACKET_SERIALIZATION_SECRET        = static_cast<uint32_t>(0xFF) - 1u;
     static inline constexpr uint32_t KRESCUE_PACKET_SERIALIZATION_SECRET    = static_cast<uint32_t>(0xFFF) - 1u;
 
@@ -3443,13 +3441,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                 output_arr_sz = 0u;
+                std::chrono::time_point<std::chrono::utc_clock> time_bar = std::chrono::utc_clock::now();
 
                 while (true){
                     if (output_arr_sz == output_arr_cap){
                         return;
                     }
 
-                    std::optional<Packet> nxt = this->pkt_map.get_expired_packet(std::chrono::nanoseconds(0));
+                    std::optional<Packet> nxt = this->pkt_map.get_expired_packet(time_bar);
 
                     if (!nxt.has_value()){
                         return;
@@ -7311,7 +7310,15 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                         auto mailchimp_arg      = InternalMailChimpArgument{};
                         Address to_addr         = packet_arr[i].to_addr;
-                        mailchimp_arg.content   = dg::network_exception_handler::nothrow_log(packet_service::serialize_packet(std::move(packet_arr[i])));
+
+                        std::expected<internal_kernel_buffer, exception_t> serialized_buffer = packet_service::serialize_packet(std::move(packet_arr[i]));
+                        
+                        if (!serialized_buffer.has_value()){
+                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(serialized_buffer.error()));
+                            continue;
+                        }
+
+                        mailchimp_arg.content   = std::move(serialized_buffer.value());
 
                         dg::network_producer_consumer::delvrsrv_kv_deliver(mailchimp_deliverer.get(), to_addr, std::move(mailchimp_arg));
                     }
@@ -8549,6 +8556,11 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
                 MailBoxArgument * base_data_arr                     = data_arr;
 
+                dg::network_stack_allocation::NoExceptAllocation<RequestPacket[]> request_pkt_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<RequestPacket[]> retry_pkt_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<size_t[]> idx_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> request_exception_arr(sz);
+
                 auto internal_deliverer                             = InternalOBDeliverer{};
                 internal_deliverer.ob_packet_container              = this->ob_packet_container.get();
                 internal_deliverer.retransmission_deliverer         = retransmission_tmp_deliverer.get();
@@ -8557,11 +8569,6 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 size_t ob_deliverer_allocation_cost                 = dg::network_producer_consumer::delvrsrv_allocation_cost(&internal_deliverer, trimmed_ob_delivery_sz);
                 dg::network_stack_allocation::NoExceptRawAllocation<char[]> ob_deliverer_mem(ob_deliverer_allocation_cost);
                 auto ob_deliverer                                   = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&internal_deliverer, trimmed_ob_delivery_sz, ob_deliverer_mem.get()));
-
-                dg::network_stack_allocation::NoExceptAllocation<RequestPacket[]> request_pkt_arr(sz);
-                dg::network_stack_allocation::NoExceptAllocation<RequestPacket[]> retry_pkt_arr(sz);
-                dg::network_stack_allocation::NoExceptAllocation<size_t[]> idx_arr(sz);
-                dg::network_stack_allocation::NoExceptAllocation<exception_t[]> request_exception_arr(sz);
 
                 size_t thru_sz = 0u; 
                 std::fill(request_exception_arr.get(), std::next(request_exception_arr.get(), sz), dg::network_exception::SUCCESS);
@@ -9031,13 +9038,13 @@ namespace dg::network_kernel_mailbox_impl1::core{
                 daemon_vec.emplace_back(std::move(daemon_handle));
             }
 
-            // for (size_t i = 0u; i < num_kernel_rescue_worker; ++i){
-            //     auto worker_ins     = worker::ComponentFactory::get_kernel_rescue_worker(ob_packet_container_sp, rescue_post_sp, krescue_packet_generator_sp, 
-            //                                                                              rescue_dispatch_threshold, rescue_packet_sz);
+            for (size_t i = 0u; i < num_kernel_rescue_worker; ++i){
+                auto worker_ins     = worker::ComponentFactory::get_kernel_rescue_worker(ob_packet_container_sp, rescue_post_sp, krescue_packet_generator_sp, 
+                                                                                         rescue_dispatch_threshold, rescue_packet_sz);
 
-            //     auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
-            //     daemon_vec.emplace_back(std::move(daemon_handle));
-            // }
+                auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
+                daemon_vec.emplace_back(std::move(daemon_handle));
+            }
 
             for (size_t i = 0u; i < num_retry_worker; ++i){
                 auto worker_ins     = worker::ComponentFactory::get_retransmission_worker(retransmission_controller_sp, ob_packet_container_sp, retransmission_consumption_cap,
