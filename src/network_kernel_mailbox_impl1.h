@@ -408,7 +408,7 @@ namespace dg::network_kernel_mailbox_impl1::constants{
     static inline constexpr size_t MAX_REQUEST_PACKET_CONTENT_SIZE      = size_t{1} << 9;
     static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 2;
     static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
-    static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 10;
+    static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 0;
     static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 8;
 
     static inline constexpr int KERNEL_NOBLOCK_TRANSMISSION_FLAG        = MSG_DONTROUTE | MSG_DONTWAIT;
@@ -2021,6 +2021,178 @@ namespace dg::network_kernel_mailbox_impl1::data_structure{
     using namespace dg::network_kernel_mailbox_impl1::model;
 
     struct pow2_initialization_tag{}; 
+
+    template <class Key>
+    class bloom_filter{
+
+        private:
+
+            dg::vector<bool> bloom_table;
+            dg::vector<uint32_t> murmur_hash_secret_vec;
+            size_t sz;
+
+        public:
+
+            bloom_filter(size_t bloom_table_tentative_cap, size_t rehash_sz){
+
+                if (rehash_sz == 0u){
+                    throw std::invalid_argument("bad bloom_filter constructor's arguments");
+                }
+
+                size_t upcap    = stdx::ceil2(bloom_table_tentative_cap);
+                auto rand_gen   = std::bind(std::uniform_int_distribution<uint32_t>{}, std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
+                this->sz        = 0u; 
+
+                this->bloom_table               = dg::vector<bool>();
+                this->bloom_table.resize(upcap, false);
+
+                this->murmur_hash_secret_vec    = dg::vector<uint32_t>(rehash_sz);
+                std::generate(this->murmur_hash_secret_vec.begin(), this->murmur_hash_secret_vec.end(), rand_gen);
+            }
+
+            auto not_contains(const Key& key) const noexcept -> bool{ //bloom filter only works for not_contains, true negative, so the interface should be built on such, not not contains does not equal to contains, logically speaking it is, yet we are returning false if we cant determine the result
+
+                for (uint32_t secret: this->murmur_hash_secret_vec){
+                    size_t hashed_value = dg::network_hash::hash_reflectible(key, secret);
+
+                    if (!this->internal_numerical_key_search(hashed_value)){
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            void insert(const Key& key) noexcept{
+
+                for (uint32_t secret: this->murmur_hash_secret_vec){
+                    size_t hashed_value = dg::network_hash::hash_reflectible(key, secret);
+                    this->internal_numerical_key_insert(hashed_value);
+                }
+
+                this->sz += 1;
+            }
+
+            void clear() noexcept{
+
+                std::fill(this->bloom_table.begin(), this->bloom_table.end(), false);
+                this->sz = 0u;
+            }
+
+            auto size() const noexcept{
+
+                return this->sz;
+            }
+
+            auto capacity() const noexcept{
+
+                return this->bloom_table.size();
+            }
+
+        private:
+
+            auto to_idx(size_t key) const noexcept -> size_t{
+
+                return key & static_cast<size_t>(this->bloom_table.size() - 1u);
+            } 
+
+            auto internal_numerical_key_search(size_t key) const noexcept -> bool{
+
+                return this->bloom_table[this->to_idx(key)];
+            }
+
+            void internal_numerical_key_insert(size_t key) noexcept{
+
+                this->bloom_table[this->to_idx(key)] = true;
+            }
+    };
+
+    template <class Key>
+    class temporal_switching_bloom_filter{
+
+        private:
+
+            static inline constexpr uint8_t LEFT_SIDE   = 0u;
+            static inline constexpr uint8_t RIGHT_SIDE  = 1u;
+
+            bloom_filter<Key> left_bloom_filter;
+            bloom_filter<Key> right_bloom_filter;
+            size_t side_capacity;
+            size_t side_sz;
+            uint8_t side;
+
+        public:
+
+            temporal_switching_bloom_filter(size_t cap,
+                                            size_t rehash_sz,
+                                            size_t reliability_decay): left_bloom_filter(std::max(size_t{1}, cap), rehash_sz),
+                                                                       right_bloom_filter(std::max(size_t{1}, cap), rehash_sz){
+
+                this->side_capacity = std::max(size_t{1}, static_cast<size_t>(this->left_bloom_filter.capacity() >> reliability_decay));
+                this->side_sz       = 0u;
+                this->side          = LEFT_SIDE;
+            }
+
+            auto not_contains(const Key& key) const noexcept -> bool{
+
+                return this->left_bloom_filter.not_contains(key) && this->right_bloom_filter.not_contains(key);
+            }
+
+            void insert(const Key& key) noexcept{
+
+                if (this->side_sz == this->side_capacity){
+                    this->switch_side();
+                }
+
+                if (this->side == LEFT_SIDE){
+                    this->left_bloom_filter.insert(key);
+                } else if (this->side == RIGHT_SIDE){
+                    this->right_bloom_filter.insert(key);
+                } else{
+                    if constexpr(DEBUG_MODE_FLAG){
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    } else{
+                        std::unreachable();
+                    }
+                }
+
+                this->side_sz += 1u;
+            }
+        
+        private:
+
+            void switch_side() noexcept{
+
+                switch (this->side){
+                    case LEFT_SIDE:
+                    {
+                        this->right_bloom_filter.clear();
+                        this->side_sz   = 0u;
+                        this->side      = RIGHT_SIDE;
+
+                        return;
+                    }
+                    case RIGHT_SIDE:
+                    {
+                        this->left_bloom_filter.clear();
+                        this->side_sz   = 0u;
+                        this->side      = LEFT_SIDE;
+
+                        return;
+                    }
+                    default:
+                    {
+                        if constexpr(DEBUG_MODE_FLAG){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        } else{
+                            std::unreachable();
+                        }
+                    }
+                }
+            }
+    };
 
     template <class T>
     class temporal_finite_unordered_set{
@@ -6185,9 +6357,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                    size_t consume_factor = 4u) -> std::unique_ptr<RetransmissionControllerInterface>{
         
             const size_t MIN_PKT_MAP_CAPACITY           = 0u;
-            const size_t MAX_PKT_MAP_CAPACITY           = size_t{1} << 25;
+            const size_t MAX_PKT_MAP_CAPACITY           = size_t{1} << 30;
             const size_t MIN_ACKED_SET_CAPACITY         = 1u;
-            const size_t MAX_ACKED_SET_CAPACITY         = size_t{1} << 25;
+            const size_t MAX_ACKED_SET_CAPACITY         = size_t{1} << 30;
             const size_t MIN_TICKING_CLOCK_RESOLUTION   = 1u;
             const size_t MAX_TICKING_CLOCK_RESOLUTION   = size_t{1} << 30;
             const size_t MIN_MAX_RETRANSMISSION_SZ      = 0u;
@@ -7513,6 +7685,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen;
             size_t rescue_packet_sz;
             std::chrono::nanoseconds rescue_threshold;
+            std::chrono::nanoseconds disaster_sleep_dur;
 
         public:
 
@@ -7520,11 +7693,13 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post,
                                std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_gen,
                                size_t rescue_packet_sz,
-                               std::chrono::nanoseconds rescue_threshold) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
-                                                                                    rescue_post(std::move(rescue_post)),
-                                                                                    krescue_gen(std::move(krescue_gen)),
-                                                                                    rescue_packet_sz(rescue_packet_sz),
-                                                                                    rescue_threshold(std::move(rescue_threshold)){}
+                               std::chrono::nanoseconds rescue_threshold,
+                               std::chrono::nanoseconds disaster_sleep_dur) noexcept: outbound_packet_container(std::move(outbound_packet_container)),
+                                                                                      rescue_post(std::move(rescue_post)),
+                                                                                      krescue_gen(std::move(krescue_gen)),
+                                                                                      rescue_packet_sz(rescue_packet_sz),
+                                                                                      rescue_threshold(std::move(rescue_threshold)),
+                                                                                      disaster_sleep_dur(disaster_sleep_dur){}
 
             bool run_one_epoch() noexcept{
 
@@ -7543,6 +7718,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 std::chrono::nanoseconds lapsed                     = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_heartbeat.value().value());
 
                 if (lapsed < this->rescue_threshold){
+                    std::this_thread::sleep_for(this->disaster_sleep_dur);
                     return false;
                 }
 
@@ -7556,6 +7732,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
 
                     if (!rescue_packet.has_value()){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(rescue_packet.error()));
+                        std::this_thread::sleep_for(this->disaster_sleep_dur);
                         return false;
                     }
 
@@ -7563,11 +7740,17 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 }
 
                 this->outbound_packet_container->push(std::make_move_iterator(rescue_packet_arr.get()), this->rescue_packet_sz, exception_arr.get());
+                bool is_failed = false; 
 
                 for (size_t i = 0u; i < this->rescue_packet_sz; ++i){
                     if (dg::network_exception::is_failed(exception_arr[i])){
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                        is_failed = true;
                     }
+                }
+
+                if (is_failed){
+                    std::this_thread::sleep_for(this->disaster_sleep_dur);
                 }
 
                 return true;
@@ -8331,12 +8514,15 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                              std::shared_ptr<packet_controller::KernelRescuePostInterface> rescue_post,
                                              std::shared_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_generator,
                                              std::chrono::nanoseconds rescue_threshold,
+                                             std::chrono::nanoseconds disaster_sleep_dur,
                                              size_t transmitting_rescue_packet_sz) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>{
 
-            const std::chrono::nanoseconds MIN_RESCUE_THRESHOLD = std::chrono::nanoseconds{size_t{0u}};
-            const std::chrono::nanoseconds MAX_RESCUE_THRESHOLD = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{size_t{1}}); 
-            const size_t MIN_TRANSMITTING_RESCUE_PACKET_SZ      = size_t{1};
-            const size_t MAX_TRANSMITTING_RESCUE_PACKET_SZ      = size_t{1} << 25;
+            const std::chrono::nanoseconds MIN_RESCUE_THRESHOLD     = std::chrono::nanoseconds{size_t{0u}};
+            const std::chrono::nanoseconds MAX_RESCUE_THRESHOLD     = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{size_t{1}});
+            const std::chrono::nanoseconds MIN_DISASTER_SLEEP_DUR   = std::chrono::nanoseconds{size_t{0u}};
+            const std::chrono::nanoseconds MAX_DISASTER_SLEEP_DUR   = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours{size_t{1}}); 
+            const size_t MIN_TRANSMITTING_RESCUE_PACKET_SZ          = size_t{1};
+            const size_t MAX_TRANSMITTING_RESCUE_PACKET_SZ          = size_t{1} << 25;
 
             if (outbound_packet_container == nullptr){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -8354,6 +8540,10 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(disaster_sleep_dur, MIN_DISASTER_SLEEP_DUR, MAX_DISASTER_SLEEP_DUR) != disaster_sleep_dur){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             if (std::clamp(transmitting_rescue_packet_sz, MIN_TRANSMITTING_RESCUE_PACKET_SZ, MAX_TRANSMITTING_RESCUE_PACKET_SZ) != transmitting_rescue_packet_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
@@ -8362,7 +8552,8 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                                                         std::move(rescue_post),
                                                         std::move(krescue_generator),
                                                         transmitting_rescue_packet_sz,
-                                                        rescue_threshold);
+                                                        rescue_threshold,
+                                                        disaster_sleep_dur);
         }
 
         static auto get_kernel_inbound_worker(std::shared_ptr<packet_controller::BufferContainerInterface> buffer_container,
@@ -8726,6 +8917,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
                                                            std::unique_ptr<packet_controller::KRescuePacketGeneratorInterface> krescue_packet_generator,
                                                            size_t rescue_packet_sz,
                                                            std::chrono::nanoseconds rescue_dispatch_threshold,
+                                                           std::chrono::nanoseconds rescue_disaster_sleep_dur,
 
                                                            std::unique_ptr<packet_controller::RetransmissionControllerInterface> retransmission_controller,
                                                            size_t retransmission_consumption_cap,
@@ -9040,7 +9232,7 @@ namespace dg::network_kernel_mailbox_impl1::core{
 
             for (size_t i = 0u; i < num_kernel_rescue_worker; ++i){
                 auto worker_ins     = worker::ComponentFactory::get_kernel_rescue_worker(ob_packet_container_sp, rescue_post_sp, krescue_packet_generator_sp, 
-                                                                                         rescue_dispatch_threshold, rescue_packet_sz);
+                                                                                         rescue_dispatch_threshold, rescue_disaster_sleep_dur, rescue_packet_sz);
 
                 auto daemon_handle  = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::IO_DAEMON, std::move(worker_ins)));
                 daemon_vec.emplace_back(std::move(daemon_handle));
@@ -9192,6 +9384,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t worker_inbound_packet_busy_threshold_sz;
         uint32_t worker_rescue_packet_sz_per_transmit; 
         std::chrono::nanoseconds worker_kernel_rescue_dispatch_threshold;
+        std::chrono::nanoseconds worker_kernel_rescue_disaster_sleep_dur;
         uint32_t worker_retransmission_consumption_cap;
         uint32_t worker_retransmission_busy_threshold_sz;
         uint32_t worker_outbound_packet_consumption_cap;
@@ -9630,6 +9823,7 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                       make_kernel_rescue_packet_generator(config),
                                                                                       config.worker_rescue_packet_sz_per_transmit,
                                                                                       config.worker_kernel_rescue_dispatch_threshold,
+                                                                                      config.worker_kernel_rescue_disaster_sleep_dur,
 
                                                                                       make_retransmission_controller(config),
                                                                                       config.worker_retransmission_consumption_cap,

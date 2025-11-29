@@ -948,16 +948,19 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
+            auto to_idx(size_t key) const noexcept -> size_t{
+
+                return key & static_cast<size_t>(this->bloom_table.size() - 1u);
+            } 
+
             auto internal_numerical_key_search(size_t key) const noexcept -> bool{
 
-                size_t idx = key & (this->bloom_table.size() - 1u); 
-                return this->bloom_table[idx];
+                return this->bloom_table[this->to_idx(key)];
             }
 
             void internal_numerical_key_insert(size_t key) noexcept{
 
-                size_t idx = key & (this->bloom_table.size() - 1u);
-                this->bloom_table[idx] = true;
+                this->bloom_table[this->to_idx(key)] = true;
             }
     };
 

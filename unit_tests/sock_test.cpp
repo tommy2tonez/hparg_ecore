@@ -46,7 +46,7 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
                 std::cout << "test > " << i << "/" << TEST_SZ << std::endl;
                 resource_vec = {};
 
-                std::this_thread::sleep_for(std::chrono::seconds(10));
+                // std::this_thread::sleep_for(std::chrono::seconds(10));
             }
 
             smp->release();
@@ -113,7 +113,7 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
                 this->sock->send(tmp_vec.data(), tmp_vec.size(), exception_vec.data());
                 size_t nxt_sz = 0u;
 
-                for (size_t i = 0u; i < sz; ++i)
+                for (size_t i = 0u; i < tmp_vec.size(); ++i)
                 {
                     if (dg::network_exception::is_failed(exception_vec[i]))
                     {
@@ -271,7 +271,6 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
         }
 };
 
-
 class IPSiever: public virtual dg::network_kernel_mailbox_impl1::external_interface::IPSieverInterface{
 
     public:
@@ -303,8 +302,8 @@ int main()
 
             std::cout << "making socket ..." << std::endl;
 
-            dg::network_kernel_mailbox_impl1::allocation::init({.total_mempiece_count = 1 << 18,
-                                                                .mempiece_sz = 1 << 12,
+            dg::network_kernel_mailbox_impl1::allocation::init({.total_mempiece_count = 1 << 22,
+                                                                .mempiece_sz = 1 << 10,
                                                                 .affined_refill_sz = 1 << 8,
                                                                 .affined_mem_vec_capacity = 1 << 8,
                                                                 .affined_free_vec_capacity = 1 << 8});
@@ -331,7 +330,7 @@ int main()
                 .retransmission_queue_cap = 1 << 16,
                 .retransmission_user_queue_cap = 1 << 14,
                 .retransmission_packet_cap = 10,
-                .retransmission_idhashset_cap = 1 << 25,
+                .retransmission_idhashset_cap = 1 << 24,
                 .retransmission_ticking_clock_resolution = 1 << 10,
                 .retransmission_has_react_pattern = false,
                 .retransmission_react_sz = 1 << 8,
@@ -380,7 +379,8 @@ int main()
                 .worker_inbound_packet_consumption_cap = 1 << 12,
                 .worker_inbound_packet_busy_threshold_sz = 1,
                 .worker_rescue_packet_sz_per_transmit = 1 << 6,
-                .worker_kernel_rescue_dispatch_threshold = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
+                .worker_kernel_rescue_dispatch_threshold = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(4)),
+                .worker_kernel_rescue_disaster_sleep_dur = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(10)),
                 .worker_retransmission_consumption_cap = 1000,
                 .worker_retransmission_busy_threshold_sz = 1,
                 .worker_outbound_packet_consumption_cap = 10,
