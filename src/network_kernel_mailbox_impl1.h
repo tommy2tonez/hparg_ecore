@@ -391,6 +391,40 @@ namespace dg::network_kernel_mailbox_impl1::model{
         const void * content;
         size_t content_sz;
     };
+
+    struct RetransmissionWaitingItem
+    {
+        Packet ** pkt_arr;
+        exception_t ** exception_arr;
+        size_t pkt_arr_sz;
+        std::binary_semaphore * smp;
+    };
+
+    struct BufferContainerWaitingItem
+    {
+        std::move_iterator<internal_kernel_buffer *> buffer_arr;
+        size_t buffer_arr_sz;
+        std::binary_semaphore * smp;
+    };
+
+    struct PacketContainerWaitingItem
+    {
+        std::move_iterator<Packet *> packet_arr;
+        size_t packet_arr_sz;
+        std::binary_semaphore * smp;
+    };
+
+    struct FairBufferContainerWaitingItem
+    {
+        dg::vector<internal_kernel_buffer> buffer_vec;
+        std::binary_semaphore * smp;
+    };
+
+    struct FairPacketContainerWaitingItem
+    {
+        dg::vector<Packet> packet_vec;
+        std::binary_semaphore * smp;
+    };
 }
 
 namespace dg::network_kernel_mailbox_impl1::constants{
@@ -408,7 +442,7 @@ namespace dg::network_kernel_mailbox_impl1::constants{
     static inline constexpr size_t MAX_REQUEST_PACKET_CONTENT_SIZE      = size_t{1} << 9;
     static inline constexpr size_t MAX_ACK_PER_PACKET                   = size_t{1} << 2;
     static inline constexpr size_t DEFAULT_ACCUMULATION_SIZE            = size_t{1} << 8;
-    static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 0;
+    static inline constexpr size_t KERNEL_BATCH_POPCOUNT                = size_t{1} << 8;
     static inline constexpr size_t DEFAULT_KEYVALUE_ACCUMULATION_SIZE   = size_t{1} << 8;
 
     static inline constexpr int KERNEL_NOBLOCK_TRANSMISSION_FLAG        = MSG_DONTROUTE | MSG_DONTWAIT;
@@ -3501,6 +3535,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
+            dg::pow2_cyclic_queue<RetransmissionWaitingItem> push_wait_queue_1;
+            dg::pow2_cyclic_queue<RetransmissionWaitingItem> push_wait_queue_2;
             data_structure::temporal_ordered_packet_map pkt_map;
             data_structure::temporal_finite_unordered_set<global_packet_id_t> acked_id_hashset;
             std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator;
@@ -3512,14 +3548,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            MemoryEfficientRetransmissionController(data_structure::temporal_ordered_packet_map pkt_map,
+            MemoryEfficientRetransmissionController(dg::pow2_cyclic_queue<RetransmissionWaitingItem> push_wait_queue_1,
+                                                    dg::pow2_cyclic_queue<RetransmissionWaitingItem> push_wait_queue_2,
+                                                    data_structure::temporal_ordered_packet_map pkt_map,
                                                     data_structure::temporal_finite_unordered_set<global_packet_id_t> acked_id_hashset,
                                                     std::shared_ptr<packet_controller::RetransmissionDelayNegotiatorInterface> delay_negotiator,
                                                     size_t ticking_clock_resolution,
                                                     size_t max_retransmission_sz,
                                                     size_t retriable_pkt_map_cap,
                                                     std::unique_ptr<stdx::fair_atomic_flag> mtx,
-                                                    size_t consume_sz_per_load): pkt_map(std::move(pkt_map)),
+                                                    size_t consume_sz_per_load): push_wait_queue_1(std::move(push_wait_queue_1)),
+                                                                                 push_wait_queue_2(std::move(push_wait_queue_2)),
+                                                                                 pkt_map(std::move(pkt_map)),
                                                                                  acked_id_hashset(std::move(acked_id_hashset)),
                                                                                  delay_negotiator(std::move(delay_negotiator)),
                                                                                  ticking_clock_resolution(ticking_clock_resolution),
@@ -3528,65 +3568,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                                  mtx(std::move(mtx)),
                                                                                  consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
 
-            void internal_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr, size_t map_cap) noexcept{
-
-                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
-
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (sz > this->max_consume_size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
-                    }
-                }
-
-                Packet * base_pkt_arr   = pkt_arr.base(); 
-                auto clock              = dg::ticking_clock<std::chrono::utc_clock>(this->ticking_clock_resolution);
-
-                for (size_t i = 0u; i < sz; ++i){
-                    if (base_pkt_arr[i].retransmission_count >= this->max_retransmission_sz){
-                        exception_arr[i] = dg::network_exception::SOCKET_MAX_RETRANSMISSION_REACHED;
-                        continue;
-                    }
-
-                    if (this->acked_id_hashset.contains(base_pkt_arr[i].id)){
-                        exception_arr[i] = dg::network_exception::SOCKET_ADD_ACKED_PACKET;
-                        continue;
-                    }
-
-                    std::expected<std::chrono::nanoseconds, exception_t> delay = this->delay_negotiator->get(base_pkt_arr[i].to_addr);
-
-                    if (!delay.has_value()){
-                        exception_arr[i] = delay.error();
-                        continue;
-                    }
-
-                    if (this->pkt_map.size() >= map_cap){
-                        exception_arr[i] = dg::network_exception::SOCKET_QUEUE_FULL;
-                        continue;
-                    }
-
-                    base_pkt_arr[i].retransmission_count    += 1;
-                    exception_t err                         = this->pkt_map.add(std::move(base_pkt_arr[i]), clock.get() + delay.value());
-
-                    if (dg::network_exception::is_failed(err)){
-                        base_pkt_arr[i].retransmission_count    -= 1;
-                        exception_arr[i]                        = err;
-
-                        continue;
-                    }
-
-                    exception_arr[i] = dg::network_exception::SUCCESS;
-                }
-            }
-
             void add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
             {
-                this->internal_add_retriables(pkt_arr, sz, exception_arr, std::min(this->retriable_pkt_map_cap, this->pkt_map.capacity()));
+                this->internal_add_retriables(pkt_arr, sz, exception_arr,
+                                              std::min(this->retriable_pkt_map_cap, this->pkt_map.capacity()),
+                                              this->push_wait_queue_1);
             }
 
             void reentrant_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr) noexcept
             {
-                this->internal_add_retriables(pkt_arr, sz, exception_arr, this->pkt_map.capacity());
+                this->internal_add_retriables(pkt_arr, sz, exception_arr,
+                                              this->pkt_map.capacity(),
+                                              this->push_wait_queue_2);
             }
 
             void ack(global_packet_id_t * id_arr, size_t id_arr_sz, exception_t * exception_arr) noexcept{
@@ -3606,6 +3599,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                     exception_arr[i] = dg::network_exception::SUCCESS;
                 }
+
+                this->fulfill_wait_queue();
             }
 
             void get_retriables(Packet * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept{
@@ -3628,11 +3623,306 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                     output_arr[output_arr_sz++] = std::move(nxt.value());
                 }
+
+                this->fulfill_wait_queue();
             }
 
             auto max_consume_size() noexcept -> size_t{
                 
                 return this->consume_sz_per_load.value;
+            }
+
+        private:
+
+            void internal_add_retriables(std::move_iterator<Packet *> pkt_arr, size_t sz, exception_t * exception_arr,
+                                         size_t map_cap,
+                                         dg::pow2_cyclic_queue<RetransmissionWaitingItem>& push_wait_queue) noexcept
+            {
+                size_t waiting_queue_cap    = sz;
+                dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<Packet>[]> waiting_queue(waiting_queue_cap);
+                dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(waiting_queue_cap);
+                size_t waiting_queue_sz     = 0u;
+                std::binary_semaphore waiting_smp(0);
+
+                {
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (sz > this->max_consume_size()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
+                    }
+
+                    Packet * base_pkt_arr   = pkt_arr.base(); 
+                    auto clock              = dg::ticking_clock<std::chrono::utc_clock>(this->ticking_clock_resolution);
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (base_pkt_arr[i].retransmission_count >= this->max_retransmission_sz){
+                            exception_arr[i] = dg::network_exception::SOCKET_MAX_RETRANSMISSION_REACHED;
+                            continue;
+                        }
+
+                        if (this->acked_id_hashset.contains(base_pkt_arr[i].id)){
+                            exception_arr[i] = dg::network_exception::SOCKET_ADD_ACKED_PACKET;
+                            continue;
+                        }
+
+                        std::expected<std::chrono::nanoseconds, exception_t> delay = this->delay_negotiator->get(base_pkt_arr[i].to_addr);
+
+                        if (!delay.has_value()){
+                            exception_arr[i] = delay.error();
+                            continue;
+                        }
+
+                        if (this->pkt_map.size() >= map_cap){
+                            waiting_queue[waiting_queue_sz]     = std::next(base_pkt_arr, i);
+                            exception_ptr_arr[waiting_queue_sz] = std::next(exception_arr, i);
+                            waiting_queue_sz                    += 1;
+                            exception_arr[i]                    = dg::network_exception::SUCCESS;
+
+                            continue;
+                        }
+
+                        base_pkt_arr[i].retransmission_count    += 1;
+                        exception_t err                         = this->pkt_map.add(std::move(base_pkt_arr[i]), clock.get() + delay.value());
+
+                        if (dg::network_exception::is_failed(err)){
+                            base_pkt_arr[i].retransmission_count    -= 1;
+                            exception_arr[i]                        = err;
+
+                            continue;
+                        }
+
+                        exception_arr[i] = dg::network_exception::SUCCESS;
+                    }
+
+                    if (waiting_queue_sz != 0u)
+                    {
+                        dg::network_exception_handler::nothrow_log(push_wait_queue.push_back(RetransmissionWaitingItem{
+                            .pkt_arr        = waiting_queue.get(),
+                            .exception_arr  = exception_ptr_arr.get(),
+                            .pkt_arr_sz     = waiting_queue_sz,
+                            .smp            = &waiting_smp
+                        }));
+                    }
+                }
+
+                if (waiting_queue_sz != 0u)
+                {
+                    waiting_smp.acquire();
+                }
+            }
+
+            auto move_to_pkt_map(RetransmissionWaitingItem wait_item,
+                                 size_t push_sz) noexcept -> std::optional<RetransmissionWaitingItem>
+            {
+                size_t old_sz   = this->pkt_map.size();
+                size_t new_sz   = old_sz + push_sz;
+
+                if (new_sz > this->pkt_map.capacity() || wait_item.pkt_arr_sz < push_sz)
+                {
+                    if constexpr(DEBUG_MODE_FLAG)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                    else
+                    {
+                        std::unreachable();
+                    }
+                }
+
+                Packet ** pkt_arr               = wait_item.pkt_arr;
+                exception_t ** exception_arr    = wait_item.exception_arr; 
+                auto clock                      = dg::ticking_clock<std::chrono::utc_clock>(this->ticking_clock_resolution);
+
+                for (size_t i = 0u; i < push_sz; ++i)
+                {
+                    std::expected<std::chrono::nanoseconds, exception_t> delay = this->delay_negotiator->get(pkt_arr[i]->to_addr);
+
+                    if (!delay.has_value())
+                    {
+                        *exception_arr[i] = delay.error();
+                        continue;                        
+                    }
+
+                    pkt_arr[i]->retransmission_count    += 1;
+                    exception_t err                     = this->pkt_map.add(std::move(*pkt_arr[i]), clock.get() + delay.value());
+
+                    if (dg::network_exception::is_failed(err))
+                    {
+                        pkt_arr[i]->retransmission_count    -= 1;
+                        *exception_arr[i]                   = err;
+
+                        continue;
+                    }
+
+                    *exception_arr[i] = dg::network_exception::SUCCESS;
+                }
+
+                if (push_sz == wait_item.pkt_arr_sz)
+                {
+                    return std::nullopt;
+                }
+
+                size_t rem_sz = 0u; 
+
+                for (size_t i = push_sz; i < wait_item.pkt_arr_sz; ++i)
+                {
+                    pkt_arr[rem_sz]         = pkt_arr[i];
+                    exception_arr[rem_sz]   = exception_arr[i];
+                    rem_sz                  += 1;
+                }
+
+                return RetransmissionWaitingItem
+                {
+                    .pkt_arr        = pkt_arr,
+                    .exception_arr  = exception_arr,
+                    .pkt_arr_sz     = rem_sz,
+                    .smp            = wait_item.smp
+                };
+
+            } 
+
+            void fulfill_one_push_wait_queue_2() noexcept
+            {
+                if (this->push_wait_queue_2.empty())
+                {
+                    if constexpr(DEBUG_MODE_FLAG)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                    else
+                    {
+                        std::unreachable();
+                    }
+                }
+
+                RetransmissionWaitingItem resolutable = this->push_wait_queue_2.front();
+
+                size_t pushable_cap = this->pkt_map.capacity() - this->pkt_map.size(); 
+                size_t push_sz      = std::min(pushable_cap, resolutable.pkt_arr_sz);
+
+                std::optional<RetransmissionWaitingItem> rem = this->move_to_pkt_map(resolutable, push_sz);
+
+                if (rem.has_value())
+                {
+                    this->push_wait_queue_2.front() = rem.value();
+                }
+                else
+                {
+                    this->push_wait_queue_2.pop_front();
+                    resolutable.smp->release();
+                }
+            }
+
+            void fulfill_one_push_wait_queue_1() noexcept
+            {
+                if (this->push_wait_queue_1.empty())
+                {
+                    if constexpr(DEBUG_MODE_FLAG)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                    else
+                    {
+                        std::unreachable();
+                    }
+                }
+
+                RetransmissionWaitingItem resolutable = this->push_wait_queue_1.front();
+
+                if (this->pkt_map.size() > this->retriable_pkt_map_cap)
+                {
+                    if constexpr(DEBUG_MODE_FLAG)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                    else
+                    {
+                        std::unreachable();
+                    }
+                }
+
+                size_t pushable_cap = this->retriable_pkt_map_cap - this->pkt_map.size();
+                size_t push_sz      = std::min(pushable_cap, resolutable.pkt_arr_sz);
+
+                std::optional<RetransmissionWaitingItem> rem = this->move_to_pkt_map(resolutable, push_sz);
+
+                if (rem.has_value())
+                {
+                    this->push_wait_queue_1.front() = rem.value();
+                }
+                else
+                {
+                    this->push_wait_queue_1.pop_front();
+                    resolutable.smp->release();
+                }
+            }
+
+            void fulfill_wait_queue() noexcept
+            {
+                while (true)
+                {
+                    if (this->pkt_map.size() == this->pkt_map.capacity())
+                    {
+                        break;
+                    }
+
+                    if (this->pkt_map.size() >= this->retriable_pkt_map_cap)
+                    {
+                        if (this->push_wait_queue_2.empty())
+                        {
+                            break;
+                        }
+
+                        this->fulfill_one_push_wait_queue_2();
+                        continue;
+                    }
+
+                    if (this->push_wait_queue_1.empty())
+                    {
+                        if (this->push_wait_queue_2.empty())
+                        {
+                            break;
+                        }
+
+                        this->fulfill_one_push_wait_queue_2();
+                        continue;
+                    }
+
+                    if (this->push_wait_queue_2.empty())
+                    {
+                        this->fulfill_one_push_wait_queue_1();
+                        continue;
+                    }
+
+                    bool coin_flip      = dg::network_randomizer::randomize_int<bool>();
+                    bool coin_flip_2    = dg::network_randomizer::randomize_int<bool>();
+
+                    if (coin_flip)
+                    {
+                        if (coin_flip_2)
+                        {
+                            this->fulfill_one_push_wait_queue_1();
+                            continue;
+                        }
+                        else
+                        {
+                            this->fulfill_one_push_wait_queue_2();
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        this->fulfill_one_push_wait_queue_1();
+                        continue;
+                    }
+                }
             }
     };
 
@@ -4133,6 +4423,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
+            dg::pow2_cyclic_queue<BufferContainerWaitingItem> waiting_item_vec;
             dg::pow2_cyclic_queue<internal_kernel_buffer> buffer_vec;
             size_t buffer_vec_capacity;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
@@ -4140,47 +4431,119 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            BufferFIFOContainer(dg::pow2_cyclic_queue<internal_kernel_buffer> buffer_vec,
+            BufferFIFOContainer(dg::pow2_cyclic_queue<BufferContainerWaitingItem> waiting_item_vec,
+                                dg::pow2_cyclic_queue<internal_kernel_buffer> buffer_vec,
                                 size_t buffer_vec_capacity,
                                 std::unique_ptr<stdx::fair_atomic_flag> mtx,
-                                stdx::hdi_container<size_t> consume_sz_per_load) noexcept: buffer_vec(std::move(buffer_vec)),
+                                stdx::hdi_container<size_t> consume_sz_per_load) noexcept: waiting_item_vec(std::move(waiting_item_vec)),
+                                                                                           buffer_vec(std::move(buffer_vec)),
                                                                                            buffer_vec_capacity(buffer_vec_capacity),
                                                                                            mtx(std::move(mtx)),
                                                                                            consume_sz_per_load(std::move(consume_sz_per_load)){}
 
             void push(std::move_iterator<internal_kernel_buffer *> buffer_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+                std::binary_semaphore smp(0); 
 
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (sz > this->max_consume_size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
+                bool need_acquire = [&]{
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (sz > this->max_consume_size()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
                     }
+
+                    size_t app_cap  = this->buffer_vec_capacity - this->buffer_vec.size();
+                    size_t app_sz   = std::min(sz, app_cap);
+                    size_t old_sz   = this->buffer_vec.size();
+                    size_t new_sz   = old_sz + app_sz;
+
+                    this->buffer_vec.resize(new_sz);
+
+                    std::copy(buffer_arr, std::next(buffer_arr, app_sz), std::next(this->buffer_vec.begin(), old_sz));
+
+                    if (app_sz != sz)
+                    {
+                        dg::network_exception_handler::nothrow_log(this->waiting_item_vec.push_back(BufferContainerWaitingItem
+                        {
+                            .buffer_arr         = std::next(buffer_arr, app_sz),
+                            .buffer_arr_sz      = sz - app_sz,
+                            .smp                = &smp 
+                        }));
+
+                        return true;
+                    }
+
+                    return false;
+                }();
+
+                if (need_acquire)
+                {
+                    smp.acquire();
                 }
 
-                size_t app_cap  = this->buffer_vec_capacity - this->buffer_vec.size();
-                size_t app_sz   = std::min(sz, app_cap);
-                size_t old_sz   = this->buffer_vec.size();
-                size_t new_sz   = old_sz + app_sz;
-
-                this->buffer_vec.resize(new_sz);
-
-                std::copy(buffer_arr, std::next(buffer_arr, app_sz), std::next(this->buffer_vec.begin(), old_sz));
-                std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
-                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::SOCKET_QUEUE_FULL);
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
             }
 
             void pop(internal_kernel_buffer * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
-                sz          = std::min(output_buffer_arr_cap, this->buffer_vec.size());
-                auto first  = this->buffer_vec.begin();
-                auto last   = std::next(first, sz);
+                sz = 0u;
 
-                std::copy(std::make_move_iterator(first), std::make_move_iterator(last), output_buffer_arr);
-                this->buffer_vec.erase_front_range(sz);
+                while (true)
+                {
+                    if (sz == output_buffer_arr_cap)
+                    {
+                        break;
+                    }
+
+                    size_t rem_cap = output_buffer_arr_cap - sz; 
+
+                    if (!this->waiting_item_vec.empty())
+                    {
+                        size_t app_sz = std::min(rem_cap, this->waiting_item_vec.front().buffer_arr_sz);
+
+                        std::copy(this->waiting_item_vec.front().buffer_arr,
+                                  std::next(this->waiting_item_vec.front().buffer_arr, app_sz),
+                                  std::next(output_buffer_arr, sz));
+
+                        if (app_sz == this->waiting_item_vec.front().buffer_arr_sz)
+                        {
+                            this->waiting_item_vec.front().smp->release();
+                            this->waiting_item_vec.pop_front();
+                        }
+                        else
+                        {
+                            this->waiting_item_vec.front() = BufferContainerWaitingItem
+                            {
+                                .buffer_arr     = std::next(this->waiting_item_vec.front().buffer_arr, app_sz),
+                                .buffer_arr_sz  = this->waiting_item_vec.front().buffer_arr_sz - app_sz,
+                                .smp            = this->waiting_item_vec.front().smp
+                            };
+                        }
+
+                        sz += app_sz;
+                        continue;
+                    }
+
+                    if (!this->buffer_vec.empty())
+                    {
+                        size_t app_sz = std::min(rem_cap, this->buffer_vec.size());
+
+                        std::copy(std::make_move_iterator(this->buffer_vec.begin()),
+                                  std::make_move_iterator(std::next(this->buffer_vec.begin(), app_sz)),
+                                  std::next(output_buffer_arr, sz));
+                        this->buffer_vec.erase_front_range(app_sz);
+
+                        sz += app_sz;
+                        continue;
+                    }
+
+                    break;
+                }
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -4373,6 +4736,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
+            dg::pow2_cyclic_queue<FairBufferContainerWaitingItem> push_waiting_item_vec; 
             dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>> distribution_queue;
             dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<internal_kernel_buffer>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue;
             dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>> leftover_queue;
@@ -4382,12 +4746,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            FairInBoundBufferContainer(dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>> distribution_queue,
+            FairInBoundBufferContainer(dg::pow2_cyclic_queue<FairBufferContainerWaitingItem> push_waiting_item_vec,
+                                       dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>> distribution_queue,
                                        dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<internal_kernel_buffer>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue,
                                        dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>> leftover_queue,
                                        std::unique_ptr<UnitAllocatorInterface<dg::vector<internal_kernel_buffer>>> bufvec_allocator,
                                        std::unique_ptr<stdx::fair_atomic_flag> mtx,
-                                       size_t consume_sz_per_load): distribution_queue(std::move(distribution_queue)),
+                                       size_t consume_sz_per_load): push_waiting_item_vec(std::move(push_waiting_item_vec)),
+                                                                    distribution_queue(std::move(distribution_queue)),
                                                                     waiting_queue(std::move(waiting_queue)),
                                                                     leftover_queue(std::move(leftover_queue)),
                                                                     bufvec_allocator(std::move(bufvec_allocator)),
@@ -4423,8 +4789,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                           buffer_vec.begin());
 
                 semaphore_impl::dg_binary_semaphore * releasing_smp = nullptr;
+                std::binary_semaphore wait_smp(0);
 
-                exception_t err = [&, this]() noexcept{
+                bool need_wait = [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->waiting_queue.empty()){
@@ -4433,29 +4800,29 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         *dst = std::move(buffer_vec);
                         releasing_smp = smp;
 
-                        return dg::network_exception::SUCCESS;
+                        return false;
                     }
 
                     if (this->distribution_queue.size() != this->distribution_queue.capacity()){
                         dg::network_exception_handler::nothrow_log(this->distribution_queue.push_back(std::move(buffer_vec)));
-                        return dg::network_exception::SUCCESS;
+                        return false;
                     }
 
-                    return dg::network_exception::SOCKET_QUEUE_FULL;
+                    dg::network_exception_handler::nothrow_log(this->push_waiting_item_vec.push_back(FairBufferContainerWaitingItem
+                    {
+                        .buffer_vec = std::move(buffer_vec),
+                        .smp        = &wait_smp
+                    }));
+                    
+                    return true;
                 }();
-
-                if (dg::network_exception::is_failed(err)){
-                    std::copy(std::make_move_iterator(buffer_vec.begin()), std::make_move_iterator(buffer_vec.end()), base_buffer_arr);
-                    std::fill(exception_arr, std::next(exception_arr, sz), err);
-
-                    buffer_vec.clear();
-                    this->bufvec_allocator->free(std::move(buffer_vec));
-
-                    return;
-                }
 
                 if (releasing_smp != nullptr){
                     releasing_smp->release();
+                }
+
+                if (need_wait){
+                    wait_smp.acquire();
                 }
 
                 std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
@@ -4468,6 +4835,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 
                 bool is_acquire_required = [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    if (!this->push_waiting_item_vec.empty()){
+                        str_vec = std::move(this->push_waiting_item_vec.front().buffer_vec);
+                        this->push_waiting_item_vec.front().smp->release();
+                        this->push_waiting_item_vec.pop_front();
+                        return false;
+                    }
 
                     if (!this->leftover_queue.empty()){
                         str_vec = std::move(this->leftover_queue.front());
@@ -4526,54 +4900,128 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
+            dg::pow2_cyclic_queue<PacketContainerWaitingItem> waiting_item_vec;
             dg::pow2_cyclic_queue<Packet> packet_deque;
             size_t packet_deque_capacity;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
-        
+
         public:
 
-            PacketFIFOContainer(dg::pow2_cyclic_queue<Packet> packet_deque,
+            PacketFIFOContainer(dg::pow2_cyclic_queue<PacketContainerWaitingItem> waiting_item_vec,
+                                dg::pow2_cyclic_queue<Packet> packet_deque,
                                 size_t packet_deque_capacity,
                                 std::unique_ptr<stdx::fair_atomic_flag> mtx,
-                                stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_deque(std::move(packet_deque)),
+                                stdx::hdi_container<size_t> consume_sz_per_load) noexcept: waiting_item_vec(std::move(waiting_item_vec)),
+                                                                                           packet_deque(std::move(packet_deque)),
                                                                                            packet_deque_capacity(packet_deque_capacity),
                                                                                            mtx(std::move(mtx)),
                                                                                            consume_sz_per_load(std::move(consume_sz_per_load)){}
 
             void push(std::move_iterator<Packet *> packet_arr, size_t sz, exception_t * exception_arr) noexcept{
 
-                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+                std::binary_semaphore smp(0);
 
-                if constexpr(DEBUG_MODE_FLAG){
-                    if (sz > this->max_consume_size()){
-                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
-                        std::abort();
+                bool need_acquire = [&]
+                {
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    if constexpr(DEBUG_MODE_FLAG){
+                        if (sz > this->max_consume_size()){
+                            dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                            std::abort();
+                        }
                     }
+
+                    size_t app_cap  = this->packet_deque_capacity - this->packet_deque.size();
+                    size_t app_sz   = std::min(sz, app_cap);
+                    size_t old_sz   = this->packet_deque.size();
+                    size_t new_sz   = old_sz + app_sz;
+
+                    this->packet_deque.resize(new_sz);
+
+                    std::copy(packet_arr, std::next(packet_arr, app_sz), std::next(this->packet_deque.begin(), old_sz));
+
+                    if (app_sz != sz)
+                    {
+                        dg::network_exception_handler::nothrow_log(this->waiting_item_vec.push_back(PacketContainerWaitingItem
+                        {
+                            .packet_arr         = std::next(packet_arr, app_sz),
+                            .packet_arr_sz      = sz - app_sz,
+                            .smp                = &smp
+                        }));
+
+                        return true;
+                    }
+
+                    return false;
+                }();
+
+                if (need_acquire)
+                {
+                    smp.acquire();
                 }
 
-                size_t app_cap  = this->packet_deque_capacity - this->packet_deque.size();
-                size_t app_sz   = std::min(sz, app_cap);
-                size_t old_sz   = this->packet_deque.size();
-                size_t new_sz   = old_sz + app_sz;
-
-                this->packet_deque.resize(new_sz);
-
-                std::copy(packet_arr, std::next(packet_arr, app_sz), std::next(this->packet_deque.begin(), old_sz));
-                std::fill(exception_arr, std::next(exception_arr, app_sz), dg::network_exception::SUCCESS);
-                std::fill(std::next(exception_arr, app_sz), std::next(exception_arr, sz), dg::network_exception::SOCKET_QUEUE_FULL);
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
             }
 
             void pop(Packet * output_pkt_arr, size_t& sz, size_t output_pkt_arr_cap) noexcept{
 
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
-                sz          = std::min(output_pkt_arr_cap, this->packet_deque.size());
-                auto first  = this->packet_deque.begin();
-                auto last   = std::next(first, sz);
+                sz = 0u;
 
-                std::copy(std::make_move_iterator(first), std::make_move_iterator(last), output_pkt_arr);
-                this->packet_deque.erase_front_range(sz);
+                while (true)
+                {
+                    if (sz == output_pkt_arr_cap)
+                    {
+                        break;
+                    }
+
+                    size_t rem_cap = output_pkt_arr_cap - sz;
+
+                    if (!this->waiting_item_vec.empty())
+                    {
+                        size_t app_sz = std::min(rem_cap, this->waiting_item_vec.front().packet_arr_sz);
+
+                        std::copy(this->waiting_item_vec.front().packet_arr,
+                                  std::next(this->waiting_item_vec.front().packet_arr, app_sz),
+                                  std::next(output_pkt_arr, sz));
+
+                        if (app_sz == this->waiting_item_vec.front().packet_arr_sz)
+                        {
+                            this->waiting_item_vec.front().smp->release();
+                            this->waiting_item_vec.pop_front();
+                        }
+                        else
+                        {
+                            this->waiting_item_vec.front() = PacketContainerWaitingItem
+                            {
+                                .packet_arr         = std::next(this->waiting_item_vec.front().packet_arr, app_sz),
+                                .packet_arr_sz      = this->waiting_item_vec.front().packet_arr_sz - app_sz,
+                                .smp                = this->waiting_item_vec.front().smp,
+                            };
+                        }
+
+                        sz += app_sz;
+                        continue;
+                    }
+
+                    if (!this->packet_deque.empty())
+                    {
+                        size_t app_sz = std::min(rem_cap, this->packet_deque.size());
+
+                        std::copy(std::make_move_iterator(this->packet_deque.begin()),
+                                  std::make_move_iterator(std::next(this->packet_deque.begin(), app_sz)),
+                                  std::next(output_pkt_arr, sz));
+                        this->packet_deque.erase_front_range(app_sz);
+
+                        sz += app_sz;
+                        continue;
+                    }
+
+                    break;
+                }
             }
 
             auto max_consume_size() noexcept -> size_t{
@@ -4916,9 +5364,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
+            dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> normal_packet_queue_waiting_item_vec;
             dg::pow2_cyclic_queue<dg::vector<Packet>> normal_packet_queue;
+
+            dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> ack_packet_queue_waiting_item_vec;
             dg::pow2_cyclic_queue<dg::vector<Packet>> ack_packet_queue;
+
+            dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> rescue_packet_queue_waiting_item_vec;
             dg::pow2_cyclic_queue<dg::vector<Packet>> rescue_packet_queue;
+
             dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue;
             dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue;
             std::unique_ptr<UnitAllocatorInterface<dg::vector<Packet>>> pktvec_allocator;
@@ -4928,16 +5382,25 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            NormalOutboundPacketContainer(dg::pow2_cyclic_queue<dg::vector<Packet>> normal_packet_queue,
+            NormalOutboundPacketContainer(dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> normal_packet_queue_waiting_item_vec,
+                                          dg::pow2_cyclic_queue<dg::vector<Packet>> normal_packet_queue,
+
+                                          dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> ack_packet_queue_waiting_item_vec,
                                           dg::pow2_cyclic_queue<dg::vector<Packet>> ack_packet_queue,
+
+                                          dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> rescue_packet_queue_waiting_item_vec,
                                           dg::pow2_cyclic_queue<dg::vector<Packet>> rescue_packet_queue,
+
                                           dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue,
                                           dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue,
                                           std::unique_ptr<UnitAllocatorInterface<dg::vector<Packet>>> pktvec_allocator,
                                           size_t feed_vectorization_sz,
                                           std::unique_ptr<stdx::fair_atomic_flag> mtx,
-                                          size_t consume_sz_per_load) noexcept: normal_packet_queue(std::move(normal_packet_queue)),
+                                          size_t consume_sz_per_load) noexcept: normal_packet_queue_waiting_item_vec(std::move(normal_packet_queue_waiting_item_vec)),
+                                                                                normal_packet_queue(std::move(normal_packet_queue)),
+                                                                                ack_packet_queue_waiting_item_vec(std::move(ack_packet_queue_waiting_item_vec)),
                                                                                 ack_packet_queue(std::move(ack_packet_queue)),
+                                                                                rescue_packet_queue_waiting_item_vec(std::move(rescue_packet_queue_waiting_item_vec)),
                                                                                 rescue_packet_queue(std::move(rescue_packet_queue)),
                                                                                 waiting_queue(std::move(waiting_queue)),
                                                                                 leftover_queue(std::move(leftover_queue)),
@@ -4952,11 +5415,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 auto internal_resolutor                 = InternalPushFeedResolutor{};
 
                 internal_resolutor.pktvec_allocator     = this->pktvec_allocator.get();
-                internal_resolutor.normal_packet_queue  = &this->normal_packet_queue; 
-                internal_resolutor.ack_packet_queue     = &this->ack_packet_queue;
-                internal_resolutor.rescue_packet_queue  = &this->rescue_packet_queue;
-                internal_resolutor.waiting_queue        = &this->waiting_queue;
-                internal_resolutor.queue_mtx            = this->mtx.get();
+
+                internal_resolutor.normal_packet_wait_queue = &this->normal_packet_queue_waiting_item_vec;
+                internal_resolutor.normal_packet_queue      = &this->normal_packet_queue;
+                
+                internal_resolutor.ack_packet_wait_queue    = &this->ack_packet_queue_waiting_item_vec;
+                internal_resolutor.ack_packet_queue         = &this->ack_packet_queue;
+
+                internal_resolutor.rescue_packet_wait_queue = &this->rescue_packet_queue_waiting_item_vec;
+                internal_resolutor.rescue_packet_queue      = &this->rescue_packet_queue;
+
+                internal_resolutor.waiting_queue            = &this->waiting_queue;
+                internal_resolutor.queue_mtx                = this->mtx.get();
 
                 size_t trimmed_feed_vectorization_sz    = std::min(this->feed_vectorization_sz, sz);
                 size_t feeder_allocation_cost           = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&internal_resolutor, trimmed_feed_vectorization_sz);
@@ -4993,6 +5463,15 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         return;
                     }
 
+                    if (!this->ack_packet_queue_waiting_item_vec.empty()){
+                        pkt_vec                     = std::move(this->ack_packet_queue_waiting_item_vec.front().packet_vec);
+                        this->ack_packet_queue_waiting_item_vec.front().smp->release();
+                        this->ack_packet_queue_waiting_item_vec.pop_front();
+                        smp_responsibility          = false;
+
+                        return;
+                    }
+
                     if (!this->ack_packet_queue.empty()){
                         pkt_vec                     = std::move(this->ack_packet_queue.front());
                         this->ack_packet_queue.pop_front();
@@ -5001,9 +5480,28 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         return;
                     }
 
+                    if (!this->normal_packet_queue_waiting_item_vec.empty()){
+                        pkt_vec                     = std::move(this->normal_packet_queue_waiting_item_vec.front().packet_vec);
+                        this->normal_packet_queue_waiting_item_vec.front().smp->release();
+                        this->normal_packet_queue_waiting_item_vec.pop_front();
+                        smp_responsibility          = false;
+
+                        return;
+                    }
+
                     if (!this->normal_packet_queue.empty()){
                         pkt_vec                     = std::move(this->normal_packet_queue.front());
                         this->normal_packet_queue.pop_front();
+                        smp_responsibility          = false;
+
+                        return;
+                    }
+
+
+                    if (!this->rescue_packet_queue_waiting_item_vec.empty()){
+                        pkt_vec                     = std::move(this->rescue_packet_queue_waiting_item_vec.front().packet_vec);
+                        this->rescue_packet_queue_waiting_item_vec.front().smp->release();
+                        this->rescue_packet_queue_waiting_item_vec.pop_front();
                         smp_responsibility          = false;
 
                         return;
@@ -5096,9 +5594,16 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             struct InternalPushFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<types::packet_polymorphic_t, InternalPushFeedArgument>{
 
                 UnitAllocatorInterface<dg::vector<Packet>> * pktvec_allocator;
+
+                dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> * normal_packet_wait_queue;
                 dg::pow2_cyclic_queue<dg::vector<Packet>> * normal_packet_queue;
+
+                dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> * ack_packet_wait_queue;
                 dg::pow2_cyclic_queue<dg::vector<Packet>> * ack_packet_queue;
+
+                dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> * rescue_packet_wait_queue;
                 dg::pow2_cyclic_queue<dg::vector<Packet>> * rescue_packet_queue;
+
                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> * waiting_queue;
                 stdx::fair_atomic_flag * queue_mtx;
 
@@ -5121,7 +5626,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         inbound_vec.value()[i] = std::move(*base_data_arr[i].packet_ptr.base());
                     }
 
-                    exception_t err = [&, this]() noexcept{
+                    std::binary_semaphore wait_smp(0);
+
+                    bool need_acquire = [&, this]() noexcept{
                         stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->queue_mtx);
 
                         if (!this->waiting_queue->empty()){
@@ -5130,39 +5637,58 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                             *fetching_addr              = std::move(inbound_vec.value());
                             smp->release();
 
-                            return dg::network_exception::SUCCESS;
+                            return false;
                         }
 
                         switch (key){
                             case constants::request:
                             {
                                 if (this->normal_packet_queue->size() == this->normal_packet_queue->capacity()){
-                                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                                    
+                                    dg::network_exception_handler::nothrow_log(this->normal_packet_wait_queue->push_back(FairPacketContainerWaitingItem
+                                    {
+                                        .packet_vec = std::move(inbound_vec.value()),
+                                        .smp        = &wait_smp
+                                    }));
+
+                                    return true;
                                 }
 
                                 dg::network_exception_handler::nothrow_log(this->normal_packet_queue->push_back(std::move(inbound_vec.value())));
 
-                                return dg::network_exception::SUCCESS;
+                                return false;
                             }
                             case constants::ack:
                             {
                                 if (this->ack_packet_queue->size() == this->ack_packet_queue->capacity()){
-                                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                                    dg::network_exception_handler::nothrow_log(this->ack_packet_wait_queue->push_back(FairPacketContainerWaitingItem
+                                    {
+                                        .packet_vec = std::move(inbound_vec.value()),
+                                        .smp        = &wait_smp
+                                    }));
+
+                                    return true;
                                 }
 
                                 dg::network_exception_handler::nothrow_log(this->ack_packet_queue->push_back(std::move(inbound_vec.value())));
 
-                                return dg::network_exception::SUCCESS;
+                                return false;
                             }
                             case constants::krescue:
                             {
                                 if (this->rescue_packet_queue->size() == this->rescue_packet_queue->capacity()){
-                                    return dg::network_exception::RESOURCE_EXHAUSTION;
+                                    dg::network_exception_handler::nothrow_log(this->rescue_packet_wait_queue->push_back(FairPacketContainerWaitingItem
+                                    {
+                                        .packet_vec = std::move(inbound_vec.value()),
+                                        .smp        = &wait_smp
+                                    }));
+
+                                    return true;
                                 }
 
                                 dg::network_exception_handler::nothrow_log(this->rescue_packet_queue->push_back(std::move(inbound_vec.value())));
 
-                                return dg::network_exception::SUCCESS;
+                                return false;
                             }
                             default:
                             {
@@ -5176,14 +5702,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         }
                     }();
 
-                    if (dg::network_exception::is_failed(err)){
-                        for (size_t i = 0u; i < sz; ++i){
-                            *base_data_arr[i].packet_ptr.base() = std::move(inbound_vec.value()[i]); 
-                            *base_data_arr[i].exception_ptr     = err;
-                        }
-
-                        inbound_vec->clear();
-                        this->pktvec_allocator->free(std::move(inbound_vec.value()));
+                    if (need_acquire){
+                        wait_smp.acquire();
                     }
                 }
             };
@@ -5252,6 +5772,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         private:
 
+            dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> push_waiting_item_vec;
             dg::pow2_cyclic_queue<dg::vector<Packet>> packet_queue;
             dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue;
             dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue;
@@ -5261,12 +5782,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
         public:
 
-            FairInBoundPacketContainer(dg::pow2_cyclic_queue<dg::vector<Packet>> packet_queue,
+            FairInBoundPacketContainer(dg::pow2_cyclic_queue<FairPacketContainerWaitingItem> push_waiting_item_vec,
+                                       dg::pow2_cyclic_queue<dg::vector<Packet>> packet_queue,
                                        dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue,
                                        dg::pow2_cyclic_queue<dg::vector<Packet>> leftover_queue,
                                        std::unique_ptr<UnitAllocatorInterface<dg::vector<Packet>>> pktvec_allocator,
                                        std::unique_ptr<stdx::fair_atomic_flag> mtx,
-                                       size_t consume_sz_per_load) noexcept: packet_queue(std::move(packet_queue)),
+                                       size_t consume_sz_per_load) noexcept: push_waiting_item_vec(std::move(push_waiting_item_vec)),
+                                                                             packet_queue(std::move(packet_queue)),
                                                                              waiting_queue(std::move(waiting_queue)),
                                                                              leftover_queue(std::move(leftover_queue)),
                                                                              pktvec_allocator(std::move(pktvec_allocator)),
@@ -5300,8 +5823,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 std::copy(pkt_arr, std::next(pkt_arr, sz), pkt_vec.begin());
 
                 semaphore_impl::dg_binary_semaphore * releasing_smp = nullptr;
+                std::binary_semaphore wait_smp(0);
 
-                exception_t err = [&, this]() noexcept{
+                bool need_wait = [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->waiting_queue.empty()){
@@ -5310,29 +5834,29 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                         *dst = std::move(pkt_vec);
                         releasing_smp = smp;
 
-                        return dg::network_exception::SUCCESS;
+                        return false;
                     }
 
                     if (this->packet_queue.size() != this->packet_queue.capacity()){
                         dg::network_exception_handler::nothrow_log(this->packet_queue.push_back(std::move(pkt_vec)));
-                        return dg::network_exception::SUCCESS;
+                        return false;
                     }
 
-                    return dg::network_exception::SOCKET_QUEUE_FULL;
+                    dg::network_exception_handler::nothrow_log(this->push_waiting_item_vec.push_back(FairPacketContainerWaitingItem
+                    {
+                        .packet_vec = std::move(pkt_vec),
+                        .smp        = &wait_smp
+                    }));
+
+                    return true;
                 }();
-
-                if (dg::network_exception::is_failed(err)){
-                    std::fill(exception_arr, std::next(exception_arr, sz), err);
-                    std::copy(std::make_move_iterator(pkt_vec.begin()), std::make_move_iterator(pkt_vec.end()), base_pkt_arr);
-
-                    pkt_vec.clear();
-                    this->pktvec_allocator->free(std::move(pkt_vec));
-
-                    return;
-                }
 
                 if (releasing_smp != nullptr){
                     releasing_smp->release();
+                }
+
+                if (need_wait){
+                    wait_smp.acquire();
                 }
 
                 std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
@@ -5345,6 +5869,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
                 bool is_acquire_required = [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    if (!this->push_waiting_item_vec.empty()){
+                        pkt_vec = std::move(this->push_waiting_item_vec.front().packet_vec);
+                        this->push_waiting_item_vec.front().smp->release();
+                        this->push_waiting_item_vec.pop_front();
+
+                        return false;
+                    }
 
                     if (!this->leftover_queue.empty()){
                         pkt_vec = std::move(this->leftover_queue.front());
@@ -6354,18 +6886,26 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                    size_t ticking_clock_resolution,
                                                                    size_t max_retransmission_sz,
                                                                    size_t retriable_pkt_map_cap,
+                                                                   size_t user_push_concurrency_sz,
+                                                                   size_t retriable_push_concurrency_sz,
                                                                    size_t consume_factor = 4u) -> std::unique_ptr<RetransmissionControllerInterface>{
-        
-            const size_t MIN_PKT_MAP_CAPACITY           = 0u;
-            const size_t MAX_PKT_MAP_CAPACITY           = size_t{1} << 30;
-            const size_t MIN_ACKED_SET_CAPACITY         = 1u;
-            const size_t MAX_ACKED_SET_CAPACITY         = size_t{1} << 30;
-            const size_t MIN_TICKING_CLOCK_RESOLUTION   = 1u;
-            const size_t MAX_TICKING_CLOCK_RESOLUTION   = size_t{1} << 30;
-            const size_t MIN_MAX_RETRANSMISSION_SZ      = 0u;
-            const size_t MAX_MAX_RETRANSMISSION_SZ      = 256u;
-            const size_t MIN_RETRIABLE_PKT_MAP_CAP      = 1u;
-            const size_t MAX_RETRIABLE_PKT_MAP_CAP      = size_t{1} << 30;
+
+            const size_t MIN_PKT_MAP_CAPACITY               = 0u;
+            const size_t MAX_PKT_MAP_CAPACITY               = size_t{1} << 30;
+            const size_t MIN_ACKED_SET_CAPACITY             = 1u;
+            const size_t MAX_ACKED_SET_CAPACITY             = size_t{1} << 30;
+            const size_t MIN_TICKING_CLOCK_RESOLUTION       = 1u;
+            const size_t MAX_TICKING_CLOCK_RESOLUTION       = size_t{1} << 30;
+            const size_t MIN_MAX_RETRANSMISSION_SZ          = 0u;
+            const size_t MAX_MAX_RETRANSMISSION_SZ          = 256u;
+            const size_t MIN_RETRIABLE_PKT_MAP_CAP          = 1u;
+            const size_t MAX_RETRIABLE_PKT_MAP_CAP          = size_t{1} << 30;
+            
+            const size_t MIN_USER_PUSH_CONCURRENCY_SZ       = 1u;
+            const size_t MAX_USER_PUSH_CONCURRENCY_SZ       = size_t{1} << 20;
+            
+            const size_t MIN_RETRIABLE_PUSH_CONCURRENCY_SZ  = 1u;
+            const size_t MAX_RETRIABLE_PUSH_CONCURRENCY_SZ  = size_t{1} << 20; 
 
             if (std::clamp(pkt_map_capacity, MIN_PKT_MAP_CAPACITY, MAX_PKT_MAP_CAPACITY) != pkt_map_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -6391,11 +6931,21 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(user_push_concurrency_sz, MIN_USER_PUSH_CONCURRENCY_SZ, MAX_USER_PUSH_CONCURRENCY_SZ) != user_push_concurrency_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(retriable_push_concurrency_sz, MIN_RETRIABLE_PUSH_CONCURRENCY_SZ, MAX_RETRIABLE_PUSH_CONCURRENCY_SZ) != retriable_push_concurrency_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             size_t tentative_pkt_map_consume_sz     = pkt_map_capacity >> consume_factor;
             size_t tentative_acked_set_consume_sz   = acked_set_capacity >> consume_factor;
             size_t consume_sz                       = std::max(std::min(tentative_pkt_map_consume_sz, tentative_acked_set_consume_sz), size_t{1u});
 
-            return std::make_unique<MemoryEfficientRetransmissionController>(data_structure::temporal_ordered_packet_map(pkt_map_capacity),
+            return std::make_unique<MemoryEfficientRetransmissionController>(dg::pow2_cyclic_queue<RetransmissionWaitingItem>(stdx::ulog2(stdx::ceil2(user_push_concurrency_sz))),
+                                                                             dg::pow2_cyclic_queue<RetransmissionWaitingItem>(stdx::ulog2(stdx::ceil2(retriable_push_concurrency_sz))),
+                                                                             data_structure::temporal_ordered_packet_map(pkt_map_capacity),
                                                                              data_structure::temporal_finite_unordered_set<global_packet_id_t>(acked_set_capacity),
                                                                              std::move(delay_negotiator),
                                                                              ticking_clock_resolution,
@@ -6549,19 +7099,27 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         }
 
         static auto get_buffer_fifo_container(size_t buffer_capacity,
+                                              size_t push_concurrency_sz,
                                               size_t consume_factor = 4u) -> std::unique_ptr<BufferContainerInterface>{
             
-            const size_t MIN_BUFFER_CAPACITY    = 1u;
-            const size_t MAX_BUFFER_CAPACITY    = size_t{1} << 25;
+            const size_t MIN_BUFFER_CAPACITY        = 1u;
+            const size_t MAX_BUFFER_CAPACITY        = size_t{1} << 25;
+            const size_t MIN_PUSH_CONCURRENCY_SZ    = 1u;
+            const size_t MAX_PUSH_CONCURRENCY_SZ    = size_t{1} << 20;
 
             if (std::clamp(buffer_capacity, MIN_BUFFER_CAPACITY, MAX_BUFFER_CAPACITY) != buffer_capacity){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(push_concurrency_sz, MIN_PUSH_CONCURRENCY_SZ, MAX_PUSH_CONCURRENCY_SZ) != push_concurrency_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             size_t tentative_consume_sz         = buffer_capacity >> consume_factor;
             size_t consume_sz                   = std::max(tentative_consume_sz, size_t{1u});
 
-            return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<internal_kernel_buffer>(stdx::ulog2(stdx::ceil2(buffer_capacity))),
+            return std::make_unique<BufferFIFOContainer>(dg::pow2_cyclic_queue<BufferContainerWaitingItem>(stdx::ulog2(stdx::ceil2(push_concurrency_sz))),
+                                                         dg::pow2_cyclic_queue<internal_kernel_buffer>(stdx::ulog2(stdx::ceil2(buffer_capacity))),
                                                          buffer_capacity,
                                                          stdx::make_unique_fair_atomic_flag(),
                                                          stdx::hdi_container<size_t>{consume_sz});
@@ -6681,6 +7239,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         static auto get_fair_inbound_buffer_container(size_t distribution_queue_sz,
                                                       size_t waiting_queue_sz,
                                                       size_t leftover_queue_sz,
+                                                      size_t push_concurrency_sz,
                                                       size_t vec_unit_sz) -> std::unique_ptr<BufferContainerInterface>{
 
             const size_t MIN_DISTRIBUTION_QUEUE_SZ  = size_t{1};
@@ -6691,6 +7250,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MAX_LEFTOVER_QUEUE_SZ      = size_t{1} << 20;
             const size_t MIN_VEC_UNIT_SZ            = size_t{1};
             const size_t MAX_VEC_UNIT_SZ            = size_t{1} << 20;
+            const size_t MIN_PUSH_CONCURRENCY_SZ    = size_t{1};
+            const size_t MAX_PUSH_CONCURRENCY_SZ    = size_t{1} << 20;
 
             if (std::clamp(distribution_queue_sz, MIN_DISTRIBUTION_QUEUE_SZ, MAX_DISTRIBUTION_QUEUE_SZ) != distribution_queue_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -6708,9 +7269,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(push_concurrency_sz, MIN_PUSH_CONCURRENCY_SZ, MAX_PUSH_CONCURRENCY_SZ) != push_concurrency_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             size_t queue_cap = distribution_queue_sz + waiting_queue_sz + leftover_queue_sz; 
 
-            return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
+            return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<FairBufferContainerWaitingItem>(stdx::ulog2(stdx::ceil2(push_concurrency_sz))),
+                                                                dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<internal_kernel_buffer>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
                                                                 dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
                                                                 get_default_lifo_unit_allocator<dg::vector<internal_kernel_buffer>>(queue_cap),
@@ -6740,19 +7306,27 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         }
 
         static auto get_packet_fifo_container(size_t packet_vec_capacity,
+                                              size_t push_concurrency_sz,
                                               size_t consume_factor = 4u) -> std::unique_ptr<PacketContainerInterface>{
             
-            const size_t MIN_VEC_CAPACITY   = size_t{1};
-            const size_t MAX_VEC_CAPACITY   = size_t{1} << 25;
+            const size_t MIN_VEC_CAPACITY           = size_t{1};
+            const size_t MAX_VEC_CAPACITY           = size_t{1} << 25;
+            const size_t MIN_PUSH_CONCURRENCY_SZ    = 1u;
+            const size_t MAX_PUSH_CONCURRENCY_SZ    = size_t{1} << 20;
 
             if (std::clamp(packet_vec_capacity, MIN_VEC_CAPACITY, MAX_VEC_CAPACITY) != packet_vec_capacity){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            if (std::clamp(push_concurrency_sz, MIN_PUSH_CONCURRENCY_SZ, MAX_PUSH_CONCURRENCY_SZ) != push_concurrency_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
             size_t tentative_consume_sz     = packet_vec_capacity >> consume_factor;
             size_t consume_sz               = std::max(tentative_consume_sz, size_t{1u});
 
-            return std::make_unique<PacketFIFOContainer>(dg::pow2_cyclic_queue<Packet>(stdx::ulog2(stdx::ceil2(packet_vec_capacity))),
+            return std::make_unique<PacketFIFOContainer>(dg::pow2_cyclic_queue<PacketContainerWaitingItem>(stdx::ulog2(stdx::ceil2(packet_vec_capacity))),
+                                                         dg::pow2_cyclic_queue<Packet>(stdx::ulog2(stdx::ceil2(packet_vec_capacity))),
                                                          packet_vec_capacity,
                                                          stdx::make_unique_fair_atomic_flag(),
                                                          stdx::hdi_container<size_t>{consume_sz});
@@ -6785,32 +7359,32 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                               stdx::hdi_container<size_t>{consume_sz});
         }
 
-        static auto get_std_outbound_packet_container(size_t ack_capacity,
-                                                      size_t request_capacity,
-                                                      size_t krescue_capacity,
-                                                      size_t accum_sz = constants::DEFAULT_ACCUMULATION_SIZE,
-                                                      size_t consume_factor = 4u) -> std::unique_ptr<PacketContainerInterface>{
+        // static auto get_std_outbound_packet_container(size_t ack_capacity,
+        //                                               size_t request_capacity,
+        //                                               size_t krescue_capacity,
+        //                                               size_t accum_sz = constants::DEFAULT_ACCUMULATION_SIZE,
+        //                                               size_t consume_factor = 4u) -> std::unique_ptr<PacketContainerInterface>{
             
-            const size_t MIN_ACCUM_SZ   = 1u;
-            const size_t MAX_ACCUM_SZ   = size_t{1} << 25; 
+        //     const size_t MIN_ACCUM_SZ   = 1u;
+        //     const size_t MAX_ACCUM_SZ   = size_t{1} << 25; 
 
-            if (std::clamp(accum_sz, MIN_ACCUM_SZ, MAX_ACCUM_SZ) != accum_sz){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
+        //     if (std::clamp(accum_sz, MIN_ACCUM_SZ, MAX_ACCUM_SZ) != accum_sz){
+        //         dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+        //     }
 
-            auto ack_container  = get_prioritized_packet_container(ack_capacity, consume_factor);
-            auto req_container  = get_packet_fifo_container(request_capacity, consume_factor);
-            auto rsc_container  = get_packet_fifo_container(krescue_capacity, consume_factor);
-            size_t consume_sz   = std::min(std::min(ack_container->max_consume_size(), req_container->max_consume_size()), rsc_container->max_consume_size());
+        //     auto ack_container  = get_prioritized_packet_container(ack_capacity, consume_factor);
+        //     auto req_container  = get_packet_fifo_container(request_capacity, consume_factor);
+        //     auto rsc_container  = get_packet_fifo_container(krescue_capacity, consume_factor);
+        //     size_t consume_sz   = std::min(std::min(ack_container->max_consume_size(), req_container->max_consume_size()), rsc_container->max_consume_size());
 
-            return std::make_unique<OutboundPacketContainer>(std::move(ack_container),
-                                                             std::move(req_container),
-                                                             std::move(rsc_container),
-                                                             accum_sz,
-                                                             accum_sz,
-                                                             accum_sz,
-                                                             stdx::hdi_container<size_t>{consume_sz});
-        }
+        //     return std::make_unique<OutboundPacketContainer>(std::move(ack_container),
+        //                                                      std::move(req_container),
+        //                                                      std::move(rsc_container),
+        //                                                      accum_sz,
+        //                                                      accum_sz,
+        //                                                      accum_sz,
+        //                                                      stdx::hdi_container<size_t>{consume_sz});
+        // }
         
         static auto get_normal_outbound_packet_container(size_t normal_packet_vec_queue_capacity,
                                                          size_t ack_packet_vec_queue_capacity,
@@ -6818,6 +7392,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                          size_t waiting_queue_capacity,
                                                          size_t leftover_queue_capacity,
                                                          size_t unit_sz,
+                                                         size_t push_concurrency_sz,
                                                          size_t accum_sz = constants::DEFAULT_ACCUMULATION_SIZE) -> std::unique_ptr<PacketContainerInterface>{
                 
             const size_t MIN_NORMAL_PACKET_VEC_QUEUE_CAPACITY   = 1u;
@@ -6830,6 +7405,8 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MAX_ACCUM_SZ                           = size_t{1} << 25;
             const size_t MIN_UNIT_SZ                            = 1u;
             const size_t MAX_UNIT_SZ                            = size_t{1} << 25;
+            const size_t MIN_PUSH_CONCURRENCY_SZ                = 1u;
+            const size_t MAX_PUSH_CONCURRENCY_SZ                = size_t{1} << 20; 
 
             if (std::clamp(normal_packet_vec_queue_capacity, MIN_NORMAL_PACKET_VEC_QUEUE_CAPACITY, MAX_NORMAL_PACKET_VEC_QUEUE_CAPACITY) != normal_packet_vec_queue_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -6851,11 +7428,18 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(push_concurrency_sz, MIN_PUSH_CONCURRENCY_SZ, MAX_PUSH_CONCURRENCY_SZ) != push_concurrency_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             size_t queue_cap = normal_packet_vec_queue_capacity + ack_packet_vec_queue_capacity + rescue_packet_vec_queue_capacity
                                 + waiting_queue_capacity + leftover_queue_capacity;
 
-            return std::make_unique<NormalOutboundPacketContainer>(dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(normal_packet_vec_queue_capacity))),
+            return std::make_unique<NormalOutboundPacketContainer>(dg::pow2_cyclic_queue<FairPacketContainerWaitingItem>(stdx::ulog2(stdx::ceil2(push_concurrency_sz))),
+                                                                   dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(normal_packet_vec_queue_capacity))),
+                                                                   dg::pow2_cyclic_queue<FairPacketContainerWaitingItem>(stdx::ulog2(stdx::ceil2(push_concurrency_sz))),
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(ack_packet_vec_queue_capacity))),
+                                                                   dg::pow2_cyclic_queue<FairPacketContainerWaitingItem>(stdx::ulog2(stdx::ceil2(push_concurrency_sz))),
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(rescue_packet_vec_queue_capacity))),
                                                                    dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_capacity))),
                                                                    dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(leftover_queue_capacity))),
@@ -6868,6 +7452,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
         static auto get_fair_inbound_packet_container(size_t packet_vec_queue_capacity,
                                                       size_t waiting_queue_capacity,
                                                       size_t leftover_queue_capacity,
+                                                      size_t push_concurrency_sz,
                                                       size_t vec_unit_sz) -> std::unique_ptr<FairInBoundPacketContainer>{
                                                 
             const size_t MIN_PACKET_VEC_QUEUE_CAPACITY  = 1u;
@@ -6877,7 +7462,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             const size_t MIN_LEFTOVER_QUEUE_CAPACITY    = 1u;
             const size_t MAX_LEFTOVER_QUEUE_CAPACITY    = size_t{1} << 25; 
             const size_t MIN_VEC_UNIT_SZ                = 1u;
-            const size_t MAX_VEC_UNIT_SZ                = size_t{1} << 20; 
+            const size_t MAX_VEC_UNIT_SZ                = size_t{1} << 20;
+            const size_t MIN_PUSH_CONCURRENCY_SZ        = 1u;
+            const size_t MAX_PUSH_CONCURRENCY_SZ        = size_t{1} << 20;
 
             if (std::clamp(packet_vec_queue_capacity, MIN_PACKET_VEC_QUEUE_CAPACITY, MAX_PACKET_VEC_QUEUE_CAPACITY) != packet_vec_queue_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -6895,9 +7482,14 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
+            if (std::clamp(push_concurrency_sz, MIN_PUSH_CONCURRENCY_SZ, MAX_PUSH_CONCURRENCY_SZ) != push_concurrency_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
             size_t unit_allocator_cap = packet_vec_queue_capacity + waiting_queue_capacity + leftover_queue_capacity; 
 
-            return std::make_unique<FairInBoundPacketContainer>(dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(packet_vec_queue_capacity))),
+            return std::make_unique<FairInBoundPacketContainer>(dg::pow2_cyclic_queue<FairPacketContainerWaitingItem>(stdx::ulog2(stdx::ceil2(push_concurrency_sz))),
+                                                                dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(packet_vec_queue_capacity))),
                                                                 dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<Packet>> *, semaphore_impl::dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_capacity))),
                                                                 dg::pow2_cyclic_queue<dg::vector<Packet>>(stdx::ulog2(stdx::ceil2(leftover_queue_capacity))),
                                                                 get_default_lifo_unit_allocator<dg::vector<Packet>>(unit_allocator_cap),
@@ -9339,6 +9931,8 @@ namespace dg::network_kernel_mailbox_impl1{
         bool retransmission_has_react_pattern;
         uint32_t retransmission_react_sz;
         uint32_t retransmission_react_queue_cap;
+        uint32_t retransmission_user_push_concurrency_sz;
+        uint32_t retransmission_retriable_push_concurrency_sz;
         std::chrono::nanoseconds retransmission_react_time;
         bool retransmission_has_exhaustion_control; 
 
@@ -9347,11 +9941,13 @@ namespace dg::network_kernel_mailbox_impl1{
         bool inbound_buffer_has_react_pattern;
         uint32_t inbound_buffer_react_sz;
         uint32_t inbound_buffer_react_queue_cap;
+        uint32_t inbound_buffer_push_concurrency_sz;
         std::chrono::nanoseconds inbound_buffer_react_time;
         bool inbound_buffer_has_fair_redistribution;
         uint32_t inbound_buffer_fair_distribution_queue_cap;
         uint32_t inbound_buffer_fair_waiting_queue_cap;
         uint32_t inbound_buffer_fair_leftover_queue_cap;
+        uint32_t inbound_buffer_fair_push_concurrency_sz;
         uint32_t inbound_buffer_fair_unit_sz;
         bool inbound_buffer_has_exhaustion_control; 
  
@@ -9360,11 +9956,13 @@ namespace dg::network_kernel_mailbox_impl1{
         bool inbound_packet_has_react_pattern;
         uint32_t inbound_packet_react_sz;
         uint32_t inbound_packet_react_queue_cap;
+        uint32_t inbound_packet_push_concurrency_sz;
         std::chrono::nanoseconds inbound_packet_react_time;
         bool inbound_packet_has_fair_redistribution;
         uint32_t inbound_packet_fair_packet_queue_cap;
         uint32_t inbound_packet_fair_waiting_queue_cap;
         uint32_t inbound_packet_fair_leftover_queue_cap; 
+        uint32_t inbound_packet_fair_push_concurrency_sz;
         uint32_t inbound_packet_fair_unit_sz;
         bool inbound_packet_has_exhaustion_control;
 
@@ -9402,6 +10000,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t outbound_container_waiting_queue_capacity;
         uint32_t outbound_container_leftover_queue_capacity; 
         uint32_t outbound_container_unit_sz;
+        uint32_t outbound_container_push_concurrency_sz;
         bool outbound_container_has_exhaustion_control; 
 
         bool inbound_tc_has_borderline_per_inbound_worker;
@@ -9448,7 +10047,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 if (config.inbound_buffer_concurrency_sz == 1u){
                     if (config.inbound_buffer_has_exhaustion_control){
                         if (config.inbound_buffer_has_react_pattern){
-                            return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                            return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap, config.inbound_buffer_push_concurrency_sz),
                                                                                                                                                                                       config.inbound_buffer_react_sz,
                                                                                                                                                                                       config.inbound_buffer_react_queue_cap,
                                                                                                                                                                                       config.inbound_buffer_react_time),
@@ -9456,19 +10055,19 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                                    packet_controller::ComponentFactory::get_default_exhaustion_controller());
                         }
 
-                        return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                        return packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap, config.inbound_buffer_push_concurrency_sz),
                                                                                                                config.retry_device,
                                                                                                                packet_controller::ComponentFactory::get_default_exhaustion_controller());
                     }
 
                     if (config.inbound_buffer_has_react_pattern){
-                        return packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                        return packet_controller::ComponentFactory::get_reacting_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap, config.inbound_buffer_push_concurrency_sz),
                                                                                                   config.inbound_buffer_react_sz,
                                                                                                   config.inbound_buffer_react_queue_cap,
                                                                                                   config.inbound_buffer_react_time);
                     }
 
-                    return packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap);
+                    return packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap, config.inbound_buffer_push_concurrency_sz);
                 }
 
                 std::vector<std::unique_ptr<packet_controller::BufferContainerInterface>> buffer_container_vec{};
@@ -9477,11 +10076,11 @@ namespace dg::network_kernel_mailbox_impl1{
                     auto current_buffer_container = std::unique_ptr<packet_controller::BufferContainerInterface>{};
 
                     if (config.inbound_buffer_has_exhaustion_control){
-                        current_buffer_container = packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap),
+                        current_buffer_container = packet_controller::ComponentFactory::get_exhaustion_controlled_buffer_container(packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap, config.inbound_buffer_push_concurrency_sz),
                                                                                                                                    config.retry_device,
                                                                                                                                    packet_controller::ComponentFactory::get_default_exhaustion_controller());
                     } else{
-                        current_buffer_container = packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap);
+                        current_buffer_container = packet_controller::ComponentFactory::get_buffer_fifo_container(config.inbound_buffer_container_cap, config.inbound_buffer_push_concurrency_sz);
                     }
 
                     buffer_container_vec.push_back(std::move(current_buffer_container));
@@ -9506,6 +10105,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 return packet_controller::ComponentFactory::get_fair_inbound_buffer_container(config.inbound_buffer_fair_distribution_queue_cap,
                                                                                               config.inbound_buffer_fair_waiting_queue_cap,
                                                                                               config.inbound_buffer_fair_leftover_queue_cap,
+                                                                                              config.inbound_buffer_fair_push_concurrency_sz,
                                                                                               config.inbound_buffer_fair_unit_sz);
             }
 
@@ -9518,7 +10118,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 if (config.inbound_packet_concurrency_sz == 1u){
                     if (config.inbound_packet_has_exhaustion_control){
                         if (config.inbound_packet_has_react_pattern){
-                            return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                            return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap, config.inbound_packet_push_concurrency_sz),
                                                                                                                                                                                       config.inbound_packet_react_sz,
                                                                                                                                                                                       config.inbound_packet_react_queue_cap,
                                                                                                                                                                                       config.inbound_packet_react_time),
@@ -9526,19 +10126,19 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                                    packet_controller::ComponentFactory::get_default_exhaustion_controller());
                         }
 
-                        return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                        return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap, config.inbound_packet_push_concurrency_sz),
                                                                                                                config.retry_device,
                                                                                                                packet_controller::ComponentFactory::get_default_exhaustion_controller());
                     }
 
                     if (config.inbound_packet_has_react_pattern){
-                        return packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                        return packet_controller::ComponentFactory::get_reacting_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap, config.inbound_packet_push_concurrency_sz),
                                                                                                   config.inbound_packet_react_sz,
                                                                                                   config.inbound_packet_react_queue_cap,
                                                                                                   config.inbound_packet_react_time);
                     }
 
-                    return packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap);
+                    return packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap, config.inbound_packet_push_concurrency_sz);
                 }
 
                 std::vector<std::unique_ptr<packet_controller::PacketContainerInterface>> packet_container_vec{};
@@ -9547,11 +10147,11 @@ namespace dg::network_kernel_mailbox_impl1{
                     auto current_packet_container = std::unique_ptr<packet_controller::PacketContainerInterface>{};
                      
                     if (config.inbound_packet_has_exhaustion_control){
-                        current_packet_container = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap),
+                        current_packet_container = packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap, config.inbound_packet_push_concurrency_sz),
                                                                                                                                    config.retry_device,
                                                                                                                                    packet_controller::ComponentFactory::get_default_exhaustion_controller());
                     } else{
-                        current_packet_container = packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap);
+                        current_packet_container = packet_controller::ComponentFactory::get_packet_fifo_container(config.inbound_packet_container_cap, config.inbound_packet_push_concurrency_sz);
                     }
 
                     packet_container_vec.push_back(std::move(current_packet_container));
@@ -9576,6 +10176,7 @@ namespace dg::network_kernel_mailbox_impl1{
                 return packet_controller::ComponentFactory::get_fair_inbound_packet_container(config.inbound_packet_fair_packet_queue_cap,
                                                                                               config.inbound_packet_fair_waiting_queue_cap,
                                                                                               config.inbound_packet_fair_leftover_queue_cap,
+                                                                                              config.inbound_packet_fair_push_concurrency_sz,
                                                                                               config.inbound_packet_fair_unit_sz);
             }
 
@@ -9643,47 +10244,29 @@ namespace dg::network_kernel_mailbox_impl1{
                 }
 
                 if (config.retransmission_concurrency_sz == 1u){
-                    if (config.retransmission_has_exhaustion_control){
-                        return packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
-                                                                                                                                                                                                            config.retransmission_idhashset_cap,
-                                                                                                                                                                                                            packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
-                                                                                                                                                                                                            config.retransmission_ticking_clock_resolution,
-                                                                                                                                                                                                            config.retransmission_packet_cap,
-                                                                                                                                                                                                            config.retransmission_user_queue_cap),
-                                                                                                                        config.retry_device,
-                                                                                                                        packet_controller::ComponentFactory::get_default_exhaustion_controller());
-                    }
-
                     return packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
                                                                                                                config.retransmission_idhashset_cap,
                                                                                                                packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
                                                                                                                config.retransmission_ticking_clock_resolution,
                                                                                                                config.retransmission_packet_cap,
-                                                                                                               config.retransmission_user_queue_cap);
+                                                                                                               config.retransmission_user_queue_cap,
+                                                                                                               config.retransmission_user_push_concurrency_sz,
+                                                                                                               config.retransmission_retriable_push_concurrency_sz);
                 }
 
                 std::vector<std::unique_ptr<packet_controller::RetransmissionControllerInterface>> retransmission_controller_vec{};
 
                 for (size_t i = 0u; i < config.retransmission_concurrency_sz; ++i){
                     auto current_retransmission_controller = std::unique_ptr<packet_controller::RetransmissionControllerInterface>{}; 
-                    
-                    if (config.retransmission_has_exhaustion_control){
-                        current_retransmission_controller = packet_controller::ComponentFactory::get_exhaustion_controlled_retransmission_controller(packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
-                                                                                                                                                                                                                                         config.retransmission_idhashset_cap,
-                                                                                                                                                                                                                                         packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
-                                                                                                                                                                                                                                         config.retransmission_ticking_clock_resolution,
-                                                                                                                                                                                                                                         config.retransmission_packet_cap,
-                                                                                                                                                                                                                                         config.retransmission_user_queue_cap),
-                                                                                                                                                     config.retry_device,
-                                                                                                                                                     packet_controller::ComponentFactory::get_default_exhaustion_controller()); 
-                    } else{
-                        current_retransmission_controller = packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
-                                                                                                                                                config.retransmission_idhashset_cap,
-                                                                                                                                                packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
-                                                                                                                                                config.retransmission_ticking_clock_resolution,
-                                                                                                                                                config.retransmission_packet_cap,
-                                                                                                                                                config.retransmission_user_queue_cap);
-                    }
+
+                    current_retransmission_controller = packet_controller::ComponentFactory::get_memory_efficient_retransmission_controller(config.retransmission_queue_cap,
+                                                                                                                                            config.retransmission_idhashset_cap,
+                                                                                                                                            packet_controller::ComponentFactory::get_static_retransmission_delay_negotiator(config.retransmission_delay),
+                                                                                                                                            config.retransmission_ticking_clock_resolution,
+                                                                                                                                            config.retransmission_packet_cap,
+                                                                                                                                            config.retransmission_user_queue_cap,
+                                                                                                                                            config.retransmission_user_push_concurrency_sz,
+                                                                                                                                            config.retransmission_retriable_push_concurrency_sz);
 
                     retransmission_controller_vec.push_back(std::move(current_retransmission_controller));
                 }
@@ -9698,7 +10281,8 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                      config.outbound_container_krescue_packet_container_cap,
                                                                                                      config.outbound_container_waiting_queue_capacity,
                                                                                                      config.outbound_container_leftover_queue_capacity,
-                                                                                                     config.outbound_container_unit_sz);
+                                                                                                     config.outbound_container_unit_sz,
+                                                                                                     config.outbound_container_push_concurrency_sz);
                 
                 if (config.outbound_container_has_exhaustion_control){
                     return packet_controller::ComponentFactory::get_exhaustion_controlled_packet_container(std::move(ins), 

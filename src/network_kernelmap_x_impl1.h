@@ -609,7 +609,7 @@ namespace dg::network_kernelmap_x_impl1::implementation{
         private:
 
             static auto unifdist_map(const dg::unordered_map<fsys_ptr_t, std::filesystem::path>& alias_map,
-                                    size_t distribution_factor) -> dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>>
+                                     size_t distribution_factor) -> dg::vector<dg::unordered_map<fsys_ptr_t, std::filesystem::path>>
             {
                 if (alias_map.size() == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -627,15 +627,31 @@ namespace dg::network_kernelmap_x_impl1::implementation{
 
                 std::shuffle(map_vec.begin(), map_vec.end(), std::mt19937{static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
 
-                size_t segment_sz   = map_vec.size() / distribution_factor + static_cast<size_t>(map_vec.size() % distribution_factor != 0u);
+                size_t segment_sz   = map_vec.size() / distribution_factor; 
+                size_t last_last    = 0u;
 
-                for (size_t i = 0u; i < distribution_factor; ++i){
-                    
-                    size_t first    = std::min(static_cast<size_t>(segment_sz * i), map_vec.size());
-                    size_t last     = std::min(static_cast<size_t>(segment_sz * (i + 1)), map_vec.size());
+                for (size_t i = 0u; i < distribution_factor; ++i)
+                {  
+                    size_t first    = segment_sz * i;
+                    size_t last     = segment_sz * (i + 1);
+                    last_last       = last;
+
+                    if (first != last)
+                    {
+                        auto appendee   = dg::unordered_map<fsys_ptr_t, std::filesystem::path>(std::next(map_vec.begin(), first),
+                                                                                               std::next(map_vec.begin(), last));
+
+                        rs.push_back(std::move(appendee));
+                    }
+                }
+
+                if (last_last != map_vec.size())
+                {
+                    size_t first    = last_last;
+                    size_t last     = map_vec.size();
 
                     auto appendee   = dg::unordered_map<fsys_ptr_t, std::filesystem::path>(std::next(map_vec.begin(), first),
-                                                                                           std::next(map_vec.begin(), last)); 
+                                                                                           std::next(map_vec.begin(), last));
 
                     rs.push_back(std::move(appendee));
                 }

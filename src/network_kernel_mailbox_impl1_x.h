@@ -3105,6 +3105,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     std::expected<PacketSegment, exception_t> pkt = deserialize_packet_segment(std::move(buf_arr[i]));
 
                     if (!pkt.has_value()){
+                        std::cout << "mayday deserialize!" << std::endl;
+                        std::abort();
+
                         dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(pkt.error()));
                         continue;
                     }
@@ -3200,6 +3203,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             std::expected<internal_huge_kernel_buffer, exception_t> buf = internal_integrity_assembled_packet_to_buffer(static_cast<AssembledPacket&&>(assembled_arr[i].value())); 
 
                             if (!buf.has_value()){
+                                std::cout << "mayday inbound gate!" << std::endl;
+                                std::abort();
+
                                 dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(buf.error()));
                             } else{
                                 dg::network_producer_consumer::delvrsrv_deliver(this->inbound_feeder, std::move(buf.value()));
@@ -3233,6 +3239,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                     for (size_t i = 0u; i < sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
+                            std::cout << "mayday inbound gate!" << std::endl;
+                            std::abort();
+
                             dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
                             continue;
                         }

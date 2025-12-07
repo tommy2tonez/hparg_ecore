@@ -1,5 +1,6 @@
-#ifndef __SOCK_TEST_PROGRAM__
-#define __SOCK_TEST_PROGRAM__
+
+#ifndef __SOCK_STREAM_TEST_PROGRAM__
+#define __SOCK_STREAM_TEST_PROGRAM__
 
 #define DEBUG_MODE_FLAG true
 #define STRONG_MEMORY_ORDERING_FLAG true
@@ -10,8 +11,9 @@
 #include <thread>
 #include <mutex>
 #include "../src/network_kernel_mailbox_impl1.h"
-#include "../src/network_kernelmap_x.h"
+#include "../src/network_kernel_mailbox_impl1_x.h"
 #include <random>
+
 
 class TestWorker: public virtual dg::network_concurrency::WorkerInterface
 {
@@ -28,26 +30,26 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
 
         bool run_one_epoch() noexcept
         {
-            const size_t TEST_SZ = size_t{1} << 20u;
-            size_t packet_sz                                = 256;
-            std::vector<std::shared_ptr<void>> resource_vec = {};
-            size_t packet_count                             = randomize_packet_count();
-            std::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> mailbox_arg_vec = make_mailbox_arg_vec(packet_sz, packet_count, 5000, resource_vec);
-            std::vector<std::string> recv_vec{};
+            const size_t TEST_SZ = size_t{1} << 10u;
 
             for (size_t i = 0u; i < TEST_SZ; ++i)
             {
+                std::vector<std::shared_ptr<void>> resource_vec = {};
+                size_t packet_sz                                = 8u;
+                size_t packet_count                             = randomize_packet_count();
 
                 std::cout << "test packet_sz > " << packet_sz << " packet_count > " << packet_count << std::endl;  
 
-                this->discrete_strong_send(mailbox_arg_vec.data(), mailbox_arg_vec.size(), size_t{1} << 14);
-                this->strong_recv(mailbox_arg_vec.size(), packet_sz, recv_vec);
+                std::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> mailbox_arg_vec = make_mailbox_arg_vec(packet_sz, packet_count, 5000, resource_vec);
 
-                // sorted_print(recv_vec);
-                // assert_equal(mailbox_arg_vec, recv_vec);
+                this->strong_send(mailbox_arg_vec.data(), mailbox_arg_vec.size());
+                std::vector<std::string> recv_vec = this->strong_recv(mailbox_arg_vec.size(), packet_sz);
+
+                sorted_print(recv_vec);
+                assert_equal(mailbox_arg_vec, recv_vec);
 
                 std::cout << "test > " << i << "/" << TEST_SZ << std::endl;
-                // resource_vec = {};
+                resource_vec = {};
 
                 // std::this_thread::sleep_for(std::chrono::seconds(10));
             }
@@ -67,7 +69,7 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
 
             for (const auto& e: cpy_vec)
             {
-                // std::cout << "value > " << e << std::endl;
+                std::cout << "value > " << e << std::endl;
             }
         }
 
@@ -84,7 +86,7 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
             for (const auto& e: recv_vec)
             {
                 size_t& value = counter[e];
-
+                
                 if (value == 0u)
                 {
                     std::cout << "mayday counter" << std::endl;
@@ -108,13 +110,8 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
 
         void strong_send(dg::network_kernel_mailbox_impl1::model::MailBoxArgument * arg_arr, size_t sz)
         {
-            static std::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> tmp_vec{};
-            
-            tmp_vec.resize(sz);
-            std::copy(arg_arr, std::next(arg_arr, sz), tmp_vec.begin());
-
-            static std::vector<exception_t> exception_vec{};
-            exception_vec.resize(sz);
+            std::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> tmp_vec(arg_arr, std::next(arg_arr, sz));
+            std::vector<exception_t> exception_vec(sz);
 
             while (true)
             {
@@ -129,17 +126,17 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
                     }
                     else
                     {
-                        // for (char c: std::string_view(static_cast<const char *>(tmp_vec[i].content), std::next(static_cast<const char *>(tmp_vec[i].content), tmp_vec[i].content_sz)))
-                        // {
-                        //     bool is_numeric = c >= '0' && c <= '9'; 
+                        for (char c: std::string_view(static_cast<const char *>(tmp_vec[i].content), std::next(static_cast<const char *>(tmp_vec[i].content), tmp_vec[i].content_sz)))
+                        {
+                            bool is_numeric = c >= '0' && c <= '9'; 
 
-                        //     if (!is_numeric)
-                        //     {
-                        //         std::cout << "mayday 1" << std::endl;
-                        //         std::cout << std::string_view(static_cast<const char *>(tmp_vec[i].content), std::next(static_cast<const char *>(tmp_vec[i].content), tmp_vec[i].content_sz)) << std::endl;
-                        //         std::abort();
-                        //     }
-                        // }
+                            if (!is_numeric)
+                            {
+                                std::cout << "mayday 1" << std::endl;
+                                std::cout << std::string_view(static_cast<const char *>(tmp_vec[i].content), std::next(static_cast<const char *>(tmp_vec[i].content), tmp_vec[i].content_sz)) << std::endl;
+                                std::abort();
+                            }
+                        }
                     }
                 }
 
@@ -151,40 +148,19 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
                 tmp_vec.resize(nxt_sz);
             }            
         }
-
-        void discrete_strong_send(dg::network_kernel_mailbox_impl1::model::MailBoxArgument * arg_arr, size_t sz, size_t discrete_sz)
+        
+        auto strong_recv(size_t sz, size_t segment_sz) -> std::vector<std::string>
         {
-            size_t partitioned_sz = sz / discrete_sz + size_t{sz % discrete_sz != 0u};
-            
-            for (size_t i = 0u; i < partitioned_sz; ++i)
-            {
-                size_t first    = i * discrete_sz;
-                size_t last     = std::min(static_cast<size_t>((i + 1) * discrete_sz), sz);
-
-                strong_send(std::next(arg_arr, first), last - first);
-            }
-        }
-
-        void strong_recv(size_t sz,
-                         size_t segment_sz,
-                         std::vector<std::string>& buf_vec)
-        {
-            // std::vector<std::string> buf_vec(sz);
-
-            buf_vec.resize(sz);
+            std::vector<std::string> buf_vec(sz);
 
             for (auto& e: buf_vec)
             {
                 e.resize(segment_sz);
             }
 
-            static std::vector<void *> recv_arr{};
-            static std::vector<size_t> cap_arr{};
-            static std::vector<size_t> sz_arr{};
-
-            recv_arr.resize(sz);
-            cap_arr.resize(sz);
-            sz_arr.resize(sz);
+            std::vector<void *> recv_arr(sz);
+            std::vector<size_t> cap_arr(sz);
+            std::vector<size_t> sz_arr(sz);
 
             for (size_t i = 0u; i < sz; ++i)
             {
@@ -208,6 +184,8 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
 
                 std::cout << "actual > " << actual_recv_sz << "<> expected > " << sz << std::endl; 
             }
+
+            return buf_vec;
         }
 
         auto randomize_packet_size() -> size_t
@@ -221,7 +199,7 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
         auto randomize_packet_count() -> size_t
         {
             static auto random_device       = std::bind(std::uniform_int_distribution<size_t>{}, std::mt19937_64{static_cast<size_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count())});
-            const size_t PACKET_COUNT_RANGE = size_t{1} << 19;
+            const size_t PACKET_COUNT_RANGE = size_t{1} << 16;
 
             return random_device() % PACKET_COUNT_RANGE + 1u;
         }
@@ -288,7 +266,7 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
                 dg::network_kernel_mailbox_impl1::model::MailBoxArgument arg = {};
 
                 arg.to          = self_addr;
-                arg.content     = make_str(packet_sz, resource_container);
+                arg.content     = make_incremental_str(packet_sz, resource_container);
                 arg.content_sz  = packet_sz;
 
                 rs.push_back(std::move(arg));
@@ -329,11 +307,31 @@ int main()
 
             std::cout << "making socket ..." << std::endl;
 
-            dg::network_kernel_mailbox_impl1::allocation::init({.total_mempiece_count = 1 << 20,
+            dg::network_kernel_mailbox_impl1::allocation::init({.total_mempiece_count = 1 << 22,
                                                                 .mempiece_sz = 1 << 10,
                                                                 .affined_refill_sz = 1 << 8,
                                                                 .affined_mem_vec_capacity = 1 << 8,
                                                                 .affined_free_vec_capacity = 1 << 8});
+
+            dg::network_kernel_mailbox_impl1_flash_streamx::init_memory(
+                                                            {.total_mempiece_count = 1 << 20,
+                                                             .mempiece_sz = 1 << 12,
+                                                             .affined_refill_sz = 1 << 8,
+                                                             .affined_mem_vec_capacity = 1 << 8,
+                                                             .affined_free_vec_capacity = 1 << 8}, 
+                                                            {
+                                                             .total_mempiece_count = 1 << 20,
+                                                             .mempiece_sz = 1 << 12,
+                                                             .affined_refill_sz = 1 << 8,
+                                                             .affined_mem_vec_capacity = 1 << 8,
+                                                             .affined_free_vec_capacity = 1 << 8
+                                                            },
+                                                            {.total_mempiece_count = 1 << 12,
+                                                             .mempiece_sz = 1 << 12,
+                                                             .affined_refill_sz = 1 << 8,
+                                                             .affined_mem_vec_capacity = 1 << 8,
+                                                             .affined_free_vec_capacity = 1 << 8
+                                                            });
 
             auto sock = dg::network_kernel_mailbox_impl1::spawn(dg::network_kernel_mailbox_impl1::Config{
                 .num_kernel_inbound_worker = 16,
@@ -353,7 +351,7 @@ int main()
 
                 .is_void_retransmission_controller = false,
                 .retransmission_delay = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)),
-                .retransmission_concurrency_sz = 2,
+                .retransmission_concurrency_sz = 1,
                 .retransmission_queue_cap = 1 << 16,
                 .retransmission_user_queue_cap = 1 << 14,
                 .retransmission_packet_cap = 10,
@@ -362,23 +360,19 @@ int main()
                 .retransmission_has_react_pattern = false,
                 .retransmission_react_sz = 1 << 8,
                 .retransmission_react_queue_cap = 1 << 10,
-                .retransmission_user_push_concurrency_sz = 1024,
-                .retransmission_retriable_push_concurrency_sz = 1024,
                 .retransmission_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
                 .retransmission_has_exhaustion_control = true,
 
                 .inbound_buffer_concurrency_sz = 32,
-                .inbound_buffer_container_cap = 1 << 8,
+                .inbound_buffer_container_cap = 1 << 14,
                 .inbound_buffer_has_react_pattern = true,
                 .inbound_buffer_react_sz = 1 << 10,
                 .inbound_buffer_react_queue_cap = 1 << 12,
-                .inbound_buffer_push_concurrency_sz = 1024,
                 .inbound_buffer_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
                 .inbound_buffer_has_fair_redistribution = true,
                 .inbound_buffer_fair_distribution_queue_cap = 1 << 14,
                 .inbound_buffer_fair_waiting_queue_cap = 1 << 10,
                 .inbound_buffer_fair_leftover_queue_cap = 1 << 10,
-                .inbound_buffer_fair_push_concurrency_sz = 1024,
                 .inbound_buffer_fair_unit_sz = 1 << 12,
                 .inbound_buffer_has_exhaustion_control = true,
 
@@ -387,18 +381,16 @@ int main()
                 .inbound_packet_has_react_pattern = true,
                 .inbound_packet_react_sz = 1 << 10,
                 .inbound_packet_react_queue_cap = 1 << 12,
-                .inbound_packet_push_concurrency_sz = 1024,
                 .inbound_packet_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
                 .inbound_packet_has_fair_redistribution = true,
                 .inbound_packet_fair_packet_queue_cap = 1 << 14,
                 .inbound_packet_fair_waiting_queue_cap = 1 << 10,
                 .inbound_packet_fair_leftover_queue_cap = 1 << 10,
-                .inbound_packet_fair_push_concurrency_sz = 1024,
                 .inbound_packet_fair_unit_sz = 1 << 12,
                 .inbound_packet_has_exhaustion_control = true, 
 
                 .inbound_idhashset_concurrency_sz = 32,
-                .inbound_idhashset_cap = 1 << 18,
+                .inbound_idhashset_cap = 1 << 14,
 
                 .worker_inbound_buffer_fair_container_fr_warehouse_get_cap = 1 << 12,
                 .worker_inbound_buffer_fair_container_to_warehouse_push_cap = 1 << 12,
@@ -419,19 +411,18 @@ int main()
                 .worker_outbound_packet_consumption_cap = 10,
                 .worker_outbound_packet_busy_threshold_sz = 1,
 
-                .mailbox_inbound_cap = size_t{1} << 16,
-                .mailbox_outbound_cap = size_t{1} << 16,
+                .mailbox_inbound_cap = size_t{1} << 20,
+                .mailbox_outbound_cap = size_t{1} << 20,
                 .traffic_reset_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)),
 
                 .outbound_transmit_frequency = uint32_t{1} << 18,
 
-                .outbound_container_request_packet_container_cap = 1 << 14,
-                .outbound_container_ack_packet_container_cap = 1 << 14,
-                .outbound_container_krescue_packet_container_cap = 1 << 14,
-                .outbound_container_waiting_queue_capacity = 1 << 14,
+                .outbound_container_request_packet_container_cap = 1 << 20,
+                .outbound_container_ack_packet_container_cap = 1 << 20,
+                .outbound_container_krescue_packet_container_cap = 1 << 20,
+                .outbound_container_waiting_queue_capacity = 1 << 10,
                 .outbound_container_leftover_queue_capacity = 1 << 10,
                 .outbound_container_unit_sz = 1 << 10,
-                .outbound_container_push_concurrency_sz = 1024,
                 .outbound_container_has_exhaustion_control = false,
 
                 .inbound_tc_has_borderline_per_inbound_worker = true,
@@ -450,11 +441,80 @@ int main()
                 .retry_device = retry_device
             });
 
+            auto sock2 = dg::network_kernel_mailbox_impl1_flash_streamx::spawn(dg::network_kernel_mailbox_impl1_flash_streamx::Config{
+                .factory_addr = {.ip = dg::network_kernel_mailbox_impl1::utility::ipv4_std_formatted_str_to_compact("127.0.0.1").value(),
+                                 .port = 5001},
+                .packetizer_segment_bsz = size_t{1} << 0,
+                .packetizer_max_bsz = size_t{1} << 20,
+                .packetizer_has_integrity_transmit = true,
+
+                .gate_controller_ato_component_sz = 16,
+                .gate_controller_ato_map_capacity = size_t{1} << 20,
+                .gate_controller_ato_dur = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
+                .gate_controller_ato_keyvalue_feed_cap = size_t{1} << 10,
+
+                .gate_controller_blklst_component_sz = 16,
+                .gate_controller_blklst_bloomfilter_cap = size_t{1} << 30,
+                .gate_controller_blklst_bloomfilter_rehash_sz = 4,
+                .gate_controller_blklst_bloomfilter_reliability_decay_factor = 10,
+                .gate_controller_blklst_keyvalue_feed_cap = size_t{1} << 10,
+
+                .latency_controller_component_sz = 16,
+                .latency_controller_queue_cap = size_t{1} << 20,
+                .latency_controller_unique_id_cap = size_t{1} << 20,
+                .latency_controller_expiry_period = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
+                .latency_controller_keyvalue_feed_cap = size_t{1} << 10,
+                .latency_controller_has_exhaustion_control = true,
+
+                .packet_assembler_component_sz = 16,
+                .packet_assembler_map_cap = size_t{1} << 20,
+                .packet_assembler_global_segment_cap = size_t{1} << 20,
+                .packet_assembler_max_segment_per_stream = size_t{1} << 11,
+                .packet_assembler_keyvalue_feed_cap = size_t{1} << 10,
+                .packet_assembler_has_exhaustion_control = true,
+
+                .inbound_container_component_sz = 16,
+                .inbound_container_cap = size_t{1} << 20,
+                .inbound_container_has_exhaustion_control = true,
+                .inbound_container_has_react_pattern = true,
+                .inbound_container_react_sz = size_t{1} << 10,
+                .inbound_container_subscriber_cap = size_t{1} << 10,
+                .inbound_container_react_latency = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(100)),
+                .inbound_container_has_redistributor = true,
+                .inbound_container_redistributor_distribution_queue_sz = size_t{1} << 20,
+                .inbound_container_redistributor_waiting_queue_sz = size_t{1} << 20,
+                .inbound_container_redistributor_concurrent_sz = size_t{1} << 20,
+                .inbound_container_redistributor_unit_sz = size_t{1} << 6,
+
+                .expiry_worker_count = 1,
+                .expiry_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
+                .expiry_worker_consume_sz = size_t{1} << 10,
+                .expiry_worker_busy_consume_sz = 1,
+
+                .inbound_worker_count = 1,
+                .inbound_worker_packet_assembler_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_inbound_gate_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_blacklist_gate_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_latency_controller_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_inbound_container_vectorization_sz = size_t{1} << 10,
+                .inbound_worker_consume_sz = size_t{1} << 10,
+                .inbound_worker_busy_consume_sz = 1,
+                .inbound_redistributor_worker_suck_cap = size_t{1} << 10,
+                .inbound_redistributor_worker_push_cap = size_t{1} << 10,
+                .inbound_redistributor_worker_busy_threshold = 1,
+
+                .mailbox_transmission_vectorization_sz = size_t{1} << 10,
+
+                .outbound_rule = dg::network_kernel_mailbox_impl1_flash_streamx::get_empty_outbound_rule(),
+                .infretry_device = retry_device,
+                .base = std::move(sock)
+            });
+
             std::cout << "made socket ..." << std::endl;
 
             std::binary_semaphore smp(0u);
 
-            auto test_worker = std::make_unique<TestWorker>(sock.get(), &smp);
+            auto test_worker = std::make_unique<TestWorker>(sock2.get(), &smp);
             // auto hello_world_worker = std::make_unique<HelloWorldWorker>(sock.get());
 
             dg::network_concurrency::daemon_register(dg::network_concurrency::COMPUTING_DAEMON, std::move(test_worker));
