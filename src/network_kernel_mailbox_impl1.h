@@ -70,28 +70,37 @@ namespace dg::network_kernel_mailbox_impl1::allocation{
     using Config = dg::network_kernel_allocator_singleton::Config; 
 
     struct Signature{};
-
+    struct Signature1{};
     struct Signature2{}; 
 
-    using AllocatorInstance         = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature>; 
-    using CrucialAllocatorInstance  = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature2>;
+    using AllocatorInstance                 = dg::network_kernel_allocator_singleton::AllocatorSingletonInstance<Signature>; 
+    using RetransmissionAllocatorInstance   = dg::network_kernel_allocator_singleton::AllocatorSingletonInstance<Signature1>; 
+    using CrucialAllocatorInstance          = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature2>;
+    using PolymorphicAllocator              = dg::network_kernel_allocator_singleton::SingletonPolymorphicAllocator<AllocatorInstance, false>;
 
     void init(Config config,
+              std::optional<Config> retransmission_config = std::nullopt,
               std::optional<Config> crucial_config = std::nullopt)
     {
-        AllocatorInstance::init(config);
+        if (!retransmission_config.has_value())
+        {
+            retransmission_config = config;
+        }
 
         if (!crucial_config.has_value())
         {
             crucial_config = config;
         }
 
+        AllocatorInstance::init(config);
+        RetransmissionAllocatorInstance::init(retransmission_config.value());
         CrucialAllocatorInstance::init(crucial_config.value());
     }
 
     void deinit() noexcept
     {
         AllocatorInstance::deinit();
+        RetransmissionAllocatorInstance::deinit();
         CrucialAllocatorInstance::deinit();
     }
 
@@ -101,10 +110,10 @@ namespace dg::network_kernel_mailbox_impl1::allocation{
         return std::allocate_shared<T>(dg::network_kernel_allocator_singleton::StdWrappedAllocator<T, CrucialAllocatorInstance>{}, std::forward<Args>(args)...);
     }
 
-    using internal_kernel_buffer = dg::network_kernel_buffer::kernel_string<dg::network_kernel_allocator_singleton::StaticWrappedAllocator<AllocatorInstance>>;
+    using internal_kernel_buffer = dg::network_kernel_buffer::polymorphic_kernel_string<PolymorphicAllocator>;
 
     template <class T>
-    using internal_vector = std::vector<T, dg::network_kernel_allocator_singleton::StdWrappedAllocator<T, AllocatorInstance>>; 
+    using internal_vector = std::vector<T, dg::network_kernel_allocator_singleton::StdWrappedAllocator<T, PolymorphicAllocator>>; 
 }
 
 namespace dg::network_kernel_mailbox_impl1::types{
@@ -113,8 +122,6 @@ namespace dg::network_kernel_mailbox_impl1::types{
 
     template <class T>
     using internal_vector = dg::network_kernel_mailbox_impl1::allocation::internal_vector<T>;
-    // template <class T>
-    // using internal_vector = std::vector<T>;
 }
 
 namespace dg::network_kernel_mailbox_impl1::model{
@@ -4740,7 +4747,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>> distribution_queue;
             dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<internal_kernel_buffer>> *, semaphore_impl::dg_binary_semaphore *>> waiting_queue;
             dg::pow2_cyclic_queue<dg::vector<internal_kernel_buffer>> leftover_queue;
-            std::unique_ptr<UnitAllocatorInterface<dg::vector<internal_kernel_buffer>>> bufvec_allocator; 
+            std::unique_ptr<UnitAllocatorInterface<dg::vector<internal_kernel_buffer>>> bufvec_allocator;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
@@ -4777,7 +4784,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 std::expected<dg::vector<internal_kernel_buffer>, exception_t> buffer_vec_tmp = this->bufvec_allocator->get();
 
                 if (!buffer_vec_tmp.has_value()){
-                    std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::QUEUE_FULL);
+                    std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::RESOURCE_EXHAUSTION);
                     return;
                 }
 
@@ -8139,6 +8146,17 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             };
     };
  
+    //what I have desparately trying to work on is to distinct two buffer pools of retransmission and that of the global buffer queues
+    //because this is the contract of guaranteeing to deliver the message up to 1 - 10 ** -8 success rate 
+    //so I guess we'd have to polymorphic the allocator, by writing directly on the prefix of the allocations
+    //this hinge of logic is so important that we must implement, even if there isnt an exhaustion case
+    //according to the observable of the software and the contracts, also the stable logics theory, I think that this is correctly implemented in the sense of in_queue, SUCCESS == guarantee of delivery up to certain percentages based on the configurations
+
+    //it's actually a marvel of engineering that we have got to this point
+    //because the retriables with the right configuration (2s * 10 times), it's almost impossible to miss a SUCCESS packet if correctly scheduled
+    //and it's also almost impossible for the retried packet to be duplicated (such is that the previous retry of the same packet is still in its lifetime)
+    //but we already capped all the components to make sure that our memory consumption is converging as the application is running, and not diverging in the sense of fragmentation or usages or etc.
+
     class RetransmissionWorker: public virtual dg::network_concurrency::WorkerInterface{
 
         private:
@@ -8187,7 +8205,7 @@ namespace dg::network_kernel_mailbox_impl1::worker{
                 auto single_delivery_handle                 = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_open_preallocated_raiihandle(&single_delivery_resolutor, trimmed_single_delivery_handle_sz, sdh_mem.get())); 
 
                 for (size_t i = 0u; i < packet_arr_sz; ++i){
-                    std::expected<Packet, exception_t> retransmit_pkt = dg::network_exception::cstyle_initialize<Packet>(packet_arr[i]);
+                    std::expected<Packet, exception_t> retransmit_pkt = this->copy_packet(packet_arr[i]);
 
                     if (!retransmit_pkt.has_value()){
                         dg::network_producer_consumer::delvrsrv_deliver(single_delivery_handle.get(), std::move(packet_arr[i]));
@@ -8206,6 +8224,31 @@ namespace dg::network_kernel_mailbox_impl1::worker{
             }
 
         private:
+
+            auto copy_packet(const Packet& pkt) noexcept -> std::expected<Packet, exception_t>
+            {
+                if (packet_service::is_request_packet(pkt))
+                {
+                    RequestPacket new_pkt               = {};
+                    new_pkt.content                     = internal_kernel_buffer(allocation::RetransmissionAllocatorInstance::get());
+                    static_cast<PacketHeader&>(new_pkt) = static_cast<const PacketHeader&>(pkt);
+
+                    try
+                    {
+                        static_cast<XOnlyRequestPacket&>(new_pkt) = std::get<XOnlyRequestPacket>(pkt.xonly_content);
+                    }
+                    catch (...)
+                    {
+                        return std::unexpected(dg::network_exception::wrap_std_exception(std::current_exception()));
+                    }
+
+                    return packet_service::virtualize_request_packet(std::move(new_pkt));
+                }
+                else
+                {
+                    return dg::network_exception::cstyle_initialize<Packet>(pkt);
+                }
+            } 
 
             struct DeliveryArgument{
 

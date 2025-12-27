@@ -459,9 +459,9 @@ int main()
                 .gate_controller_blklst_bloomfilter_reliability_decay_factor = 10,
                 .gate_controller_blklst_keyvalue_feed_cap = size_t{1} << 10,
 
+                .latency_controller_tick_wait_queue_cap = size_t{1} << 10,
                 .latency_controller_component_sz = 16,
                 .latency_controller_queue_cap = size_t{1} << 20,
-                .latency_controller_unique_id_cap = size_t{1} << 20,
                 .latency_controller_expiry_period = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
                 .latency_controller_keyvalue_feed_cap = size_t{1} << 10,
                 .latency_controller_has_exhaustion_control = true,
@@ -484,6 +484,7 @@ int main()
                 .inbound_container_redistributor_distribution_queue_sz = size_t{1} << 20,
                 .inbound_container_redistributor_waiting_queue_sz = size_t{1} << 20,
                 .inbound_container_redistributor_concurrent_sz = size_t{1} << 20,
+                .inbound_container_redistributor_push_concurrent_sz = size_t{1} << 10,
                 .inbound_container_redistributor_unit_sz = size_t{1} << 6,
 
                 .expiry_worker_count = 1,

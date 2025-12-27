@@ -548,6 +548,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         bool has_mm_integrity_value;
     };
 
+    struct FairBufferContainerWaitingItem
+    {
+        dg::vector<internal_huge_kernel_buffer> buffer_vec;
+        std::binary_semaphore * smp;
+    };
+
     //OK
     static auto serialize_packet_segment(PacketSegment&& segment) noexcept -> std::expected<internal_segment_kernel_buffer, exception_t>{
 
@@ -669,6 +675,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     }
 
     //OK
+    template <class T>
+    struct UnitAllocatorInterface{
+        virtual ~UnitAllocatorInterface() noexcept = default;
+        virtual auto get() noexcept -> std::expected<T, exception_t> = 0;
+        virtual void free(T item) noexcept = 0;
+    };
+
+    //OK
     struct ExhaustionControllerInterface{
         virtual ~ExhaustionControllerInterface() noexcept = default;
         virtual auto is_should_wait() noexcept -> bool = 0;
@@ -769,6 +783,53 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     struct OutBoundRuleInterface{
         virtual ~OutBoundRuleInterface() noexcept = default;
         virtual auto thru(const Address&) noexcept -> std::expected<bool, exception_t> = 0;
+    };
+
+    template <class T>
+    class LIFOUnitAllocator: public virtual UnitAllocatorInterface<T>{
+
+        private:
+            
+            dg::vector<T> queue;
+            size_t queue_cap;
+            size_t allocated_sz;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
+
+        public:
+
+            LIFOUnitAllocator(dg::vector<T> queue,
+                              size_t queue_cap,
+                              size_t allocated_sz,
+                              std::unique_ptr<stdx::fair_atomic_flag> mtx) noexcept: queue(std::move(queue)),
+                                                                                     queue_cap(queue_cap),
+                                                                                     allocated_sz(allocated_sz),
+                                                                                     mtx(std::move(mtx)){}
+
+            auto get() noexcept -> std::expected<T, exception_t>{
+
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                if (this->queue.empty()){
+                    if (this->allocated_sz == this->queue_cap){
+                        return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                    }
+
+                    this->queue.push_back(T{});
+                    this->allocated_sz += 1u;
+                }
+
+                T rs = std::move(this->queue.back()); 
+                this->queue.pop_back();
+
+                return std::expected<T, exception_t>(std::move(rs));
+            }
+
+            void free(T item) noexcept
+            {
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                this->queue.push_back(std::move(item));
+            }
     };
 
     class SockTrafficAdapter : public virtual NetworkBusyStatusRetrieverInterface{
@@ -1744,15 +1805,22 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         __uint128_t entry_id;
     };
 
+    struct EntranceControllerWaitingItem
+    {
+        GlobalIdentifier * id_arr;
+        size_t id_arr_sz;
+        dg_binary_semaphore * release_smp;
+    };
+
     //OK
     class EntranceController: public virtual EntranceControllerInterface{
 
         private:
 
+            dg::pow2_cyclic_queue<EntranceControllerWaitingItem> tick_wait_queue;
             dg::pow2_cyclic_queue<EntranceEntry> entrance_entry_pq; //no exhausted container
             const size_t entrance_entry_pq_cap; 
             dg::unordered_unstable_map<GlobalIdentifier, __uint128_t> key_id_map; //no exhausted container
-            const size_t key_id_map_cap;
             __uint128_t id_ticker;
             const std::chrono::nanoseconds expiry_period;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
@@ -1760,17 +1828,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         public:
 
-            EntranceController(dg::pow2_cyclic_queue<EntranceEntry> entrance_entry_pq,
+            EntranceController(dg::pow2_cyclic_queue<EntranceControllerWaitingItem> tick_wait_queue,
+                               dg::pow2_cyclic_queue<EntranceEntry> entrance_entry_pq,
                                size_t entrance_entry_pq_cap,
                                dg::unordered_unstable_map<GlobalIdentifier, __uint128_t> key_id_map,
-                               size_t key_id_map_cap,
                                __uint128_t id_ticker,
                                std::chrono::nanoseconds expiry_period,
                                std::unique_ptr<stdx::fair_atomic_flag> mtx,
-                               stdx::hdi_container<size_t> tick_sz_per_load) noexcept: entrance_entry_pq(std::move(entrance_entry_pq)),
+                               stdx::hdi_container<size_t> tick_sz_per_load) noexcept: tick_wait_queue(std::move(tick_wait_queue)),
+                                                                                       entrance_entry_pq(std::move(entrance_entry_pq)),
                                                                                        entrance_entry_pq_cap(entrance_entry_pq_cap),
                                                                                        key_id_map(std::move(key_id_map)),
-                                                                                       key_id_map_cap(key_id_map_cap),
                                                                                        id_ticker(id_ticker),
                                                                                        expiry_period(std::move(expiry_period)),
                                                                                        mtx(std::move(mtx)),
@@ -1785,29 +1853,50 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
 
-                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+                dg_binary_semaphore smp(0);
+                bool need_wait;
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
-                auto now = this->get_now();
+                {
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
-                for (size_t i = 0u; i < sz; ++i){
-                    if (this->entrance_entry_pq.size() == this->entrance_entry_pq_cap){
-                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
-                        continue;
+                    auto now            = this->get_now();
+                    size_t wait_offset  = sz; 
+
+                    for (size_t i = 0u; i < sz; ++i){
+                        if (this->entrance_entry_pq.size() == this->entrance_entry_pq_cap){
+                            wait_offset = i; 
+                            break;
+                        }
+
+                        auto entry      = EntranceEntry{};
+                        entry.timestamp = now;
+                        entry.key       = global_id_arr[i];
+                        entry.entry_id  = this->id_ticker++;
+
+                        dg::network_exception_handler::nothrow_log(this->entrance_entry_pq.push_back(entry));
+                        this->key_id_map[global_id_arr[i]] = entry.entry_id;
                     }
 
-                    if (this->key_id_map.size() == this->key_id_map_cap){
-                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
-                        continue;
+                    if (wait_offset == sz)
+                    {
+                        need_wait = false;
                     }
+                    else
+                    {
+                        need_wait = true;
+                        dg::network_exception_handler::nothrow_log(this->tick_wait_queue.push_back(EntranceControllerWaitingItem
+                        {
+                            .id_arr         = std::next(global_id_arr, wait_offset),
+                            .id_arr_sz      = sz - wait_offset,
+                            .release_smp    = &smp
+                        }));
+                    }
+                }
 
-                    auto entry      = EntranceEntry{};
-                    entry.timestamp = now;
-                    entry.key       = global_id_arr[i];
-                    entry.entry_id  = this->id_ticker++;
-
-                    this->entrance_entry_pq.push_back(entry);
-                    this->key_id_map[global_id_arr[i]] = entry.entry_id;
-                    exception_arr[i] = dg::network_exception::SUCCESS;
+                if (need_wait)
+                {
+                    smp.acquire();
                 }
             }
 
@@ -1849,6 +1938,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         output_arr[sz++] = entry.key;
                         this->key_id_map.erase(map_ptr);
                     }
+
+                    this->fulfill_one_push_wait_queue();
                 }
             }
 
@@ -1858,6 +1949,39 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
 
         private:
+
+            void fulfill_one_push_wait_queue() noexcept
+            {
+                if (this->tick_wait_queue.empty())
+                {
+                    return;
+                }
+
+                if (this->tick_wait_queue.front().id_arr_sz == 0u)
+                {
+                    std::abort();
+                }
+
+                auto entry      = EntranceEntry{};
+                entry.timestamp = this->get_now();
+                entry.key       = this->tick_wait_queue.front().id_arr[0];
+                entry.entry_id  = this->id_ticker++;
+
+                dg::network_exception_handler::nothrow_log(this->entrance_entry_pq.push_back(entry));
+                this->key_id_map[entry.key] = entry.entry_id;
+                
+                this->tick_wait_queue.front() = EntranceControllerWaitingItem
+                {
+                    .id_arr         = std::next(this->tick_wait_queue.front().id_arr),
+                    .id_arr_sz      = this->tick_wait_queue.front().id_arr_sz - 1,
+                    .release_smp    = this->tick_wait_queue.front().release_smp,
+                };
+
+                if (this->tick_wait_queue.front().id_arr_sz == 0u)
+                {
+                    this->tick_wait_queue.pop_front();
+                }
+            }
 
             auto get_now() const noexcept -> std::chrono::time_point<std::chrono::steady_clock>{
 
@@ -2656,21 +2780,27 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>> distribution_queue;
-            dg::pow2_cyclic_queue<std::pair<std::optional<internal_vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>> waiting_queue;
-            dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>> leftover_queue;
+            dg::pow2_cyclic_queue<FairBufferContainerWaitingItem> push_waiting_item_vec;
+            dg::pow2_cyclic_queue<dg::vector<internal_huge_kernel_buffer>> distribution_queue;
+            dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>> waiting_queue;
+            dg::pow2_cyclic_queue<dg::vector<internal_huge_kernel_buffer>> leftover_queue;
+            std::unique_ptr<UnitAllocatorInterface<dg::vector<internal_huge_kernel_buffer>>> bufvec_allocator;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
-        
+
         public:
 
-            FairInBoundBufferContainer(dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>> distribution_queue,
-                                       dg::pow2_cyclic_queue<std::pair<std::optional<internal_vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>> waiting_queue,
-                                       dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>> leftover_queue,
+            FairInBoundBufferContainer(dg::pow2_cyclic_queue<FairBufferContainerWaitingItem> push_waiting_item_vec,
+                                       dg::pow2_cyclic_queue<dg::vector<internal_huge_kernel_buffer>> distribution_queue,
+                                       dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>> waiting_queue,
+                                       dg::pow2_cyclic_queue<dg::vector<internal_huge_kernel_buffer>> leftover_queue,
+                                       std::unique_ptr<UnitAllocatorInterface<dg::vector<internal_huge_kernel_buffer>>> bufvec_allocator,
                                        std::unique_ptr<stdx::fair_atomic_flag> mtx,
-                                       size_t consume_sz_per_load): distribution_queue(std::move(distribution_queue)),
+                                       size_t consume_sz_per_load): push_waiting_item_vec(std::move(push_waiting_item_vec)),
+                                                                    distribution_queue(std::move(distribution_queue)),
                                                                     waiting_queue(std::move(waiting_queue)),
                                                                     leftover_queue(std::move(leftover_queue)),
+                                                                    bufvec_allocator(std::move(bufvec_allocator)),
                                                                     mtx(std::move(mtx)),
                                                                     consume_sz_per_load(stdx::hdi_container<size_t>{consume_sz_per_load}){}
 
@@ -2688,56 +2818,74 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 }
 
                 internal_huge_kernel_buffer * base_buffer_arr = buffer_arr.base();
-                std::expected<internal_vector<internal_huge_kernel_buffer>, exception_t> buffer_vec = dg::network_exception::cstyle_initialize<internal_vector<internal_huge_kernel_buffer>>(std::make_move_iterator(base_buffer_arr),
-                                                                                                                                                                                             std::next(std::make_move_iterator(base_buffer_arr), sz));
+                std::expected<dg::vector<internal_huge_kernel_buffer>, exception_t> buffer_vec_tmp = this->bufvec_allocator->get();
 
-                if (!buffer_vec.has_value()){
+                if (!buffer_vec_tmp.has_value()){
                     std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::RESOURCE_EXHAUSTION);
                     return;
                 }
 
-                dg_binary_semaphore * releasing_smp = nullptr;
+                dg::vector<internal_huge_kernel_buffer> buffer_vec = std::move(buffer_vec_tmp.value());
 
-                exception_t err = [&, this]() noexcept{
+                buffer_vec.resize(sz);
+                std::copy(std::make_move_iterator(base_buffer_arr),
+                          std::next(std::make_move_iterator(base_buffer_arr), sz),
+                          buffer_vec.begin());
+
+                dg_binary_semaphore * releasing_smp = nullptr;
+                std::binary_semaphore wait_smp(0);
+
+                bool need_wait = [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     if (!this->waiting_queue.empty()){
                         auto [dst, smp] = this->waiting_queue.front();
                         this->waiting_queue.pop_front();
-                        *dst = std::move(buffer_vec.value());
+                        *dst = std::move(buffer_vec);
                         releasing_smp = smp;
 
-                        return dg::network_exception::SUCCESS;
+                        return false;
                     }
 
                     if (this->distribution_queue.size() != this->distribution_queue.capacity()){
-                        dg::network_exception_handler::nothrow_log(this->distribution_queue.push_back(std::move(buffer_vec.value())));
-                        return dg::network_exception::SUCCESS;
+                        dg::network_exception_handler::nothrow_log(this->distribution_queue.push_back(std::move(buffer_vec)));
+                        return false;
                     }
 
-                    return dg::network_exception::QUEUE_FULL;
+                    dg::network_exception_handler::nothrow_log(this->push_waiting_item_vec.push_back(FairBufferContainerWaitingItem
+                    {
+                        .buffer_vec = std::move(buffer_vec),
+                        .smp        = &wait_smp
+                    }));
+                    
+                    return true;
                 }();
-
-                if (dg::network_exception::is_failed(err)){
-                    std::copy(std::make_move_iterator(buffer_vec->begin()), std::make_move_iterator(buffer_vec->end()), base_buffer_arr);
-                    std::fill(exception_arr, std::next(exception_arr, sz), err);
-                    return;
-                }
-
-                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
 
                 if (releasing_smp != nullptr){
                     releasing_smp->release();
                 }
+
+                if (need_wait){
+                    wait_smp.acquire();
+                }
+
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
             }
 
             void pop(internal_huge_kernel_buffer * output_buffer_arr, size_t& sz, size_t output_buffer_arr_cap) noexcept{
 
-                std::optional<internal_vector<internal_huge_kernel_buffer>> str_vec(std::nullopt); 
+                std::optional<dg::vector<internal_huge_kernel_buffer>> str_vec(std::nullopt); 
                 dg_binary_semaphore smp(0);
-
+                
                 bool is_acquire_required = [&, this]() noexcept{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    if (!this->push_waiting_item_vec.empty()){
+                        str_vec = std::move(this->push_waiting_item_vec.front().buffer_vec);
+                        this->push_waiting_item_vec.front().smp->release();
+                        this->push_waiting_item_vec.pop_front();
+                        return false;
+                    }
 
                     if (!this->leftover_queue.empty()){
                         str_vec = std::move(this->leftover_queue.front());
@@ -2780,6 +2928,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     } else{
                         dg::network_exception_handler::nothrow_log(this->leftover_queue.push_back(std::move(str_vec.value())));
                     }
+                } else{
+                    this->bufvec_allocator->free(std::move(str_vec.value()));
                 }
             }
 
@@ -3442,7 +3592,23 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             uint64_t random_counter = dg::network_randomizer::randomize_int<uint64_t>();
             return std::make_unique<PacketIDGenerator>(std::move(factory_addr), random_counter);
         } 
-        
+
+        template <class T>
+        static auto get_default_lifo_unit_allocator(size_t queue_cap) -> std::unique_ptr<UnitAllocatorInterface<T>>{
+
+            const size_t MIN_QUEUE_CAP = 1u;
+            const size_t MAX_QUEUE_CAP = size_t{1} << 30;
+
+            if (std::clamp(queue_cap, MIN_QUEUE_CAP, MAX_QUEUE_CAP) != queue_cap){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<LIFOUnitAllocator<T>>(dg::vector<T>(),
+                                                          queue_cap,
+                                                          0u,
+                                                          stdx::make_unique_fair_atomic_flag());
+        }
+
         static auto get_random_packet_id_generator(Address factory_addr) -> std::unique_ptr<PacketIDGeneratorInterface>{
 
             return std::make_unique<RandomPacketIDGenerator>(factory_addr);
@@ -3596,24 +3762,24 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                 has_integrity_transmit);
         }  
 
-        static auto get_entrance_controller(size_t queue_cap,
-                                            size_t unique_id_cap,
+        static auto get_entrance_controller(size_t tick_wait_queue_cap,
+                                            size_t queue_cap,
                                             std::chrono::nanoseconds expiry_period,
                                             size_t max_consume_decay_factor = 2u) -> std::unique_ptr<EntranceControllerInterface>{
             
+            const size_t MIN_TICK_WAIT_QUEUE_CAP                = size_t{1};
+            const size_t MAX_TICK_WAIT_QUEUE_CAP                = size_t{1} << 30;
             const size_t MIN_QUEUE_CAP                          = size_t{1};
             const size_t MAX_QUEUE_CAP                          = size_t{1} << 30;
-            const size_t MIN_UNIQUE_ID_CAP                      = size_t{1};
-            const size_t MAX_UNIQUE_ID_CAP                      = size_t{1} << 30;
 
             const std::chrono::nanoseconds MIN_EXPIRY_PERIOD    = std::chrono::nanoseconds(1);
             const std::chrono::nanoseconds MAX_EXPIRY_PERIOD    = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::hours(1));
-
-            if (std::clamp(queue_cap, MIN_QUEUE_CAP, MAX_QUEUE_CAP) != queue_cap){
+            
+            if (std::clamp(tick_wait_queue_cap, MIN_TICK_WAIT_QUEUE_CAP, MAX_TICK_WAIT_QUEUE_CAP) != tick_wait_queue_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            if (std::clamp(unique_id_cap, MIN_UNIQUE_ID_CAP, MAX_UNIQUE_ID_CAP) != unique_id_cap){
+            if (std::clamp(queue_cap, MIN_QUEUE_CAP, MAX_QUEUE_CAP) != queue_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -3622,17 +3788,16 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
 
             size_t upqueue_cap              = stdx::ceil2(queue_cap);
-            size_t tentative_max_consume_sz = std::min(upqueue_cap, unique_id_cap) >> max_consume_decay_factor;
+            size_t tentative_max_consume_sz = upqueue_cap >> max_consume_decay_factor;
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz);
+            auto tick_wait_queue            = dg::pow2_cyclic_queue<EntranceControllerWaitingItem>(stdx::ulog2(stdx::ceil2(tick_wait_queue_cap)));
             auto entrance_entry_pq          = dg::pow2_cyclic_queue<EntranceEntry>(stdx::ulog2(upqueue_cap));
             auto key_id_map                 = dg::unordered_unstable_map<GlobalIdentifier, __uint128_t>{};
 
-            key_id_map.reserve(unique_id_cap);
-
-            return std::make_unique<EntranceController>(std::move(entrance_entry_pq),
+            return std::make_unique<EntranceController>(std::move(tick_wait_queue),
+                                                        std::move(entrance_entry_pq),
                                                         upqueue_cap,
                                                         std::move(key_id_map),
-                                                        unique_id_cap,
                                                         __uint128_t{0u},
                                                         expiry_period,
                                                         stdx::make_unique_fair_atomic_flag(),
@@ -3878,6 +4043,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         static auto get_fair_inbound_buffer_container(size_t distribution_queue_sz,
                                                       size_t waiting_queue_sz,
                                                       size_t leftover_queue_sz,
+                                                      size_t push_concurrency_sz,
                                                       size_t unit_sz) -> std::unique_ptr<InBoundContainerInterface>{
             
             const size_t MIN_DISTRIBUTION_QUEUE_SZ  = size_t{1};
@@ -3888,6 +4054,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             const size_t MAX_LEFTOVER_QUEUE_SZ      = size_t{1} << 20;
             const size_t MIN_UNIT_SZ                = size_t{1};
             const size_t MAX_UNIT_SZ                = size_t{1} << 20; 
+            const size_t MIN_PUSH_CONCURRENCY_SZ    = size_t{1};
+            const size_t MAX_PUSH_CONCURRENCY_SZ    = size_t{1} << 20;
 
             if (std::clamp(distribution_queue_sz, MIN_DISTRIBUTION_QUEUE_SZ, MAX_DISTRIBUTION_QUEUE_SZ) != distribution_queue_sz){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -3905,9 +4073,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
-                                                                dg::pow2_cyclic_queue<std::pair<std::optional<internal_vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
-                                                                dg::pow2_cyclic_queue<internal_vector<internal_huge_kernel_buffer>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
+            if (std::clamp(push_concurrency_sz, MIN_PUSH_CONCURRENCY_SZ, MAX_PUSH_CONCURRENCY_SZ) != push_concurrency_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t queue_cap = distribution_queue_sz + waiting_queue_sz + leftover_queue_sz; 
+
+            return std::make_unique<FairInBoundBufferContainer>(dg::pow2_cyclic_queue<FairBufferContainerWaitingItem>(stdx::ulog2(stdx::ceil2(push_concurrency_sz))),
+                                                                dg::pow2_cyclic_queue<dg::vector<internal_huge_kernel_buffer>>(stdx::ulog2(stdx::ceil2(distribution_queue_sz))),
+                                                                dg::pow2_cyclic_queue<std::pair<std::optional<dg::vector<internal_huge_kernel_buffer>> *, dg_binary_semaphore *>>(stdx::ulog2(stdx::ceil2(waiting_queue_sz))),
+                                                                dg::pow2_cyclic_queue<dg::vector<internal_huge_kernel_buffer>>(stdx::ulog2(stdx::ceil2(leftover_queue_sz))),
+                                                                get_default_lifo_unit_allocator<dg::vector<internal_huge_kernel_buffer>>(queue_cap),
                                                                 stdx::make_unique_fair_atomic_flag(),
                                                                 unit_sz);
         }
@@ -4179,9 +4355,9 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         uint32_t gate_controller_blklst_bloomfilter_reliability_decay_factor;
         uint32_t gate_controller_blklst_keyvalue_feed_cap; 
 
+        uint32_t latency_controller_tick_wait_queue_cap;
         uint32_t latency_controller_component_sz;
         uint32_t latency_controller_queue_cap;
-        uint32_t latency_controller_unique_id_cap;
         std::chrono::nanoseconds latency_controller_expiry_period;
         uint32_t latency_controller_keyvalue_feed_cap;
         bool latency_controller_has_exhaustion_control; 
@@ -4204,6 +4380,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         size_t inbound_container_redistributor_distribution_queue_sz;
         size_t inbound_container_redistributor_waiting_queue_sz;
         size_t inbound_container_redistributor_concurrent_sz;
+        size_t inbound_container_redistributor_push_concurrent_sz;
         size_t inbound_container_redistributor_unit_sz;
 
         uint32_t expiry_worker_count;
@@ -4384,6 +4561,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                 return ComponentFactory::get_fair_inbound_buffer_container(config.inbound_container_redistributor_distribution_queue_sz,
                                                                            config.inbound_container_redistributor_waiting_queue_sz,
                                                                            config.inbound_container_redistributor_concurrent_sz,
+                                                                           config.inbound_container_redistributor_push_concurrent_sz,
                                                                            config.inbound_container_redistributor_unit_sz);
             }
 
@@ -4395,14 +4573,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 if (config.latency_controller_has_exhaustion_control){
                     if (config.latency_controller_component_sz == 1u){
-                        return ComponentFactory::get_exhaustion_controlled_entrance_controller(ComponentFactory::get_entrance_controller(config.latency_controller_queue_cap, 
-                                                                                                                                         config.latency_controller_unique_id_cap,
+                        return ComponentFactory::get_exhaustion_controlled_entrance_controller(ComponentFactory::get_entrance_controller(config.latency_controller_tick_wait_queue_cap,
+                                                                                                                                         config.latency_controller_queue_cap,
                                                                                                                                          config.latency_controller_expiry_period),
                                                                                                config.infretry_device,
                                                                                                ComponentFactory::get_no_exhaustion_controller());
                     } else{
                         std::vector<std::unique_ptr<EntranceControllerInterface>> entrance_controller_vec(config.latency_controller_component_sz);
-                        auto gen = std::bind_front(ComponentFactory::get_entrance_controller, config.latency_controller_queue_cap, config.latency_controller_unique_id_cap, config.latency_controller_expiry_period, 2u);
+                        auto gen = std::bind_front(ComponentFactory::get_entrance_controller, config.latency_controller_tick_wait_queue_cap, config.latency_controller_queue_cap, config.latency_controller_expiry_period, 2u);
                         std::generate(entrance_controller_vec.begin(), entrance_controller_vec.end(), gen);
 
                         return ComponentFactory::get_exhaustion_controlled_entrance_controller(ComponentFactory::get_random_hash_distributed_entrance_controller(std::move(entrance_controller_vec),
@@ -4412,12 +4590,12 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 } else{
                     if (config.latency_controller_component_sz == 1u){
-                        return ComponentFactory::get_entrance_controller(config.latency_controller_queue_cap,
-                                                                         config.latency_controller_unique_id_cap,
+                        return ComponentFactory::get_entrance_controller(config.latency_controller_tick_wait_queue_cap,
+                                                                         config.latency_controller_queue_cap,
                                                                          config.latency_controller_expiry_period);
                     } else{
                         std::vector<std::unique_ptr<EntranceControllerInterface>> entrance_controller_vec(config.latency_controller_component_sz);
-                        auto gen = std::bind_front(ComponentFactory::get_entrance_controller, config.latency_controller_queue_cap, config.latency_controller_unique_id_cap, config.latency_controller_expiry_period, 2u);
+                        auto gen = std::bind_front(ComponentFactory::get_entrance_controller, config.latency_controller_tick_wait_queue_cap, config.latency_controller_queue_cap, config.latency_controller_expiry_period, 2u);
                         std::generate(entrance_controller_vec.begin(), entrance_controller_vec.end(), gen);
 
                         return ComponentFactory::get_random_hash_distributed_entrance_controller(std::move(entrance_controller_vec),

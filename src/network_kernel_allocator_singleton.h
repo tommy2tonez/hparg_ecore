@@ -18,18 +18,19 @@ namespace dg::network_kernel_allocator_singleton
     struct AllocatorInstance
     {
         using singleton_object = stdx::singleton<Signature, std::unique_ptr<dg::network_kernel_allocator::AllocatorInterface<dg::network_kernel_allocator::AffinedMapAllocator>>>; 
+        using self = AllocatorInstance;
 
         static void init(Config config)
         {
             using namespace dg::network_kernel_allocator;
 
             std::unique_ptr<BatchAllocatorInterface> base_allocator = network_kernel_allocator::ComponentFactory::make_batch_allocator(config.total_mempiece_count,
-                                                                                                                                    config.mempiece_sz);
+                                                                                                                                       config.mempiece_sz);
 
             singleton_object::get() = network_kernel_allocator::ComponentFactory::make_affined_map_allocator(std::move(base_allocator),
-                                                                                                            config.affined_refill_sz,
-                                                                                                            config.affined_mem_vec_capacity,
-                                                                                                            config.affined_free_vec_capacity);
+                                                                                                             config.affined_refill_sz,
+                                                                                                             config.affined_mem_vec_capacity,
+                                                                                                             config.affined_free_vec_capacity);
         }
 
         static void deinit() noexcept
@@ -37,13 +38,13 @@ namespace dg::network_kernel_allocator_singleton
             singleton_object::get() = nullptr;
         }
 
-        static auto dg_malloc(size_t byte_sz) noexcept -> std::expected<void *, exception_t>
+        static auto malloc(size_t byte_sz) noexcept -> std::expected<void *, exception_t>
         {
             if constexpr(DEBUG_MODE_FLAG)
             {
                 if (singleton_object::get() == nullptr)
                 {
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }            
             }
@@ -61,20 +62,20 @@ namespace dg::network_kernel_allocator_singleton
             return singleton_object::get()->malloc();
         }
 
-        static auto dg_realloc(void * old_ptr, size_t new_sz) noexcept -> std::expected<void *, exception_t>
+        static auto realloc(void * old_ptr, size_t new_sz) noexcept -> std::expected<void *, exception_t>
         {
             if constexpr(DEBUG_MODE_FLAG)
             {
                 if (singleton_object::get() == nullptr)
                 {
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
             }
 
             if (old_ptr == nullptr)
             {
-                return dg_malloc(new_sz);
+                return self::malloc(new_sz);
             }
 
             if (new_sz > singleton_object::get()->malloc_size())
@@ -85,13 +86,13 @@ namespace dg::network_kernel_allocator_singleton
             return old_ptr;
         }
 
-        static void dg_free(void * mem_ptr) noexcept
+        static void free(void * mem_ptr) noexcept
         {
             if constexpr(DEBUG_MODE_FLAG)
             {
                 if (singleton_object::get() == nullptr)
                 {
-                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INVALID_ARGUMENT));
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
                     std::abort();
                 }
             }
@@ -105,28 +106,139 @@ namespace dg::network_kernel_allocator_singleton
         }
     };
 
-    template <class Allocator>
-    class StaticWrappedAllocator
+    template <class Signature>
+    struct AllocatorSingletonInstance
     {
+        using singleton_object = stdx::singleton<Signature, std::shared_ptr<dg::network_kernel_allocator::BaseAllocatorInterface>>;
+
+        static void init(Config config)
+        {
+            using namespace dg::network_kernel_allocator;
+
+            std::unique_ptr<BatchAllocatorInterface> base_allocator = network_kernel_allocator::ComponentFactory::make_batch_allocator(config.total_mempiece_count,
+                                                                                                                                       config.mempiece_sz);
+
+            singleton_object::get() = network_kernel_allocator::ComponentFactory::make_affined_map_allocator(std::move(base_allocator),
+                                                                                                             config.affined_refill_sz,
+                                                                                                             config.affined_mem_vec_capacity,
+                                                                                                             config.affined_free_vec_capacity);
+        }
+
+        static void deinit()
+        {
+            singleton_object::get() = nullptr;
+        }
+
+        static auto get() noexcept -> const std::shared_ptr<dg::network_kernel_allocator::BaseAllocatorInterface>&
+        {
+            return singleton_object::get();
+        }
+    };
+
+    class UnsafeSingletonStorage
+    {
+        private:
+
+            dg::network_kernel_allocator::BaseAllocatorInterface * allocator;
+        
         public:
 
-            static auto malloc(size_t byte_sz) noexcept -> std::expected<void *, exception_t>
+            UnsafeSingletonStorage(const std::shared_ptr<dg::network_kernel_allocator::BaseAllocatorInterface>& allocator): allocator(allocator.get())
             {
-                return Allocator::dg_malloc(byte_sz);
+                if (this->allocator == nullptr)
+                {
+                    throw std::invalid_argument("bad allocator, null allocator");
+                }
             }
 
-            static auto realloc(void * old_ptr, size_t new_sz) noexcept -> std::expected<void *, exception_t>
+            auto get() const noexcept -> dg::network_kernel_allocator::BaseAllocatorInterface *
             {
-                return Allocator::dg_realloc(old_ptr, new_sz);
-            }
-
-            static auto free(void * old_ptr) noexcept
-            {
-                Allocator::dg_free(old_ptr);
+                return this->allocator;
             }
     };
 
-    template <typename T, class Allocator>
+    class SafeSingletonStorage
+    {
+        private:
+
+            std::shared_ptr<dg::network_kernel_allocator::BaseAllocatorInterface> allocator;
+        
+        public:
+
+            SafeSingletonStorage(const std::shared_ptr<dg::network_kernel_allocator::BaseAllocatorInterface>& allocator): allocator(allocator)
+            {
+                if (this->allocator == nullptr)
+                {
+                    throw std::invalid_argument("bad allocator, null allocator");
+                }
+            }
+
+            auto get() const noexcept -> const std::shared_ptr<dg::network_kernel_allocator::BaseAllocatorInterface>&
+            {
+                return this->allocator;
+            }
+    };
+
+    template <bool IS_SAFE_SINGLETON>
+    using SingletonStorage = std::conditional_t<IS_SAFE_SINGLETON,
+                                                SafeSingletonStorage,
+                                                UnsafeSingletonStorage>;
+
+    template <class AllocatorSingletonFactory, bool IS_SAFE_SINGLETON = true>
+    class SingletonPolymorphicAllocator: private SingletonStorage<IS_SAFE_SINGLETON>
+    {  
+        private:
+
+            using Base = SingletonStorage<IS_SAFE_SINGLETON>;
+
+        public:
+
+            SingletonPolymorphicAllocator(): Base(AllocatorSingletonFactory::get()){}
+
+            SingletonPolymorphicAllocator(const std::shared_ptr<dg::network_kernel_allocator::BaseAllocatorInterface>& allocator): Base(allocator){}
+
+            auto malloc(size_t byte_sz) const noexcept -> std::expected<void *, exception_t>
+            {
+                if (byte_sz == 0u)
+                {
+                    return std::add_pointer_t<void>(nullptr);
+                }
+
+                if (byte_sz > Base::get()->malloc_size())
+                {
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                return Base::get()->malloc();
+            }
+
+            auto realloc(void * old_ptr, size_t new_sz) const noexcept -> std::expected<void *, exception_t>
+            {
+                if (old_ptr == nullptr)
+                {
+                    return this->malloc(new_sz);
+                }
+
+                if (new_sz > Base::get()->malloc_size())
+                {
+                    return std::unexpected(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                return old_ptr;
+            }
+
+            void free(void * mem_ptr) const noexcept
+            {
+                if (mem_ptr == nullptr)
+                {
+                    return;
+                }
+
+                Base::get()->free(mem_ptr);
+            }
+    };
+
+    template <typename T, class StatelessAllocator>
     struct StdWrappedAllocator
     {
         using value_type = T;
@@ -136,9 +248,9 @@ namespace dg::network_kernel_allocator_singleton
         template <typename ...Args>
         constexpr StdWrappedAllocator(const StdWrappedAllocator<Args...>&) {}
 
-        auto allocate(std::size_t n) -> T *
+        auto allocate(std::size_t n) const -> T *
         {
-            std::expected<void *, exception_t> raw_mem = Allocator::dg_malloc(n * sizeof(T)); 
+            std::expected<void *, exception_t> raw_mem = StatelessAllocator{}.malloc(n * sizeof(T)); 
 
             if (!raw_mem.has_value())
             {
@@ -157,19 +269,19 @@ namespace dg::network_kernel_allocator_singleton
             return static_cast<T *>(raw_mem.value());
         }
 
-        void deallocate(T* p, std::size_t n) 
+        void deallocate(T* p, std::size_t n) const 
         {
-            Allocator::dg_free(p);
+            StatelessAllocator{}.free(p);
         }
 
         template <typename U, typename... Args>
-        void construct(U* p, Args&&... args)
+        void construct(U* p, Args&&... args) const
         {
             new (p) U(std::forward<Args>(args)...);
         }
 
         template <typename U>
-        void destroy(U* p) 
+        void destroy(U* p) const
         {
             std::destroy_at(p);
         }

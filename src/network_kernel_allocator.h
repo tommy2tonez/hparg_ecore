@@ -25,16 +25,19 @@ namespace dg::network_kernel_allocator
             virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
-    template <class T>
-    class AllocatorInterface
+    class BaseAllocatorInterface
     {
         public:
 
-            virtual ~AllocatorInterface() noexcept = default;
+            virtual ~BaseAllocatorInterface() noexcept = default;
+
             virtual auto malloc() noexcept -> std::expected<void *, exception_t> = 0;
             virtual void free(void *) noexcept = 0;
             virtual auto malloc_size() const noexcept -> size_t = 0;
     };
+
+    template <class T>
+    class AllocatorInterface: public virtual BaseAllocatorInterface{};
 
     using memfree_func_t = void (*)(void *) noexcept; 
 
