@@ -475,6 +475,7 @@ int main()
 
                 .inbound_container_component_sz = 16,
                 .inbound_container_cap = size_t{1} << 20,
+                .inbound_container_push_concurrent_sz = size_t{1} << 10,
                 .inbound_container_has_exhaustion_control = true,
                 .inbound_container_has_react_pattern = true,
                 .inbound_container_react_sz = size_t{1} << 10,
