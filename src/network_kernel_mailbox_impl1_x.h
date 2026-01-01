@@ -2245,6 +2245,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
     };
 
+    //the cyclic unordered node map philosophy of cache access and guarantee of lifetime is very important
+    //such that when a node is enqueued at position sz, its lifetime is guaranteed to be at least sz
+    //this does not mean that inbound gates and other measurements are not important, because it, first, increases the life expectancy overall, second, decrease memory usages in case of idle, even though we are using flash stream extension, which, we can safely assume that we are at 100% usage at all time, because the system is designed to be so
+    //this, singlehandedly is the most important implementation of socket transportation
+
+    //think of bandwidth and outdegree and preplanned, we need to specify the individual bandwidth in the instantiation of mailbox_impl1, and we'd need to make sure that all pipes at full capacity is a reasonable scenerio
+    //we'd have to have 0 delay for all of the steps
+    //this is the topic that we have discussed in a span of 2 years, we'd want to loosen the pipe when its busy and stricten the pipe when its not busy or we'd just constant ping our pipe at a reasonable velocity
+
     //OK
     class PacketAssembler: public virtual PacketAssemblerInterface{
 

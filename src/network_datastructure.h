@@ -2376,7 +2376,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 //alright, we have provided all the arguments we could to the compiler, it's up to the randomness of the wild to render things now
 
-                virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.back().first); 
+                virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.front().first); 
     
                 if (swapping_reference == key_reference) [[unlikely]]{
                     *key_reference = this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr;
@@ -2386,10 +2386,14 @@ namespace dg::network_datastructure::unordered_map_variants{
                     }
 
                     *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr); 
-                    dg_restrict_swap_for_destroy(&this->virtual_storage_vec[this->to_storage_addr(*swapping_reference)], &this->virtual_storage_vec.back());
+                    dg_restrict_swap_for_destroy(&this->virtual_storage_vec[this->to_storage_addr(*swapping_reference)], &this->virtual_storage_vec.front());
                 }
 
-                this->virtual_storage_vec.pop_back();
+                this->virtual_storage_vec.pop_front();
+
+                this->virtual_addr_offset   += this->virtual_storage_vec.capacity() - 1u;
+                this->virtual_addr_offset   &= this->virtual_storage_vec.capacity() - 1u;
+
                 return true;
             }
 
@@ -3466,7 +3470,7 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 //we found a bucket, we are guaranteed to have at least 1 bucket => a back().key is guaranteed to be a valid statement
 
-                virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.back().key);
+                virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.front().key);
 
                 if (swapping_reference == key_reference){
                     *key_reference = this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr;
@@ -3476,10 +3480,14 @@ namespace dg::network_datastructure::unordered_map_variants{
                     }
 
                     *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr);
-                    dg_restrict_swap_for_destroy(&this->virtual_storage_vec[this->to_storage_addr(*swapping_reference)], &this->virtual_storage_vec.back());
+                    dg_restrict_swap_for_destroy(&this->virtual_storage_vec[this->to_storage_addr(*swapping_reference)], &this->virtual_storage_vec.front());
                 }
 
-                this->virtual_storage_vec.pop_back();
+                this->virtual_storage_vec.pop_front();
+
+                this->virtual_addr_offset   += this->virtual_storage_vec.capacity() - 1u;
+                this->virtual_addr_offset   &= this->virtual_storage_vec.capacity() - 1u;
+
                 return true;
             }
 
