@@ -2250,26 +2250,17 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            dg::unordered_unstable_map<GlobalIdentifier, AssembledPacket> packet_map;
-            size_t packet_map_cap;
-            size_t global_packet_segment_cap;
-            size_t global_packet_segment_counter;
+            dg::cyclic_unordered_node_map<GlobalIdentifier, AssembledPacket> packet_map;
             size_t max_segment_sz_per_stream; 
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<size_t> consume_sz_per_load;
 
         public:
 
-            PacketAssembler(dg::unordered_unstable_map<GlobalIdentifier, AssembledPacket> packet_map,
-                            size_t packet_map_cap,
-                            size_t global_packet_segment_cap,
-                            size_t global_packet_segment_counter,
+            PacketAssembler(dg::cyclic_unordered_node_map<GlobalIdentifier, AssembledPacket> packet_map,
                             size_t max_segment_sz_per_stream,
                             std::unique_ptr<stdx::fair_atomic_flag> mtx,
                             stdx::hdi_container<size_t> consume_sz_per_load) noexcept: packet_map(std::move(packet_map)),
-                                                                                       packet_map_cap(packet_map_cap),
-                                                                                       global_packet_segment_cap(global_packet_segment_cap),
-                                                                                       global_packet_segment_counter(global_packet_segment_counter),
                                                                                        max_segment_sz_per_stream(max_segment_sz_per_stream),
                                                                                        mtx(std::move(mtx)),
                                                                                        consume_sz_per_load(std::move(consume_sz_per_load)){}
@@ -2303,16 +2294,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                             continue;
                         }
 
-                        if (this->packet_map.size() == this->packet_map_cap){
-                            assembled_arr[i] = std::unexpected(dg::network_exception::QUEUE_FULL);
-                            continue;
-                        }
-
-                        if (this->global_packet_segment_counter + base_segment_arr[i].segment_sz > this->global_packet_segment_cap){
-                            assembled_arr[i] = std::unexpected(dg::network_exception::QUEUE_FULL);
-                            continue;
-                        }
-
                         std::expected<AssembledPacket, exception_t> waiting_pkt = this->make_empty_assembled_packet(base_segment_arr[i].segment_sz,
                                                                                                                     base_segment_arr[i].mm_integrity_value,
                                                                                                                     base_segment_arr[i].has_mm_integrity_value);
@@ -2325,15 +2306,13 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         auto [emplace_ptr, status]          = this->packet_map.try_emplace(base_segment_arr[i].id, std::move(waiting_pkt.value()));
                         dg::network_exception_handler::dg_assert(status);
                         map_ptr                             = emplace_ptr;
-                        this->global_packet_segment_counter += base_segment_arr[i].segment_sz;
                         is_new_map_ptr                      = true;
                     }
 
                     exception_t err = this->internal_packet_segment_put(map_ptr->second, std::move(base_segment_arr[i]));
 
                     if (dg::network_exception::is_failed(err)){
-                        if (is_new_map_ptr){
-                            this->global_packet_segment_counter -= map_ptr->second.total_segment_sz; 
+                        if (is_new_map_ptr){ 
                             this->packet_map.erase(map_ptr);
                         }
 
@@ -2341,9 +2320,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         continue;
                     }
 
-                    if (map_ptr->second.collected_segment_sz == map_ptr->second.total_segment_sz){
-                        this->global_packet_segment_counter -= map_ptr->second.total_segment_sz; 
-                        assembled_arr[i]                    = std::move(map_ptr->second);
+                    if (map_ptr->second.collected_segment_sz == map_ptr->second.total_segment_sz){ 
+                        assembled_arr[i] = std::move(map_ptr->second);
                         this->packet_map.erase(map_ptr);
                     } else{
                         assembled_arr[i] = std::unexpected(dg::network_exception::SOCKET_STREAM_SEGMENT_FILLING);
@@ -2369,7 +2347,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         continue;
                     }
 
-                    this->global_packet_segment_counter -= map_ptr->second.total_segment_sz;
                     this->packet_map.erase(map_ptr);
                 }
             }
@@ -4033,22 +4010,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         }
 
         static auto get_packet_assembler(size_t packet_map_cap,
-                                         size_t global_packet_segment_cap,
                                          size_t max_segment_sz_per_stream,
                                          size_t max_consume_decay_factor = 2u) -> std::unique_ptr<PacketAssemblerInterface>{
 
             const size_t MIN_PACKET_MAP_CAP             = size_t{1};
             const size_t MAX_PACKET_MAP_CAP             = size_t{1} << 30;
-            const size_t MIN_GLOBAL_PACKET_SEGMENT_CAP  = size_t{1};
-            const size_t MAX_GLOBAL_PACKET_SEGMENT_CAP  = size_t{1} << 30;
             const size_t MIN_MAX_SEGMENT_SZ_PER_STREAM  = size_t{1};
             const size_t MAX_MAX_SEGMENT_SZ_PER_STREAM  = size_t{1} << 30; 
 
             if (std::clamp(packet_map_cap, MIN_PACKET_MAP_CAP, MAX_PACKET_MAP_CAP) != packet_map_cap){
-                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
-            }
-
-            if (std::clamp(global_packet_segment_cap, MIN_GLOBAL_PACKET_SEGMENT_CAP, MAX_GLOBAL_PACKET_SEGMENT_CAP) != global_packet_segment_cap){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
@@ -4058,14 +4028,10 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             size_t tentative_max_consume_sz = packet_map_cap >> max_consume_decay_factor;
             size_t max_consume_sz           = std::max(size_t{1}, tentative_max_consume_sz);
-            
-            auto packet_map                 = dg::unordered_unstable_map<GlobalIdentifier, AssembledPacket>();
-            packet_map.reserve(packet_map_cap); 
-
+            size_t packet_map_bucket_cap    = dg::cyclic_unordered_node_map<GlobalIdentifier, AssembledPacket>::ceil_size_to_capacity(packet_map_cap);
+            auto packet_map                 = dg::cyclic_unordered_node_map<GlobalIdentifier, AssembledPacket>(packet_map_bucket_cap);
+ 
             return std::make_unique<PacketAssembler>(std::move(packet_map),
-                                                    packet_map_cap,
-                                                    global_packet_segment_cap,
-                                                    size_t{0u},
                                                     max_segment_sz_per_stream,
                                                     stdx::make_unique_fair_atomic_flag(),
                                                     stdx::hdi_container<size_t>{max_consume_sz});
@@ -4550,7 +4516,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         uint32_t packet_assembler_component_sz;
         uint32_t packet_assembler_map_cap;
-        uint32_t packet_assembler_global_segment_cap;
         uint32_t packet_assembler_max_segment_per_stream;
         uint32_t packet_assembler_keyvalue_feed_cap;
         bool packet_assembler_has_exhaustion_control; 
@@ -4655,7 +4620,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 if (config.packet_assembler_component_sz == 1u){
                     return ComponentFactory::get_packet_assembler(config.packet_assembler_map_cap,
-                                                                  config.packet_assembler_global_segment_cap,
                                                                   config.packet_assembler_max_segment_per_stream);   
                 }
 
@@ -4663,7 +4627,6 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                 for (size_t i = 0u; i < config.packet_assembler_component_sz; ++i){
                     pktasmblr_vec.push_back(ComponentFactory::get_packet_assembler(config.packet_assembler_map_cap,
-                                                                                   config.packet_assembler_global_segment_cap,
                                                                                    config.packet_assembler_max_segment_per_stream));
                 }
 

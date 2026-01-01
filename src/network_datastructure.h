@@ -58,6 +58,9 @@ namespace dg::network_datastructure::cyclic_queue{
 
         private:
 
+            template <class OtherBaseIterator>
+            friend class pow2_cyclic_queue_iterator;
+
             BaseIterator iter_head;
             intmax_t virtual_idx;
             pow2_cyclic_queue_index_getter_device index_getter;
@@ -77,6 +80,11 @@ namespace dg::network_datastructure::cyclic_queue{
                                                  pow2_cyclic_queue_index_getter_device index_getter) noexcept(std::is_nothrow_move_constructible_v<BaseIterator>): iter_head(std::move(iter_head)),
                                                                                                                                                                    virtual_idx(virtual_idx),
                                                                                                                                                                    index_getter(index_getter){} 
+
+            template <class OtherBaseIterator, std::enable_if_t<!std::is_same_v<OtherBaseIterator, BaseIterator> && std::is_convertible_v<OtherBaseIterator, BaseIterator>, bool> = true>
+            constexpr pow2_cyclic_queue_iterator(const pow2_cyclic_queue_iterator<OtherBaseIterator>& other) noexcept(std::is_nothrow_convertible_v<OtherBaseIterator, BaseIterator>): iter_head(other.iter_head),
+                                                                                                                                                                                       virtual_idx(other.virtual_idx),
+                                                                                                                                                                                       index_getter(other.index_getter){}
 
             constexpr auto operator ++() noexcept -> self&{
 
@@ -519,6 +527,9 @@ namespace dg::network_datastructure::cyclic_queue{
 
         private:
 
+            template <class T1, class ST1, class BaseIterator1>
+            friend class aligned_storage_vector_iterator;
+
             BaseIterator iter;
 
         public:
@@ -531,6 +542,9 @@ namespace dg::network_datastructure::cyclic_queue{
             constexpr aligned_storage_vector_iterator(): iter(){}
 
             constexpr aligned_storage_vector_iterator(BaseIterator iter)noexcept(std::is_nothrow_move_constructible_v<BaseIterator>): iter(std::move(iter)){} 
+
+            template <class OtherBaseIterator, std::enable_if_t<!std::is_same_v<OtherBaseIterator, BaseIterator> && std::is_convertible_v<OtherBaseIterator, BaseIterator>, bool> = true>
+            constexpr aligned_storage_vector_iterator(const aligned_storage_vector_iterator<T, ST, OtherBaseIterator>& other) noexcept(std::is_nothrow_convertible_v<OtherBaseIterator, BaseIterator>): iter(other.iter){}
 
             constexpr auto operator ++() noexcept -> self&{
 
@@ -1898,6 +1912,25 @@ namespace dg::network_datastructure::unordered_map_variants{
         return !(lhs == rhs);
     }
 
+    constexpr auto mul_round(size_t x, size_t multiplier) noexcept -> size_t
+    {
+        if (multiplier == 0u)
+        {
+            throw std::invalid_argument("bad multiplier, 0");
+        }
+
+        if (x == 0u)
+        {
+            return 0u;
+        }
+
+        size_t previous_x       = x - 1u;
+        size_t previous_slot    = previous_x / multiplier;
+        size_t next_slot        = previous_slot + 1u;
+
+        return next_slot;
+    }
+
     template <class Key, class Mapped, class Hasher = std::hash<Key>, class VirtualAddrType = std::size_t, class HasStructureReordering = std::integral_constant<bool, true>, class Pred = std::equal_to<Key>, class Allocator = std::allocator<Node<HasStructureReordering, Key, Mapped, VirtualAddrType>>, class LoadFactor = std::ratio<4, 8>>
     class cyclic_unordered_node_map{
 
@@ -2046,6 +2079,20 @@ namespace dg::network_datastructure::unordered_map_variants{
                 std::swap(this->allocator, other.allocator);
             }
 
+            template <class EraseArg>
+            constexpr auto erase(EraseArg&& erase_arg) noexcept(true){
+
+                if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
+                    if constexpr(std::is_nothrow_convertible_v<EraseArg&&, const_iterator>){
+                        return this->internal_erase_iter(std::forward<EraseArg>(erase_arg));
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                } else{
+                    return static_cast<size_type>(this->internal_erase_key(std::forward<EraseArg>(erase_arg)));
+                }
+            }
+
             template <class KeyLike>
             constexpr auto find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
@@ -2188,7 +2235,17 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 return sz / self::max_load_factor();
             }
-        
+
+            static constexpr auto ceil_capacity_to_size(size_t cap) -> size_t{
+
+                return right_capacity_to_size(mul_round(cap, load_factor_ratio::den));
+            }
+
+            static constexpr auto ceil_size_to_capacity(size_t sz) -> size_t{
+
+                return right_size_to_capacity(mul_round(sz, load_factor_ratio::num));
+            } 
+            
         private:
             
             static constexpr auto right_capacity_to_size(size_t cap) noexcept -> size_t{
@@ -2304,6 +2361,48 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 return std::make_pair(ptr, true);
             }
+
+            template <class KeyLike>
+            constexpr auto internal_erase_key(const KeyLike& key) noexcept(true) -> bool{
+
+                // static_assert(noexcept(std::swap(std::declval<node_t&>, std::declval<node_t&>)));
+                // static_assert(noexcept(this->virtual_storage_vec.pop_back()));
+
+                virtual_addr_t * key_reference  = this->internal_find_bucket_reference(key);
+
+                if (*key_reference == self::NULL_VIRTUAL_ADDR){
+                    return false;
+                }
+
+                //alright, we have provided all the arguments we could to the compiler, it's up to the randomness of the wild to render things now
+
+                virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.back().first); 
+    
+                if (swapping_reference == key_reference) [[unlikely]]{
+                    *key_reference = this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr;
+                } else [[likely]]{
+                    if (swapping_reference == &this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr) [[unlikely]]{
+                        swapping_reference = key_reference;
+                    }
+
+                    *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr); 
+                    dg_restrict_swap_for_destroy(&this->virtual_storage_vec[this->to_storage_addr(*swapping_reference)], &this->virtual_storage_vec.back());
+                }
+
+                this->virtual_storage_vec.pop_back();
+                return true;
+            }
+
+            constexpr auto internal_erase_iter(const_iterator iter) noexcept(true) -> iterator{
+
+                if (iter == this->cend())[[unlikely]]{
+                    return this->end();
+                } else [[likely]]{
+                    size_t off = std::distance(this->virtual_storage_vec.cbegin(), iter); 
+                    this->internal_erase_key(iter->first);
+                    return std::next(this->virtual_storage_vec.begin(), off);
+                }
+            }
     };
 
     template <class ...Args>
@@ -2347,6 +2446,8 @@ namespace dg::network_datastructure::unordered_map_variants{
 
             BidirIterator base_node_iterator;
 
+            template <class OtherBidirIterator>
+            friend class unordered_set_node_external_iterator;
 
         public:
 
@@ -2357,7 +2458,10 @@ namespace dg::network_datastructure::unordered_map_variants{
             constexpr unordered_set_node_external_iterator(): base_node_iterator(){}
 
             constexpr unordered_set_node_external_iterator(BidirIterator base_node_iterator) noexcept(std::is_nothrow_move_constructible_v<BidirIterator>): base_node_iterator(std::move(base_node_iterator)){}
-        
+
+            template <class OtherBidirIterator, std::enable_if_t<!std::is_same_v<OtherBidirIterator, BidirIterator> && std::is_convertible_v<OtherBidirIterator, BidirIterator>, bool> = true>
+            constexpr unordered_set_node_external_iterator(const unordered_set_node_external_iterator<OtherBidirIterator>& other) noexcept(std::is_nothrow_convertible_v<OtherBidirIterator, BidirIterator>): base_node_iterator(other.base_node_iterator){} 
+
             constexpr auto operator ++() noexcept -> self&{
 
                 ++this->base_node_iterator;
@@ -3106,6 +3210,20 @@ namespace dg::network_datastructure::unordered_map_variants{
                 std::swap(this->allocator, other.allocator);
             }
 
+            template <class EraseArg>
+            constexpr auto erase(EraseArg&& erase_arg) noexcept(true){
+
+                if constexpr(std::is_convertible_v<EraseArg&&, const_iterator>){
+                    if constexpr(std::is_nothrow_convertible_v<EraseArg&&, const_iterator>){
+                        return this->nofancy_erase(const_iterator(std::forward<EraseArg>(erase_arg)).unfancy());
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                } else{
+                    return this->nofancy_erase(std::forward<EraseArg>(erase_arg));
+                }
+            }
+
             template <class KeyLike>
             constexpr auto find(const KeyLike& key) const noexcept(true) -> const_iterator{
 
@@ -3207,6 +3325,16 @@ namespace dg::network_datastructure::unordered_map_variants{
             static constexpr auto size_to_capacity(size_t sz) -> size_t{
 
                 return sz / self::max_load_factor();
+            }
+
+            static constexpr auto ceil_capacity_to_size(size_t cap) -> size_t{
+
+                return right_capacity_to_size(mul_round(cap, load_factor_ratio::den));
+            }
+
+            static constexpr auto ceil_size_to_capacity(size_t sz){
+
+                return right_size_to_capacity(mul_round(sz, load_factor_ratio::num));
             }
 
         private:
@@ -3325,6 +3453,59 @@ namespace dg::network_datastructure::unordered_map_variants{
 
                 return this->internal_insert(UnorderedSetNode<KeyType, VirtualAddrType>{.key        = std::forward<KeyLike>(key),
                                                                                         .nxt_addr   = self::NULL_VIRTUAL_ADDR});
+            }
+
+            template <class KeyLike>
+            constexpr auto internal_erase_key(const KeyLike& key) noexcept(true) -> bool{
+
+                virtual_addr_t * key_reference = this->internal_find_bucket_reference(key);
+
+                if (*key_reference == self::NULL_VIRTUAL_ADDR){
+                    return false;
+                }
+
+                //we found a bucket, we are guaranteed to have at least 1 bucket => a back().key is guaranteed to be a valid statement
+
+                virtual_addr_t * swapping_reference = this->internal_find_bucket_reference(this->virtual_storage_vec.back().key);
+
+                if (swapping_reference == key_reference){
+                    *key_reference = this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr;
+                } else{
+                    if (swapping_reference == &this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr) [[unlikely]]{
+                        swapping_reference = key_reference;
+                    }
+
+                    *swapping_reference = std::exchange(*key_reference, this->virtual_storage_vec[this->to_storage_addr(*key_reference)].nxt_addr);
+                    dg_restrict_swap_for_destroy(&this->virtual_storage_vec[this->to_storage_addr(*swapping_reference)], &this->virtual_storage_vec.back());
+                }
+
+                this->virtual_storage_vec.pop_back();
+                return true;
+            }
+
+            constexpr auto internal_erase_iter(nofancy_const_iterator iter) noexcept(true) -> nofancy_const_iterator{
+
+                if (iter == this->nofancy_cend()){
+                    return this->nofancy_cend();
+                } else [[likely]]{
+                    size_t off = std::distance(this->virtual_storage_vec.cbegin(), iter);
+                    this->internal_erase_key(iter->key);
+                    return std::next(this->virtual_storage_vec.cbegin(), off);
+                }
+            }
+
+            template <class EraseArg>
+            constexpr auto nofancy_erase(EraseArg&& erase_arg) noexcept(true){
+
+                if constexpr(std::is_convertible_v<EraseArg&&, nofancy_const_iterator>){
+                    if constexpr(std::is_nothrow_convertible_v<EraseArg&&, nofancy_const_iterator>){
+                        return this->internal_erase_iter(std::forward<EraseArg>(erase_arg));
+                    } else{
+                        static_assert(FALSE_VAL<>);
+                    }
+                } else{
+                    return static_cast<size_type>(this->internal_erase_key(std::forward<EraseArg>(erase_arg)));
+                }
             }
 
             template <class KeyLike>
