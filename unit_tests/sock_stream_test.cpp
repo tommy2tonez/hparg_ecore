@@ -459,12 +459,14 @@ int main()
                 .gate_controller_ato_map_capacity = size_t{1} << 20,
                 .gate_controller_ato_dur = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
                 .gate_controller_ato_keyvalue_feed_cap = size_t{1} << 10,
+                .gate_controller_ato_is_voided = true,
 
                 .gate_controller_blklst_component_sz = 16,
                 .gate_controller_blklst_bloomfilter_cap = size_t{1} << 30,
                 .gate_controller_blklst_bloomfilter_rehash_sz = 4,
                 .gate_controller_blklst_bloomfilter_reliability_decay_factor = 10,
                 .gate_controller_blklst_keyvalue_feed_cap = size_t{1} << 10,
+                .gate_controller_blklst_is_voided = true, 
 
                 .latency_controller_tick_wait_queue_cap = size_t{1} << 10,
                 .latency_controller_component_sz = 16,
@@ -472,6 +474,7 @@ int main()
                 .latency_controller_expiry_period = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(100)),
                 .latency_controller_keyvalue_feed_cap = size_t{1} << 10,
                 .latency_controller_has_exhaustion_control = true,
+                .latency_controller_is_voided = true,
 
                 .packet_assembler_component_sz = 16,
                 .packet_assembler_map_cap = size_t{1} << 20,

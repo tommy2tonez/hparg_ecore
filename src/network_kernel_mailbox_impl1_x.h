@@ -478,6 +478,37 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     //so its compromised at the function call level, such is that the compromission time is dispatch_sz / pipe_sz * retryable_times * time_per_retry, so if you call the functions for 1 millions items, with a 1-item pipe, it's a guaranteed NO-NO, deadlock for you
     //and that's an expected functionality in system design, not a flaw of function call compromission, for the function must deliver the arguing packets 
 
+    //I was working on the proof of concept that this could work very well, in the sense of 100% delivery
+
+    //remember that we were offloading the responsibility of delivery to the sender, not the sendee
+    //also that we are on finite resources, especially our cyclic_unordered_node_set or cyclic_unordered_node_map
+    //which is governed by the traffic controller, such is that the packet flux is kept under a certain velocity so that the retransmission cannot have duplicate packets because of discarded ids
+
+    //so we are OK for the mailbox_impl1 implementation
+    //how about this implementation?
+
+    //remember that we are counting the lifetime based on the cyclic queue size, such is that the lifetime of an enqueued node is at least queue_sz
+    //in the worst case scenerio, the packet delivery is so fragmented that every slot has exactly one segment, which is never going to be the case
+    //so we are in the average case scenerio, where the fragmented packet rate is probably 1%
+
+    //we just need to prove that in the average case scenerio, the packet lifetime outlives the retransmission lifetime
+    //there is a formula for this, but I can guarantee that this realistically systematically reliably can deliver fixed size segments 
+
+    //I was asked to connect with the peers to not do retransmission, but that's logically flawed as we need to retransmit the connection as well
+    //and it does not improve the worst case scenerio also (which is what we actually care about)
+
+    //so it's best to leave the responsibility to the callee, such is that we would have to inject the commands to abort the remaining queued packets 
+
+    //real life system is very messy, so we can only rely on counts, semaphore of transmission and we'd hope that we'd dump or forward the received packets as fast as possible
+    //we have to also guarantee that all pipes at full capacity is fair (in the network sense, such is discard_on_delivery), which is the purpose of all this
+
+    //remember that our novel of packet transmission is based on the round trip time, such is max velocity is queue_sz / round_trip_time, min velocity is queue_sz / retransmission_time
+    //this, in real life, is very applicable, so we can build on top of this
+
+    //it's already incredibly hard to have this worked for a particular scenerio, we can't generalize the non-uniformity or other assumptions, we can, by building on top of the mailbox_impl1, but that's another topic to talk about
+    //we'd settle this being the solution for flash_streamx, until we've found another solution 
+    //we have also implemented a retry-system for our upper layer protocol, so I think that this is beyond sufficient in the sense of reliability
+
     using MemoryConfig                      = dg::network_kernel_allocator_singleton::Config;
     using HugeAllocatorInstance             = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature>;
     using VectorAllocatorInstance           = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature1>;
@@ -1549,6 +1580,21 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             };
     };
 
+    class VoidInboundGate: public virtual InBoundGateInterface
+    {
+        public:
+
+            void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+            }
+
+            auto max_consume_size() noexcept -> size_t
+            {
+                return std::numeric_limits<size_t>::max();
+            }
+    };
+
     //OK
     class TemporalBlackListGate: public virtual BlackListGateInterface{
 
@@ -1794,6 +1840,26 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                     }
                 }
             };
+    };
+
+    class VoidBlackListGate: public virtual BlackListGateInterface
+    {
+        public:
+
+            void thru(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+            }
+
+            void blacklist(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+            }
+
+            auto max_consume_size() noexcept -> size_t
+            {
+                return std::numeric_limits<size_t>::max();
+            }
     };
 
     //OK
@@ -2268,6 +2334,26 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             auto max_consume_size() noexcept -> size_t{
 
                 return this->base->max_consume_size();
+            }
+    };
+
+    class VoidEntranceController: public virtual EntranceControllerInterface
+    {
+        public:
+
+            void tick(GlobalIdentifier * global_id_arr, size_t sz, exception_t * exception_arr) noexcept
+            {
+                std::fill(exception_arr, std::next(exception_arr, sz), dg::network_exception::SUCCESS);
+            }
+
+            void get_expired_id(GlobalIdentifier * output_arr, size_t& sz, size_t cap) noexcept
+            {
+                sz = 0u;
+            }
+
+            auto max_consume_size() noexcept -> size_t
+            {
+                return std::numeric_limits<size_t>::max();
             }
     };
 
@@ -3876,6 +3962,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                       max_consume_sz);
         }
 
+        static auto get_void_inbound_gate() -> std::unique_ptr<InBoundGateInterface>
+        {
+            return std::make_unique<VoidInboundGate>();
+        }
+
         static auto get_temporal_blacklist_gate(size_t set_cap,
                                                 size_t rehash_sz,
                                                 size_t reliability_decay_factor,
@@ -3928,6 +4019,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                                                                         blacklist_gate_arr_sz,
                                                                         keyvalue_feed_cap,
                                                                         max_consume_sz);
+        }
+
+        static auto get_void_blacklist_gate() -> std::unique_ptr<BlackListGateInterface>
+        {
+            return std::make_unique<VoidBlackListGate>();
         }
 
         static auto get_packetizer(Address factory_addr, 
@@ -4058,6 +4154,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             return std::make_unique<ExhaustionControlledEntranceController>(std::move(base),
                                                                             std::move(executor),
                                                                             std::move(exhaustion_controller));
+        }
+
+        static auto get_void_entrance_controller() -> std::unique_ptr<EntranceControllerInterface>
+        {
+            return std::make_unique<VoidEntranceController>();
         }
 
         static auto get_packet_assembler(size_t packet_map_cap,
@@ -4551,12 +4652,14 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         uint32_t gate_controller_ato_map_capacity;
         std::chrono::nanoseconds gate_controller_ato_dur;
         uint32_t gate_controller_ato_keyvalue_feed_cap;
+        bool gate_controller_ato_is_voided; 
 
         uint32_t gate_controller_blklst_component_sz;
         uint32_t gate_controller_blklst_bloomfilter_cap;
         uint32_t gate_controller_blklst_bloomfilter_rehash_sz;
         uint32_t gate_controller_blklst_bloomfilter_reliability_decay_factor;
         uint32_t gate_controller_blklst_keyvalue_feed_cap; 
+        bool gate_controller_blklst_is_voided; 
 
         uint32_t latency_controller_tick_wait_queue_cap;
         uint32_t latency_controller_component_sz;
@@ -4564,6 +4667,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
         std::chrono::nanoseconds latency_controller_expiry_period;
         uint32_t latency_controller_keyvalue_feed_cap;
         bool latency_controller_has_exhaustion_control; 
+        bool latency_controller_is_voided;
 
         uint32_t packet_assembler_component_sz;
         uint32_t packet_assembler_map_cap;
@@ -4621,6 +4725,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
             static auto make_ato_gate_controller(Config config) -> std::unique_ptr<InBoundGateInterface>{
                 
+                if (config.gate_controller_ato_is_voided)
+                {
+                    return ComponentFactory::get_void_inbound_gate();
+                }
+
                 if (config.gate_controller_ato_component_sz == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
                 }
@@ -4641,6 +4750,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
 
             static auto make_blklst_gate_controller(Config config) -> std::unique_ptr<BlackListGateInterface>{
+
+                if (config.gate_controller_blklst_is_voided)
+                {
+                    return ComponentFactory::get_void_blacklist_gate();
+                }
 
                 if (config.gate_controller_blklst_component_sz == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -4769,6 +4883,11 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
             }
 
             static auto make_latency_controller(Config config) -> std::unique_ptr<EntranceControllerInterface>{
+
+                if (config.latency_controller_is_voided)
+                {
+                    return ComponentFactory::get_void_entrance_controller();
+                }
 
                 if (config.latency_controller_component_sz == 0u){
                     dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
