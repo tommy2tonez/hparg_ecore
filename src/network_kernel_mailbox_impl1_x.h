@@ -3654,8 +3654,15 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         continue;
                     }
 
-                    for (size_t j = 0u; j < segment_vec.value().size(); ++j){
-                        dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), base_data_arr[i].to, std::move(segment_vec.value()[j])); //we are to attempt to temporally group the <to> transmission, to increase ack vectorization chances
+                    for (size_t j = 0u; j < segment_vec.value().size(); ++j)
+                    {
+                        InternalFeedArgument arg
+                        {
+                            .segment    = std::move(segment_vec.value()[j]),
+                            .err        = std::next(exception_arr, i)
+                        };
+
+                        dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), base_data_arr[i].to, std::move(arg));
                     }
                 }
             }
@@ -3690,25 +3697,32 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
         private:
 
-            struct InternalFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<Address, PacketSegment>{
+            struct InternalFeedArgument
+            {
+                PacketSegment segment;
+                exception_t * err;
+            };
+
+            struct InternalFeedResolutor: dg::network_producer_consumer::KVConsumerInterface<Address, InternalFeedArgument>{
 
                 dg::network_kernel_mailbox_impl1::core::MailboxInterface * dst;
 
-                void push(const Address& to, std::move_iterator<PacketSegment *> data_arr, size_t sz) noexcept{
+                void push(const Address& to, std::move_iterator<InternalFeedArgument *> data_arr, size_t sz) noexcept{
 
-                    PacketSegment * base_data_arr   = data_arr.base();
-                    size_t arr_cap                  = sz;
-                    size_t arr_sz                   = 0u;
+                    InternalFeedArgument * base_data_arr    = data_arr.base();
+                    size_t arr_cap                          = sz;
+                    size_t arr_sz                           = 0u;
 
                     dg::network_stack_allocation::NoExceptAllocation<MailBoxArgument[]> mailbox_arg_arr(arr_cap);
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(arr_cap);
+                    dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(arr_cap);
                     dg::network_stack_allocation::NoExceptAllocation<internal_segment_kernel_buffer[]> segment_arr(arr_cap);
 
                     for (size_t i = 0u; i < sz; ++i){
-                        std::expected<internal_segment_kernel_buffer, exception_t> serialized = serialize_packet_segment(static_cast<PacketSegment&&>(base_data_arr[i]));
+                        std::expected<internal_segment_kernel_buffer, exception_t> serialized = serialize_packet_segment(static_cast<PacketSegment&&>(base_data_arr[i].segment));
 
                         if (!serialized.has_value()){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(serialized.error()));
+                            *base_data_arr[i].err = serialized.error();
                             continue;
                         }
 
@@ -3716,6 +3730,8 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                         mailbox_arg_arr[arr_sz].content     = segment_arr[arr_sz].data();
                         mailbox_arg_arr[arr_sz].content_sz  = segment_arr[arr_sz].size();
                         mailbox_arg_arr[arr_sz].to          = to;
+                        exception_ptr_arr[arr_sz]           = base_data_arr[i].err;
+
                         arr_sz                              += 1;
                     }
 
@@ -3723,7 +3739,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
                     for (size_t i = 0u; i < arr_sz; ++i){
                         if (dg::network_exception::is_failed(exception_arr[i])){
-                            dg::network_log_stackdump::error_fast_optional(dg::network_exception::verbose(exception_arr[i]));
+                            *exception_ptr_arr[i] = exception_arr[i];
                         }
                     }
                 }
