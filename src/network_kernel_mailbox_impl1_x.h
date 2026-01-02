@@ -454,14 +454,39 @@
 namespace dg::network_kernel_mailbox_impl1_flash_streamx{
 
     struct Signature{};
+    struct Signature1{};
     struct Signature2{};
     struct Signature3{};
 
+    //this is too hard to solve but I'd try to quantify the problem as followed
+    //in system design, we'd want to cancel, transmit, guarantee of deliveries
+
+    //let's first define our problems so we'd have to solve it
+    //assume uniform bandwidth in our system (such is A - B bandwidth is uniform for all edges) 
+
+    //in short, let's assume that our retransmission queue is of size 1, such is that we put 1 packet in the queue, we wait for the packet to be acked, we'd continue with another packet
+    //we dont have problems
+
+    //so we increase the number of packets in the queue to 2, such is that ..., we dont have problem
+    //we increase the number of packets in queue to n, such is that there is a problem of bandwidth or consumption or packet id counter reached or etc.
+
+    //the number n is binary-searchable, configurable and fixed, because our environment is known and uniform
+    //so we don't have any problems with networks, assume that its for pure consumption and dump the buffer thereafter (which we'd put in a filesystem, which is another topic to talk about)
+
+    //assume in a perfect conditions, our system is flawless, such is all packets sent == all packets received and there is no congestion whatsoever, we are very super happy
+    //how about we'd want to abort some of the operating tasks or transmissions?
+    //so its compromised at the function call level, such is that the compromission time is dispatch_sz / pipe_sz * retryable_times * time_per_retry, so if you call the functions for 1 millions items, with a 1-item pipe, it's a guaranteed NO-NO, deadlock for you
+    //and that's an expected functionality in system design, not a flaw of function call compromission, for the function must deliver the arguing packets 
+
     using MemoryConfig                      = dg::network_kernel_allocator_singleton::Config;
     using HugeAllocatorInstance             = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature>;
+    using VectorAllocatorInstance           = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature1>;
 
     template <class T>
     using HugeStdWrappedAllocator           = dg::network_kernel_allocator_singleton::StdWrappedAllocator<T, HugeAllocatorInstance>;
+
+    template <class T>
+    using VectorStdWrappedAllocator         = dg::network_kernel_allocator_singleton::StdWrappedAllocator<T, VectorAllocatorInstance>;
 
     using SegmentAllocatorInstance          = dg::network_kernel_allocator_singleton::AllocatorInstance<Signature2>;
 
@@ -478,6 +503,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
                      MemoryConfig urgent_packet_config)
     {
         HugeAllocatorInstance::init(big_packet_config);
+        VectorAllocatorInstance::init(big_packet_config);
         SegmentAllocatorInstance::init(segment_packet_config);
         UrgentAllocatorInstance::init(urgent_packet_config);
     }
@@ -493,7 +519,7 @@ namespace dg::network_kernel_mailbox_impl1_flash_streamx{
     using internal_segment_kernel_buffer    = dg::network_kernel_buffer::kernel_string<SegmentAllocatorInstance>; 
 
     template <class T>
-    using internal_vector                   = std::vector<T, HugeStdWrappedAllocator<T>>;
+    using internal_vector                   = std::vector<T, VectorStdWrappedAllocator<T>>;
 
     template <class T, class ...Args>
     auto urgent_make_shared(Args&& ...args){
