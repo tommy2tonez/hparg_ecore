@@ -129,6 +129,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t BAD_OPERATION                       = 00u;
     static inline constexpr exception_t INDEX_OUT_OF_RANGE                  = 00u;
     static inline constexpr exception_t OUT_OF_BOUND_ACCESS                 = 00u;
+    static inline constexpr exception_t BAD_STATE                               = 00u;
 
     static inline constexpr exception_t REST_CACHE_MAX_RESPONSE_SIZE_REACHED    = 00u;
     static inline constexpr exception_t REST_CACHE_POPULATION_LIMIT_REACHED     = 00u;

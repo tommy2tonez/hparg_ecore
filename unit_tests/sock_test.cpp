@@ -364,6 +364,7 @@ int main()
                 .retransmission_react_queue_cap = 1 << 10,
                 .retransmission_user_push_concurrency_sz = 1024,
                 .retransmission_retriable_push_concurrency_sz = 1024,
+                .retransmission_unit_sz = 1024,
                 .retransmission_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
                 .retransmission_has_exhaustion_control = true,
 

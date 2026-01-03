@@ -63,15 +63,165 @@ namespace dg::network_stack_allocation{
             }
     };
 
+    class SplitStackAllocator
+    {
+        private:
+
+            struct MemorySegment
+            {
+                std::unique_ptr<char[]> buf;
+                size_t buf_sz;
+            };
+
+            struct MemoryPoint
+            {
+                size_t slot;
+                size_t offset;
+            };
+
+            std::vector<MemorySegment> stack_buffer_vec;
+            std::vector<std::optional<MemoryPoint>> saved_point_vec;
+            std::optional<MemoryPoint> valid_point;
+        
+        public:
+            
+            SplitStackAllocator(): stack_buffer_vec(),
+                                   saved_point_vec(),
+                                   valid_point(std::nullopt){}
+
+            inline auto enter_scope() noexcept -> exception_t
+            {
+                MemoryPoint next_point;
+
+                if (this->valid_point.has_value())
+                {
+                    next_point = this->valid_point.value();
+                }
+                else
+                {
+                    next_point = MemoryPoint
+                    {
+                        .slot   = 0u,
+                        .offset = 0u
+                    };
+
+                    exception_t err = this->reserve_for_vector_size_of(1);
+
+                    if (dg::network_exception::is_failed(err))
+                    {
+                        return err;
+                    }
+                }
+
+                try
+                {
+                    this->saved_point_vec.push_back(this->valid_point);
+                }
+                catch (...)
+                {
+                    return dg::network_exception::wrap_std_exception(std::current_exception());
+                }
+
+                this->valid_point = next_point;
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            inline auto allocate(size_t blk_sz) noexcept -> std::expected<void *, exception_t>
+            {
+                if (!this->valid_point.has_value())
+                {
+                    return std::unexpected(dg::network_exception::BAD_STATE);
+                }
+
+                MemoryPoint cur_point = this->valid_point.value();
+
+                while (true)
+                {
+                    size_t point_sz = this->stack_buffer_vec[cur_point.slot].buf_sz - cur_point.offset;
+
+                    if (point_sz >= blk_sz)
+                    {
+                        void * rs   = std::next(this->stack_buffer_vec[cur_point.slot].buf.get(), cur_point.offset); 
+                        cur_point   = MemoryPoint
+                        {
+                            .slot   = cur_point.slot,
+                            .offset = cur_point.offset + blk_sz
+                        };
+
+                        this->valid_point   = cur_point;
+
+                        return rs;
+                    }
+
+                    exception_t err = this->reserve_for_vector_size_of(cur_point.slot + 2u);
+
+                    if (dg::network_exception::is_failed(err))
+                    {
+                        return std::unexpected(err);
+                    }
+
+                    cur_point = MemoryPoint
+                    {
+                        .slot   = cur_point.slot + 1u,
+                        .offset = 0u
+                    };
+                }
+            }
+
+            inline void exit_scope() noexcept
+            {
+                if (this->saved_point_vec.empty())
+                {
+                    std::abort();
+                }
+
+                this->valid_point = this->saved_point_vec.back();
+                this->saved_point_vec.pop_back();
+            }
+
+        private:
+
+            auto reserve_for_vector_size_of(size_t sz) noexcept -> exception_t
+            {
+                size_t new_sz   = std::max(sz, static_cast<size_t>(this->stack_buffer_vec.size()));
+                size_t old_sz   = this->stack_buffer_vec.size();
+                size_t diff_sz  = new_sz - old_sz; 
+
+                try
+                {
+                    for (size_t i = 0u; i < diff_sz; ++i)
+                    {
+                        size_t offset                   = old_sz + i; 
+                        size_t buf_vec_sz               = size_t{1} << offset;
+                        std::unique_ptr<char[]> new_buf = std::make_unique<char[]>(buf_vec_sz);
+
+                        this->stack_buffer_vec.push_back(MemorySegment
+                        {
+                            .buf    = std::move(new_buf),
+                            .buf_sz = buf_vec_sz
+                        });
+                    }
+                }
+                catch (...)
+                {
+                    this->stack_buffer_vec.resize(old_sz);
+                    return dg::network_exception::wrap_std_exception(std::current_exception());
+                }
+
+                return dg::network_exception::SUCCESS;
+            }            
+    };
+
     class ConcurrentAllocator{
 
         private:
 
-            std::vector<std::unique_ptr<StackAllocator>> allocator_vec;
+            std::vector<std::unique_ptr<SplitStackAllocator>> allocator_vec;
 
         public:
 
-            ConcurrentAllocator(std::vector<std::unique_ptr<StackAllocator>> allocator_vec) noexcept: allocator_vec(std::move(allocator_vec)){}
+            ConcurrentAllocator(std::vector<std::unique_ptr<SplitStackAllocator>> allocator_vec) noexcept: allocator_vec(std::move(allocator_vec)){}
 
             inline auto enter_scope() noexcept -> exception_t{
 
@@ -117,24 +267,30 @@ namespace dg::network_stack_allocation{
             return std::make_unique<StackAllocator>(std::move(stack_cursor_vec), std::move(buf), buf_sz, cursor);
         }
 
-        static inline auto spawn_concurrent_allocator(size_t scope_size, size_t buf_sz) -> std::unique_ptr<ConcurrentAllocator>{
+        static inline auto spawn_split_stack_allocator() -> std::unique_ptr<SplitStackAllocator>
+        {
+            return std::make_unique<SplitStackAllocator>();
+        }
 
-            std::vector<std::unique_ptr<StackAllocator>> stack_allocator_vec{};
+        static inline auto spawn_concurrent_allocator() -> std::unique_ptr<ConcurrentAllocator>{
+
+            std::vector<std::unique_ptr<SplitStackAllocator>> stack_allocator_vec{};
 
             for (size_t i = 0u; i < dg::network_concurrency::get_thread_count(); ++i){
-                stack_allocator_vec.push_back(spawn_stack_allocator(scope_size, buf_sz));
+                stack_allocator_vec.push_back(spawn_split_stack_allocator());
             }
 
             return std::make_unique<ConcurrentAllocator>(std::move(stack_allocator_vec));
         }
     };
-
+    
     inline ConcurrentAllocator * volatile allocator;
 
-    void init(size_t scope_size, size_t buf_sz){
+    void init(){
 
         stdx::memtransaction_guard tx_grd;
-        auto tmp_allocator  = ComponentFactory::spawn_concurrent_allocator(scope_size, buf_sz);
+
+        auto tmp_allocator  = ComponentFactory::spawn_concurrent_allocator();
         allocator           = tmp_allocator.get();
         tmp_allocator.release();
     }

@@ -6895,7 +6895,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                                                                    size_t retriable_pkt_map_cap,
                                                                    size_t user_push_concurrency_sz,
                                                                    size_t retriable_push_concurrency_sz,
-                                                                   size_t consume_factor = 4u) -> std::unique_ptr<RetransmissionControllerInterface>{
+                                                                   size_t tentative_consume_sz) -> std::unique_ptr<RetransmissionControllerInterface>{
 
             const size_t MIN_PKT_MAP_CAPACITY               = 0u;
             const size_t MAX_PKT_MAP_CAPACITY               = size_t{1} << 30;
@@ -6913,6 +6913,9 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             
             const size_t MIN_RETRIABLE_PUSH_CONCURRENCY_SZ  = 1u;
             const size_t MAX_RETRIABLE_PUSH_CONCURRENCY_SZ  = size_t{1} << 20; 
+            
+            const size_t MIN_TENTATIVE_CONSUME_SZ           = 0u;
+            const size_t MAX_TENTATIVE_CONSUME_SZ           = size_t{1} << 30;
 
             if (std::clamp(pkt_map_capacity, MIN_PKT_MAP_CAPACITY, MAX_PKT_MAP_CAPACITY) != pkt_map_capacity){
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
@@ -6946,9 +6949,13 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
                 dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
             }
 
-            size_t tentative_pkt_map_consume_sz     = pkt_map_capacity >> consume_factor;
-            size_t tentative_acked_set_consume_sz   = acked_set_capacity >> consume_factor;
-            size_t consume_sz                       = std::max(std::min(tentative_pkt_map_consume_sz, tentative_acked_set_consume_sz), size_t{1u});
+            if (std::clamp(tentative_consume_sz, MIN_TENTATIVE_CONSUME_SZ, MAX_TENTATIVE_CONSUME_SZ) != tentative_consume_sz){
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            size_t tentative_pkt_map_consume_sz     = pkt_map_capacity;
+            size_t tentative_acked_set_consume_sz   = acked_set_capacity;
+            size_t consume_sz                       = std::max(std::min(std::min(tentative_pkt_map_consume_sz, tentative_acked_set_consume_sz), tentative_consume_sz), size_t{1u});
 
             return std::make_unique<MemoryEfficientRetransmissionController>(dg::pow2_cyclic_queue<RetransmissionWaitingItem>(stdx::ulog2(stdx::ceil2(user_push_concurrency_sz))),
                                                                              dg::pow2_cyclic_queue<RetransmissionWaitingItem>(stdx::ulog2(stdx::ceil2(retriable_push_concurrency_sz))),
@@ -9976,6 +9983,7 @@ namespace dg::network_kernel_mailbox_impl1{
         uint32_t retransmission_react_queue_cap;
         uint32_t retransmission_user_push_concurrency_sz;
         uint32_t retransmission_retriable_push_concurrency_sz;
+        uint32_t retransmission_unit_sz;
         std::chrono::nanoseconds retransmission_react_time;
         bool retransmission_has_exhaustion_control; 
 
@@ -10294,7 +10302,8 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                                config.retransmission_packet_cap,
                                                                                                                config.retransmission_user_queue_cap,
                                                                                                                config.retransmission_user_push_concurrency_sz,
-                                                                                                               config.retransmission_retriable_push_concurrency_sz);
+                                                                                                               config.retransmission_retriable_push_concurrency_sz,
+                                                                                                               config.retransmission_unit_sz);
                 }
 
                 std::vector<std::unique_ptr<packet_controller::RetransmissionControllerInterface>> retransmission_controller_vec{};
@@ -10309,7 +10318,8 @@ namespace dg::network_kernel_mailbox_impl1{
                                                                                                                                             config.retransmission_packet_cap,
                                                                                                                                             config.retransmission_user_queue_cap,
                                                                                                                                             config.retransmission_user_push_concurrency_sz,
-                                                                                                                                            config.retransmission_retriable_push_concurrency_sz);
+                                                                                                                                            config.retransmission_retriable_push_concurrency_sz,
+                                                                                                                                            config.retransmission_unit_sz);
 
                     retransmission_controller_vec.push_back(std::move(current_retransmission_controller));
                 }

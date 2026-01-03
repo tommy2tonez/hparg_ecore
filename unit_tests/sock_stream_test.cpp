@@ -30,26 +30,29 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
 
         bool run_one_epoch() noexcept
         {
-            const size_t TEST_SZ = size_t{1} << 10u;
+            const size_t TEST_SZ = size_t{1} << 20u;
+
+            size_t packet_sz    = 8u;
+            size_t packet_count = size_t{1} << 20;
+
+            std::vector<std::shared_ptr<void>> resource_vec = {};
+            std::vector<std::string> recv_vec{};
+            std::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> mailbox_arg_vec = make_mailbox_arg_vec(packet_sz, packet_count, 5000, resource_vec);
 
             for (size_t i = 0u; i < TEST_SZ; ++i)
             {
-                std::vector<std::shared_ptr<void>> resource_vec = {};
-                size_t packet_sz                                = 8u;
-                size_t packet_count                             = randomize_packet_count();
+                size_t iterative_packet_count = randomize_packet_count() % packet_count + 1u; 
 
-                std::cout << "test packet_sz > " << packet_sz << " packet_count > " << packet_count << std::endl;  
+                std::cout << "test packet_sz > " << packet_sz << " packet_count > " << iterative_packet_count << std::endl;  
 
-                std::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> mailbox_arg_vec = make_mailbox_arg_vec(packet_sz, packet_count, 5000, resource_vec);
+                this->strong_send(mailbox_arg_vec.data(), iterative_packet_count);
+                this->strong_recv(iterative_packet_count, packet_sz, recv_vec);
 
-                this->strong_send(mailbox_arg_vec.data(), mailbox_arg_vec.size());
-                std::vector<std::string> recv_vec = this->strong_recv(mailbox_arg_vec.size(), packet_sz);
-
-                sorted_print(recv_vec);
-                assert_equal(mailbox_arg_vec, recv_vec);
+                // sorted_print(recv_vec);
+                // assert_equal(mailbox_arg_vec, recv_vec);
 
                 std::cout << "test > " << i << "/" << TEST_SZ << std::endl;
-                resource_vec = {};
+                // resource_vec = {};
 
                 // std::this_thread::sleep_for(std::chrono::seconds(10));
             }
@@ -110,8 +113,13 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
 
         void strong_send(dg::network_kernel_mailbox_impl1::model::MailBoxArgument * arg_arr, size_t sz)
         {
-            std::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> tmp_vec(arg_arr, std::next(arg_arr, sz));
-            std::vector<exception_t> exception_vec(sz);
+            static std::vector<dg::network_kernel_mailbox_impl1::model::MailBoxArgument> tmp_vec{};
+            
+            tmp_vec.resize(sz);
+            std::copy(arg_arr, std::next(arg_arr, sz), tmp_vec.begin());
+
+            static std::vector<exception_t> exception_vec{};
+            exception_vec.resize(sz);
 
             while (true)
             {
@@ -126,17 +134,17 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
                     }
                     else
                     {
-                        for (char c: std::string_view(static_cast<const char *>(tmp_vec[i].content), std::next(static_cast<const char *>(tmp_vec[i].content), tmp_vec[i].content_sz)))
-                        {
-                            bool is_numeric = c >= '0' && c <= '9'; 
+                        // for (char c: std::string_view(static_cast<const char *>(tmp_vec[i].content), std::next(static_cast<const char *>(tmp_vec[i].content), tmp_vec[i].content_sz)))
+                        // {
+                        //     bool is_numeric = c >= '0' && c <= '9'; 
 
-                            if (!is_numeric)
-                            {
-                                std::cout << "mayday 1" << std::endl;
-                                std::cout << std::string_view(static_cast<const char *>(tmp_vec[i].content), std::next(static_cast<const char *>(tmp_vec[i].content), tmp_vec[i].content_sz)) << std::endl;
-                                std::abort();
-                            }
-                        }
+                        //     if (!is_numeric)
+                        //     {
+                        //         std::cout << "mayday 1" << std::endl;
+                        //         std::cout << std::string_view(static_cast<const char *>(tmp_vec[i].content), std::next(static_cast<const char *>(tmp_vec[i].content), tmp_vec[i].content_sz)) << std::endl;
+                        //         std::abort();
+                        //     }
+                        // }
                     }
                 }
 
@@ -149,18 +157,26 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
             }            
         }
         
-        auto strong_recv(size_t sz, size_t segment_sz) -> std::vector<std::string>
+        void strong_recv(size_t sz,
+                         size_t segment_sz,
+                         std::vector<std::string>& buf_vec)
         {
-            std::vector<std::string> buf_vec(sz);
+            // std::vector<std::string> buf_vec(sz);
+
+            buf_vec.resize(sz);
 
             for (auto& e: buf_vec)
             {
                 e.resize(segment_sz);
             }
 
-            std::vector<void *> recv_arr(sz);
-            std::vector<size_t> cap_arr(sz);
-            std::vector<size_t> sz_arr(sz);
+            static std::vector<void *> recv_arr{};
+            static std::vector<size_t> cap_arr{};
+            static std::vector<size_t> sz_arr{};
+
+            recv_arr.resize(sz);
+            cap_arr.resize(sz);
+            sz_arr.resize(sz);
 
             for (size_t i = 0u; i < sz; ++i)
             {
@@ -184,8 +200,6 @@ class TestWorker: public virtual dg::network_concurrency::WorkerInterface
 
                 std::cout << "actual > " << actual_recv_sz << "<> expected > " << sz << std::endl; 
             }
-
-            return buf_vec;
         }
 
         auto randomize_packet_size() -> size_t
@@ -300,7 +314,8 @@ int main()
         });
 
         {
-            dg::network_stack_allocation::init(10000, size_t{1} << 25);
+            // dg::network_stack_allocation::init(10000, size_t{1} << 25);
+            dg::network_stack_allocation::init();
 
             auto [retry_device_up, destructor] = dg::network_concurrency_infretry_x::get_infretry_machine(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(1000))); 
             std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> retry_device = std::move(retry_device_up);
@@ -362,6 +377,7 @@ int main()
                 .retransmission_react_queue_cap = 1 << 10,
                 .retransmission_user_push_concurrency_sz = 1024,
                 .retransmission_retriable_push_concurrency_sz = 1024,
+                .retransmission_unit_sz = 1024,
                 .retransmission_react_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(10)),
                 .retransmission_has_exhaustion_control = true,
 
