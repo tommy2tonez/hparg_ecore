@@ -1530,7 +1530,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto operator[](KeyLike&& key) -> mapped_type&{
 
-                return std::get<0>(this->insert_or_assign(std::forward<KeyLike>(key), mapped_type{}))->second;
+                return std::get<0>(this->try_emplace(std::forward<KeyLike>(key), mapped_type{}))->second;
             }
 
             constexpr void clear() noexcept(true){
@@ -2053,7 +2053,7 @@ namespace dg::network_datastructure::unordered_map_variants{
             template <class KeyLike>
             constexpr auto operator[](KeyLike&& key) -> mapped_type&{
 
-                return std::get<0>(this->insert_or_assign(std::forward<KeyLike>(key), mapped_type{}))->second;
+                return std::get<0>(this->try_emplace(std::forward<KeyLike>(key), mapped_type{}))->second;
             }
 
             constexpr void clear() noexcept(true){

@@ -37,7 +37,7 @@ namespace dg::network_compact_serializer::network_trivial_serializer::types{
 
 namespace dg::network_compact_serializer::network_trivial_serializer::types_space{
 
-    static constexpr auto nil_lambda = [](...){}; 
+    static constexpr auto nil_lambda = []<class ...Args>(Args&& ...){}; 
 
     template <class T, class = void>
     struct is_tuple: std::false_type{};
@@ -378,7 +378,7 @@ namespace dg::network_compact_serializer::exception_space{
 
 namespace dg::network_compact_serializer::types_space{
 
-    static constexpr auto nil_lambda    = [](...){}; 
+    static constexpr auto nil_lambda    = []<class ...Args>(Args&& ...){}; 
 
     template <class T, class = void>
     struct is_tuple: std::false_type{};

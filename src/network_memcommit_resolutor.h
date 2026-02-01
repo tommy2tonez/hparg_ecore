@@ -253,9 +253,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_blkr_signal_smph_addr_operatable_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -377,9 +377,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_rstr_signal_smph_addr_operatable_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -500,9 +500,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_mono_signal_smph_addr_operatable_id_nothrow(ptr); 
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -625,9 +625,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_pair_signal_smph_addr_operatable_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -758,9 +758,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_uacm_signal_smph_addr_operatable_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -886,9 +886,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_pacm_signal_smph_addr_operatable_id_nothrow(ptr); 
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -1023,9 +1023,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_crit_signal_smph_addr_operatable_id_nothrow(ptr); 
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -1169,9 +1169,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_poly_signal_smph_addr_operatable_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -1320,9 +1320,9 @@ namespace dg::network_memcommit_resolutor{
                                                                                                                                                                   //we have preconds, we have throw conds, we have inputs, we have outputs, we call it a day
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -1476,9 +1476,9 @@ namespace dg::network_memcommit_resolutor{
                         std::chrono::nanoseconds latency    = dg::network_tile_member_getsetter::get_extndst_request_latency_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -1624,9 +1624,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_msgrfwd_signal_smph_addr_operatable_id_nothrow(ptr); 
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -1748,9 +1748,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t smp_operatable_id           = dg::network_tile_member_getsetter::get_msgrbwd_signal_smph_addr_operatable_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -1859,21 +1859,21 @@ namespace dg::network_memcommit_resolutor{
                 }
 
                 switch (tile_kind.value()){
-                    case TILE_KIND_LEAF: [[fallthrough]]
-                    case TILE_KIND_BLKR: [[fallthrough]]
-                    case TILE_KIND_RSTR: [[fallthrough]]
-                    case TILE_KIND_MONO: [[fallthrough]]
-                    case TILE_KIND_PAIR: [[fallthrough]]
-                    case TILE_KIND_UACM: [[fallthrough]]
-                    case TILE_KIND_PACM: [[fallthrough]]
-                    case TILE_KIND_CRIT: [[fallthrough]]
-                    case TILE_KIND_IMMU: [[fallthrough]]
-                    case TILE_KIND_POLY: [[fallthrough]]
-                    case TILE_KIND_EXTNSRC: [[fallthrough]]
-                    case TILE_KIND_EXTNSRX: [[fallthrough]]
-                    case TILE_KIND_EXTNDST: [[fallthrough]] 
-                    case TILE_KIND_EXTNDSX: [[fallthrough]]
-                    case TILE_KIND_MSGRFWD: [[fallthrough]]
+                    case TILE_KIND_LEAF: 
+                    case TILE_KIND_BLKR: 
+                    case TILE_KIND_RSTR: 
+                    case TILE_KIND_MONO: 
+                    case TILE_KIND_PAIR: 
+                    case TILE_KIND_UACM: 
+                    case TILE_KIND_PACM: 
+                    case TILE_KIND_CRIT: 
+                    case TILE_KIND_IMMU: 
+                    case TILE_KIND_POLY: 
+                    case TILE_KIND_EXTNSRC: 
+                    case TILE_KIND_EXTNSRX: 
+                    case TILE_KIND_EXTNDST:  
+                    case TILE_KIND_EXTNDSX: 
+                    case TILE_KIND_MSGRFWD: 
                     case TILE_KIND_MSGRBWD:
                     {
                         return dg::network_exception::SUCCESS;
@@ -2124,7 +2124,7 @@ namespace dg::network_memcommit_resolutor{
                         set_operatable_id_t current_ops_id          = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -2245,12 +2245,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -2376,12 +2376,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_rstr_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -2507,12 +2507,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -2638,12 +2638,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -2769,12 +2769,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -2900,12 +2900,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -3031,12 +3031,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -3162,7 +3162,7 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -3285,12 +3285,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_set_t current_ops_id          = dg::network_tile_member_getsetter::get_poly_operatable_memevent_id_set_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (!is_subset_id(expected_ops_id, current_ops_id)){
@@ -3418,12 +3418,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -3570,12 +3570,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -3722,12 +3722,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -3853,12 +3853,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -3971,21 +3971,21 @@ namespace dg::network_memcommit_resolutor{
                 }
 
                 switch (tile_kind.value()){
-                    case TILE_KIND_LEAF: [[fallthrough]]
-                    case TILE_KIND_BLKR: [[fallthrough]]
-                    case TILE_KIND_RSTR: [[fallthrough]]
-                    case TILE_KIND_MONO: [[fallthrough]]
-                    case TILE_KIND_PAIR: [[fallthrough]]
-                    case TILE_KIND_UACM: [[fallthrough]]
-                    case TILE_KIND_PACM: [[fallthrough]]
-                    case TILE_KIND_CRIT: [[fallthrough]]
-                    case TILE_KIND_IMMU: [[fallthrough]]
-                    case TILE_KIND_POLY: [[fallthrough]]
-                    case TILE_KIND_EXTNSRC: [[fallthrough]]
-                    case TILE_KIND_EXTNSRX: [[fallthrough]]
-                    case TILE_KIND_EXTNDST: [[fallthrough]]
-                    case TILE_KIND_EXTNDSX: [[fallthrough]]
-                    case TILE_KIND_MSGRFWD: [[fallthrough]]
+                    case TILE_KIND_LEAF: 
+                    case TILE_KIND_BLKR: 
+                    case TILE_KIND_RSTR: 
+                    case TILE_KIND_MONO: 
+                    case TILE_KIND_PAIR: 
+                    case TILE_KIND_UACM: 
+                    case TILE_KIND_PACM: 
+                    case TILE_KIND_CRIT: 
+                    case TILE_KIND_IMMU: 
+                    case TILE_KIND_POLY: 
+                    case TILE_KIND_EXTNSRC: 
+                    case TILE_KIND_EXTNSRX: 
+                    case TILE_KIND_EXTNDST: 
+                    case TILE_KIND_EXTNDSX: 
+                    case TILE_KIND_MSGRFWD: 
                     case TILE_KIND_MSGRBWD:
                     {
                         return dg::network_exception::SUCCESS;
@@ -4236,7 +4236,7 @@ namespace dg::network_memcommit_resolutor{
                         set_operatable_id_t current_ops_id          = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -4360,12 +4360,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t descendant                            = dg::network_tile_member_getsetter::get_blkr_descendant_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -4407,9 +4407,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -4534,12 +4534,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t descendant                            = dg::network_tile_member_getsetter::get_rstr_descendant_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -4581,9 +4581,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -4708,12 +4708,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t descendant                            = dg::network_tile_member_getsetter::get_mono_descendant_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -4755,9 +4755,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -4885,12 +4885,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t right_descendant                      = dg::network_tile_member_getsetter::get_pair_right_descendant_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -4932,9 +4932,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -5067,12 +5067,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t ping_signal_smp_operatable_id   = dg::network_tile_member_getsetter::get_uacm_signal_smph_addr_operatable_id_nothrow(requestee); 
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -5114,9 +5114,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -5248,12 +5248,12 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t ping_signal_smp_operatable_id   = dg::network_tile_member_getsetter::get_pacm_signal_smph_addr_operatable_id_nothrow(requestee); 
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -5295,9 +5295,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -5438,12 +5438,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t descendant                            = dg::network_tile_member_getsetter::get_crit_descendant_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -5485,9 +5485,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED; [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED; 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -5609,7 +5609,7 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id              = dg::network_tile_member_getsetter::get_immu_operatable_memevent_id_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -5732,12 +5732,12 @@ namespace dg::network_memcommit_resolutor{
                         poly_tile_t poly_type                           = dg::network_tile_member_getsetter::get_poly_poly_type_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (!is_subset_id(expected_ops_id, current_ops_id)){
@@ -5779,9 +5779,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -5935,12 +5935,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t descendant                            = dg::network_tile_member_getsetter::get_extnsrc_descendant_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -5982,9 +5982,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -6156,12 +6156,12 @@ namespace dg::network_memcommit_resolutor{
                         std::chrono::nanoseconds request_latency        = dg::network_tile_member_getsetter::get_extndst_request_latency_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -6203,9 +6203,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -6361,12 +6361,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t descendant                            = dg::network_tile_member_getsetter::get_msgrfwd_descendant_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -6408,9 +6408,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -6536,12 +6536,12 @@ namespace dg::network_memcommit_resolutor{
                         uma_ptr_t descendant                            = dg::network_tile_member_getsetter::get_msgrbwd_descendant_nothrow(requestee);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != expected_ops_id){
@@ -6583,9 +6583,9 @@ namespace dg::network_memcommit_resolutor{
                         }
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_DECAYED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
@@ -6693,21 +6693,21 @@ namespace dg::network_memcommit_resolutor{
                 }
 
                 switch (tile_kind.value()){
-                    case TILE_KIND_LEAF: [[fallthrough]]
-                    case TILE_KIND_BLKR: [[fallthrough]]
-                    case TILE_KIND_RSTR: [[fallthrough]]
-                    case TILE_KIND_MONO: [[fallthrough]]
-                    case TILE_KIND_PAIR: [[fallthrough]]
-                    case TILE_KIND_UACM: [[fallthrough]]
-                    case TILE_KIND_PACM: [[fallthrough]]
-                    case TILE_KIND_CRIT: [[fallthrough]]
-                    case TILE_KIND_IMMU: [[fallthrough]]
-                    case TILE_KIND_POLY: [[fallthrough]]
-                    case TILE_KIND_EXTNSRC: [[fallthrough]]
-                    case TILE_KIND_EXTNSRX: [[fallthrough]]
-                    case TILE_KIND_EXTNDST: [[fallthrough]]
-                    case TILE_KIND_EXTNDSX: [[fallthrough]]
-                    case TILE_KIND_MSGRFWD: [[fallthrough]]
+                    case TILE_KIND_LEAF: 
+                    case TILE_KIND_BLKR: 
+                    case TILE_KIND_RSTR: 
+                    case TILE_KIND_MONO: 
+                    case TILE_KIND_PAIR: 
+                    case TILE_KIND_UACM: 
+                    case TILE_KIND_PACM: 
+                    case TILE_KIND_CRIT: 
+                    case TILE_KIND_IMMU: 
+                    case TILE_KIND_POLY: 
+                    case TILE_KIND_EXTNSRC: 
+                    case TILE_KIND_EXTNSRX: 
+                    case TILE_KIND_EXTNDST: 
+                    case TILE_KIND_EXTNDSX: 
+                    case TILE_KIND_MSGRFWD: 
                     case TILE_KIND_MSGRBWD:
                     {
                         return dg::network_exception::SUCCESS;
@@ -6975,7 +6975,7 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t cur_operatable_id   = dg::network_tile_member_getsetter::get_cron_operatable_memevent_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -7001,10 +7001,10 @@ namespace dg::network_memcommit_resolutor{
 
                                         break;
                                     }
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_ping_signal: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pong_request: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pingpong_request: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_do_signal: [[fallthrough]]
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_ping_signal: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pong_request: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pingpong_request: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_do_signal: 
                                     case dg::network_memcommit_factory::sigagg_event_kind_backward_do_signal:
                                     {
                                         if (clock.get() >= cron_expiry_time){
@@ -7156,7 +7156,7 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t cur_operatable_id   = dg::network_tile_member_getsetter::get_smph_operatable_memevent_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -7168,10 +7168,10 @@ namespace dg::network_memcommit_resolutor{
                                 }
 
                                 switch (base_event_arr[i].sigagg_virtual_event.event_kind){
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_ping_signal: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pong_request: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pingpong_request: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_do_signal: [[fallthrough]]
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_ping_signal: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pong_request: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pingpong_request: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_do_signal: 
                                     case dg::network_memcommit_factory::sigagg_event_kind_backward_do_signal:
                                     {
                                         virtual_memory_event_t virtual_event = dg::network_exception_handler::nothrow_log(dg::network_memcommit_factory::to_virtual_event(base_event_arr[i].sigagg_virtual_event));
@@ -7311,7 +7311,7 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t cur_operatable_id   = dg::network_tile_member_getsetter::get_fsmp_operatable_memevent_id_nothrow(ptr);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -7341,10 +7341,10 @@ namespace dg::network_memcommit_resolutor{
 
                                         break;
                                     }
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_ping_signal: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pong_request: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pingpong_request: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_do_signal: [[fallthrough]]
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_ping_signal: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pong_request: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pingpong_request: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_do_signal: 
                                     case dg::network_memcommit_factory::sigagg_event_kind_backward_do_signal:
                                     {
                                         virtual_emmory_event_t virtual_event = dg::network_exception_handler::nothrow_log(dg::network_memcommit_factory::to_virtual_event(base_event_arr[i].sigagg_virtual_event));
@@ -7506,7 +7506,7 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t cur_operatable_id   = dg::network_tile_member_getsetter::get_wsmp_operatable_memevent_id_nothrow(ptr);
                         
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -7543,10 +7543,10 @@ namespace dg::network_memcommit_resolutor{
 
                                         break;
                                     }
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_ping_signal: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pong_request: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pingpong_request: [[fallthrough]]
-                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_do_signal: [[fallthrough]]
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_ping_signal: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pong_request: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_pingpong_request: 
+                                    case dg::network_memcommit_factory::sigagg_event_kind_forward_do_signal: 
                                     case dg::network_memcommit_factory::sigagg_event_kind_backward_do_signal:
                                     {
                                         size_t wsmp_sigagg_cap  = dg::network_tile_member_getsetter::get_wsmp_sigagg_capacity_nothrow(ptr);
@@ -7662,9 +7662,9 @@ namespace dg::network_memcommit_resolutor{
                 }
 
                 switch (tile_kind.value()){
-                    case TILE_KIND_CRON: [[fallthrough]]
-                    case TILE_KIND_SMPH: [[fallthrough]]
-                    case TILE_KIND_FSMP: [[fallthrough]]
+                    case TILE_KIND_CRON: 
+                    case TILE_KIND_SMPH: 
+                    case TILE_KIND_FSMP: 
                     case TILE_KIND_WSMP:
                     {
                         return dg::network_exception::SUCCESS;
@@ -7979,13 +7979,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_blkr_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
@@ -8435,13 +8435,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
@@ -8875,13 +8875,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != data_arr[i].expected_ops_id){
@@ -9419,13 +9419,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_set_t current_ops_id  = dg::network_tile_member_getsetter::get_poly_operatable_memevent_id_set_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }         
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (!is_subset_id(data_arr[i].expected_ops_id, current_ops_id)){
@@ -9988,13 +9988,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(dst);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != data_arr[i].expected_ops_id){
@@ -10588,13 +10588,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(dst);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id != data_arr[i].expected_ops_id){
@@ -11255,13 +11255,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
@@ -11686,13 +11686,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
@@ -12148,13 +12148,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
@@ -12633,13 +12633,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
@@ -13070,13 +13070,13 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
                             case TILE_INIT_STATUS_INITIALIZED:
                             {
                                 break;
                             }
-                            case TILE_INIT_STATUS_DECAYED: [[fallthrough]]:
+                            case TILE_INIT_STATUS_DECAYED: :
                             case TILE_INIT_STATUS_ADOPTED:
                             {
                                 if (current_ops_id == data_arr[i].expected_ops_id){
@@ -13447,21 +13447,21 @@ namespace dg::network_memcommit_resolutor{
                 }
 
                 switch (tile_kind.value()){
-                    case TILE_KIND_LEAF: [[fallthrough]]
-                    case TILE_KIND_BLKR: [[fallthrough]]
-                    case TILE_KIND_RSTR: [[fallthrough]]
-                    case TILE_KIND_MONO: [[fallthrough]]
-                    case TILE_KIND_PAIR: [[fallthrough]]
-                    case TILE_KIND_UACM: [[fallthrough]]
-                    case TILE_KIND_PACM: [[fallthrough]]
-                    case TILE_KIND_CRIT: [[fallthrough]]
-                    case TILE_KIND_IMMU: [[fallthrough]]
-                    case TILE_KIND_POLY: [[fallthrough]]
-                    case TILE_KIND_EXTNSRC: [[fallthrough]]
-                    case TILE_KIND_EXTNSRX: [[fallthrough]]
-                    case TILE_KIND_EXTNDST: [[fallthrough]]
-                    case TILE_KIND_EXTNDSX: [[fallthrough]]
-                    case TILE_KIND_MSGRFWD: [[fallthrough]]
+                    case TILE_KIND_LEAF: 
+                    case TILE_KIND_BLKR: 
+                    case TILE_KIND_RSTR: 
+                    case TILE_KIND_MONO: 
+                    case TILE_KIND_PAIR: 
+                    case TILE_KIND_UACM: 
+                    case TILE_KIND_PACM: 
+                    case TILE_KIND_CRIT: 
+                    case TILE_KIND_IMMU: 
+                    case TILE_KIND_POLY: 
+                    case TILE_KIND_EXTNSRC: 
+                    case TILE_KIND_EXTNSRX: 
+                    case TILE_KIND_EXTNDST: 
+                    case TILE_KIND_EXTNDSX: 
+                    case TILE_KIND_MSGRFWD: 
                     case TILE_KIND_MSGRBWD:
                     {
                         return dg::network_exception::SUCCESS;
@@ -13758,7 +13758,7 @@ namespace dg::network_memcommit_resolutor{
                         set_operatable_id_t current_ops_id_set  = dg::network_tile_member_getsetter::get_leaf_operatable_memevent_id_set_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
                             case TILE_INIT_STATUS_ORPHANED:
                             {
                                 break;
@@ -14157,9 +14157,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_mono_operatable_memevent_id_nothrow(data_arr[i].root);  
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -14659,9 +14659,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pair_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -15273,9 +15273,9 @@ namespace dg::network_memcommit_resolutor{
                         poly_tile_t poly_type               = dg::network_tile_member_getsetter::get_poly_poly_type_nothrow(data_arr[i].root); 
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -15287,7 +15287,7 @@ namespace dg::network_memcommit_resolutor{
                                 ]
 
                                 switch (poly_type){
-                                    case POLY_TILE_LEAF: [[fallthrough]]
+                                    case POLY_TILE_LEAF: 
                                     case POLY_TILE_IMMU:
                                     {
                                         break;
@@ -15913,9 +15913,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_uacm_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -16544,9 +16544,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_pacm_operatable_memevent_id_nothrow(dst);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -17338,9 +17338,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_crit_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -17828,9 +17828,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extnsrc_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -18305,9 +18305,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndst_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -18688,9 +18688,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_extndsx_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -19155,9 +19155,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrfwd_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {
                                 break;
@@ -19632,9 +19632,9 @@ namespace dg::network_memcommit_resolutor{
                         operatable_id_t current_ops_id  = dg::network_tile_member_getsetter::get_msgrbwd_operatable_memevent_id_nothrow(data_arr[i].root);
 
                         switch (init_status){
-                            case TILE_INIT_STATUS_EMPTY: [[fallthrough]]
-                            case TILE_INIT_STATUS_ORPHANED: [[fallthrough]]
-                            case TILE_INIT_STATUS_ADOPTED: [[fallthrough]]
+                            case TILE_INIT_STATUS_EMPTY: 
+                            case TILE_INIT_STATUS_ORPHANED: 
+                            case TILE_INIT_STATUS_ADOPTED: 
                             case TILE_INIT_STATUS_DECAYED:
                             {   
                                 break;
@@ -20043,21 +20043,21 @@ namespace dg::network_memcommit_resolutor{
                 }
 
                 switch (tile_kind.value()){
-                    case TILE_KIND_LEAF: [[fallthrough]]
-                    case TILE_KIND_BLKR: [[fallthrough]]
-                    case TILE_KIND_RSTR: [[fallthrough]]
-                    case TILE_KIND_MONO: [[fallthrough]]
-                    case TILE_KIND_PAIR: [[fallthrough]]
-                    case TILE_KIND_UACM: [[fallthrough]]
-                    case TILE_KIND_PACM: [[fallthrough]]
-                    case TILE_KIND_CRIT: [[fallthrough]]
-                    case TILE_KIND_IMMU: [[fallthrough]]
-                    case TILE_KIND_POLY: [[fallthrough]]
-                    case TILE_KIND_EXTNSRC: [[fallthrough]]
-                    case TILE_KIND_EXTNSRX: [[fallthrough]]
-                    case TILE_KIND_EXTNDST: [[fallthrough]]
-                    case TILE_KIND_EXTNDSX: [[fallthrough]]
-                    case TILE_KIND_MSGRFWD: [[fallthrough]]
+                    case TILE_KIND_LEAF: 
+                    case TILE_KIND_BLKR: 
+                    case TILE_KIND_RSTR: 
+                    case TILE_KIND_MONO: 
+                    case TILE_KIND_PAIR: 
+                    case TILE_KIND_UACM: 
+                    case TILE_KIND_PACM: 
+                    case TILE_KIND_CRIT: 
+                    case TILE_KIND_IMMU: 
+                    case TILE_KIND_POLY: 
+                    case TILE_KIND_EXTNSRC: 
+                    case TILE_KIND_EXTNSRX: 
+                    case TILE_KIND_EXTNDST: 
+                    case TILE_KIND_EXTNDSX: 
+                    case TILE_KIND_MSGRFWD: 
                     case TILE_KIND_MSGRBWD:
                     {
                         return dg::network_exception::SUCCESS;

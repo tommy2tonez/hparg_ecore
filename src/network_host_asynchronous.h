@@ -368,6 +368,116 @@ namespace dg::network_host_asynchronous{
             }
     };
 
+    class WaitingWorkOrderContainer: public virtual WorkOrderContainerInterface
+    {
+        private:
+
+            dg::pow2_cyclic_queue<std::unique_ptr<WorkOrder>> wo_vec;
+            dg::pow2_cyclic_queue<std::pair<std::binary_semaphore *, std::unique_ptr<WorkOrder> *>> pop_wait_vec;
+            dg::pow2_cyclic_queue<std::pair<std::binary_semaphore *, std::unique_ptr<WorkOrder>>> push_wait_vec;
+            std::unique_ptr<stdx::fair_atomic_flag> mtx;
+        
+        public:
+
+            WaitingWorkOrderContainer(dg::pow2_cyclic_queue<std::unique_ptr<WorkOrder>> wo_vec,
+                                      dg::pow2_cyclic_queue<std::pair<std::binary_semaphore *, std::unique_ptr<WorkOrder> *>> pop_wait_vec,
+                                      dg::pow2_cyclic_queue<std::pair<std::binary_semaphore *, std::unique_ptr<WorkOrder>>> push_wait_vec,
+                                      std::unique_ptr<stdx::fair_atomic_flag> mtx) noexcept: wo_vec(std::move(wo_vec)),
+                                                                                             pop_wait_vec(std::move(pop_wait_vec)),
+                                                                                             push_wait_vec(std::move(push_wait_vec)),
+                                                                                             mtx(std::move(mtx)){}
+            
+            ~WaitingWorkOrderContainer() noexcept
+            {
+                if (!this->wo_vec.empty())
+                {
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }
+            }
+
+            auto push(std::unique_ptr<WorkOrder> wo) noexcept -> exception_t
+            {
+                if (wo == nullptr)
+                {
+                    return dg::network_exception::INVALID_ARGUMENT;
+                }
+
+                std::binary_semaphore acquire_smp(0);
+                bool need_acquire = [&]
+                {
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    if (!this->waiting_vec.empty())
+                    {
+                        auto [pending_smp, fetching_addr] = this->pop_wait_vec.front();
+                        this->pop_wait_vec.pop_front();
+                        *fetching_addr = std::move(wo);
+                        pending_smp->release();
+
+                        return false;
+                    }
+
+                    if (this->wo_vec.size() == this->wo_vec.capacity())
+                    {
+                        dg::network_exception_handler::nothrow_log(this->push_wait_vec.push_back(std::make_pair(&acquire_smp, std::move(wo))));
+                        return true;
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->wo_vec.push_back(std::move(wo)));
+
+                    return false;
+                }();
+
+                if (need_acquire)
+                {
+                    acquire_smp.acquire();
+                }
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            auto pop() noexcept -> std::unique_ptr<WorkOrder>
+            {
+                std::binary_semaphore acquire_smp(0);
+                std::unique_ptr<WorkOrder> wo;
+
+                {
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    if (!this->push_wait_vec.empty())
+                    {
+                        auto [pending_smp, fetching_data] = std::move(this->push_wait_vec.front());
+                        this->push_wait_vec.pop_front();
+                        pending_smp->release();
+
+                        return fetching_data;
+                    }
+
+                    if (!this->wo_vec.empty())
+                    {
+                        auto rs = std::move(this->wo_vec.front());
+                        this->wo_vec.pop_front();
+
+                        return rs;
+                    }
+
+                    if (this->pop_wait_vec.size() == this->pop_wait_vec.capacity())
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+
+                    dg::network_exception_handler::nothrow_log(this->pop_wait_vec.push_back(std::make_pair(&acquire_smp, &wo)));
+                }
+            }
+
+            acquire_smp.acquire();
+
+            return wo;
+
+    };
+
     class AsyncOrderExecutor: public virtual dg::network_concurrency::WorkerInterface{
 
         private:

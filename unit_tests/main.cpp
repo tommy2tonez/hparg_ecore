@@ -12,6 +12,13 @@
 #include "fsys_test.h"
 #include "kernel_map_test.h"
 
+//we have hopes guys
+//I'll be back on the project when there is a seed investment 
+//around 1-2 months
+//client is asking us to build a virtual net (on top of the cloud infrastructure) to transfer data from A - B, essentially to not stress the infrastructure yet still crunching cuda + host operations 
+//we built the socket fine, at least the memory and their effects are compromised and the results are there reliably if the capacity is under some number
+//this is gonna be bigger than we dreamt of 
+
 int main(){
 
     keyfeed_test::run();
