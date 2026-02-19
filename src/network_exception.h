@@ -135,7 +135,7 @@ namespace dg::network_exception{
     static inline constexpr exception_t REST_CACHE_POPULATION_LIMIT_REACHED     = 00u;
     static inline constexpr exception_t REST_CLIENTSIDE_TIMEOUT                 = 00u;
     static inline constexpr exception_t REST_SERVERSIDE_ABSTIMEOUT_TIMEOUT      = 00u;
-    static inline constexpr exception_t REST_INVALID_URI                        = 00u;
+    static inline constexpr exception_t REST_INVALID_URL                        = 00u;
     static inline constexpr exception_t REST_INVALID_ARGUMENT                   = 00u;
     static inline constexpr exception_t REST_BAD_CACHE_UNIQUE_WRITE             = 00u;
     static inline constexpr exception_t REST_INTERNAL_SERVER_ERROR              = 00u;

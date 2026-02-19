@@ -3507,6 +3507,27 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
     };
 
+    class RandomRetransmissionDelayNegotiator: public virtual RetransmissionDelayNegotiatorInterface
+    {
+        private:
+
+            std::chrono::nanoseconds average_delay_interval;
+        
+        public:
+
+            RandomRetransmissionDelayNegotiator(std::chrono::nanoseconds average_delay_interval) noexcept: average_delay_interval(average_delay_interval){}
+
+            auto get(const Address& to_addr) noexcept -> std::expected<std::chrono::nanoseconds, exception_t>
+            {
+                std::chrono::nanoseconds two_interval   = this->average_delay_interval * 2;
+                uint64_t two_interval_ticks             = static_cast<uint64_t>(two_interval.count());
+                uint64_t random_seed                    = dg::network_randomizer::randomize_int<uint64_t>();
+                uint64_t new_avg_ticks                  = random_seed % std::max(uint64_t{1}, two_interval_ticks); 
+
+                return std::chrono::nanoseconds(new_avg_ticks);
+            }
+    };
+
     class EmptyRetransmissionController: public virtual RetransmissionControllerInterface{
 
         public:
@@ -6872,7 +6893,7 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
 
             using namespace std::chrono_literals;
 
-            const std::chrono::nanoseconds MIN_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(1ns);
+            const std::chrono::nanoseconds MIN_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(0ns);
             const std::chrono::nanoseconds MAX_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(10min);
 
             if (std::clamp(interval, MIN_INTERVAL, MAX_INTERVAL) != interval){
@@ -6880,7 +6901,22 @@ namespace dg::network_kernel_mailbox_impl1::packet_controller{
             }
 
             return std::make_unique<StaticRetransmissionDelayNegotiator>(interval);
-        } 
+        }
+
+        static auto get_random_retransmission_delay_negotiator(std::chrono::nanoseconds interval) -> std::unique_ptr<RetransmissionDelayNegotiatorInterface>
+        {
+            using namespace std::chrono_literals;
+
+            const std::chrono::nanoseconds MIN_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(0ns);
+            const std::chrono::nanoseconds MAX_INTERVAL = std::chrono::duration_cast<std::chrono::nanoseconds>(10min);
+
+            if (std::clamp(interval, MIN_INTERVAL, MAX_INTERVAL) != interval)
+            {
+                dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+            }
+
+            return std::make_unique<RandomRetransmissionDelayNegotiator>(interval);
+        }
 
         static auto get_empty_retransmission_controller() -> std::unique_ptr<RetransmissionControllerInterface>
         {

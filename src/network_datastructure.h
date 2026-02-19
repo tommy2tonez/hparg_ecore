@@ -349,7 +349,7 @@ namespace dg::network_datastructure::cyclic_queue{
                 return dg::network_exception::SUCCESS;
             }
 
-            template <class ValueLike>
+            template <class ValueLike = value_type>
             constexpr auto push_back(ValueLike&& value) noexcept -> exception_t{
 
                 if (this->sz == this->cap){
@@ -900,7 +900,7 @@ namespace dg::network_datastructure::cyclic_queue{
                 return dg::network_exception::SUCCESS;
             }
 
-            template <class ValueLike>
+            template <class ValueLike = value_type>
             constexpr auto push_back(ValueLike&& value) noexcept -> exception_t{
 
                 if (this->sz == this->cap){
