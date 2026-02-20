@@ -4,11 +4,22 @@
 #include <functional>
 #include "network_trivial_serializer.h"
 #include "network_hash.h"
+#include <string>
+#include <cstring>
 
 namespace dg::network_hash_factory
 {
     template <class T>
     using std_hasher = std::hash<T>;
+
+    template <class T>
+    struct is_basic_string_hashable: std::false_type{};
+    
+    template <class ...Args>
+    struct is_basic_string_hashable<std::basic_string<Args...>>: std::true_type{};
+
+    template <class T>
+    static inline constexpr bool is_basic_string_hashable_v = is_basic_string_hashable<T>::value;
 
     template <class T, class = void>
     struct is_std_hashable: std::false_type{};
@@ -47,13 +58,22 @@ namespace dg::network_hash_factory
     struct type_container<void>{};
 
     template <class T>
-    auto internal_default_hasher_chooser(){
-
-        if constexpr(is_std_hashable_v<T>){
+    auto internal_default_hasher_chooser()
+    {
+        if constexpr(is_basic_string_hashable_v<T>)
+        {
+            return type_container<std_hasher<std::string_view>>();
+        }
+        else if constexpr(is_std_hashable_v<T>)
+        {
             return type_container<std_hasher<T>>();
-        } else if constexpr(is_trivial_hashable_v<T>){
+        }
+        else if constexpr(is_trivial_hashable_v<T>)
+        {
             return type_container<trivial_reflectable_hasher<T>>();
-        } else{
+        }
+        else
+        {
             return type_container<void>();
         }
     }
@@ -86,13 +106,22 @@ namespace dg::network_hash_factory
     static inline constexpr bool is_trivial_equal_to_able_v = dg::network_trivial_serializer::is_serializable_v<T>;
 
     template <class T>
-    auto internal_default_equal_to_chooser(){
-
-        if constexpr(is_std_equal_to_able_v<T>){
+    auto internal_default_equal_to_chooser()
+    {
+        if constexpr(is_basic_string_hashable_v<T>)
+        {
+            return type_container<std_equal_to<std::string_view>>();
+        }
+        else if constexpr(is_std_equal_to_able_v<T>)
+        {
             return type_container<std_equal_to<T>>();
-        } else if constexpr(is_trivial_equal_to_able_v<T>){
+        }
+        else if constexpr(is_trivial_equal_to_able_v<T>)
+        {
             return type_container<trivial_reflectable_equal_to<T>>();
-        } else{
+        }
+        else
+        {
             return type_container<void>();
         }
     }
