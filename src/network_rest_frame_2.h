@@ -303,12 +303,22 @@ namespace dg::network_rest_frame::server
     struct RequestHandlerInterface
     {
         using Request   = model::Request;
-        using Response  = model::Response; 
+        using Response  = model::Response;
 
         virtual ~RequestHandlerInterface() noexcept = default;
 
         virtual void handle(std::move_iterator<Request *> request_arr, size_t request_arr_sz, Response * response_arr) noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
+    };
+
+    struct OneRequestHandlerInterface
+    {
+        using Request   = model::Request;
+        using Response  = model::Response;
+
+        virtual ~OneRequestHandlerInterface() noexcept = default;
+
+        virtual auto handle(const Request& request) -> Response = 0;
     };
 
     struct RequestHandlerDictionaryInterface
@@ -332,18 +342,27 @@ namespace dg::network_rest_frame::client
 {
     using namespace dg::network_rest_frame::model;
 
+    //we'll solve this later
+
+    struct UpdatableInterface
+    {
+        virtual ~UpdatableInterface() noexcept = default;
+
+        virtual void update() noexcept = 0;
+    };
+
     struct RequestIDGeneratorInterface
     {
         virtual ~RequestIDGeneratorInterface() noexcept = default;
 
-        virtual auto get(size_t, RequestID *) noexcept -> exception_t = 0;
+        virtual auto get(size_t request_id_sz, RequestID * request_id_arr) noexcept -> exception_t = 0;
     };
 
     struct ResponseObserverInterface
     {
         virtual ~ResponseObserverInterface() noexcept = default;
 
-        virtual void update(std::expected<Response, exception_t>) noexcept = 0;
+        virtual void update(std::expected<Response, exception_t> response) noexcept = 0;
     };
 
     struct BatchResponseInterface
@@ -367,7 +386,7 @@ namespace dg::network_rest_frame::client
     {
         virtual ~RequestContainerInterface() noexcept = default;
 
-        virtual auto push(dg::vector<model::InternalRequest>&&) noexcept -> exception_t = 0;
+        virtual auto push(dg::vector<model::InternalRequest>&& request_vec) noexcept -> exception_t = 0;
         virtual auto pop() noexcept -> dg::vector<model::InternalRequest> = 0;
     };
 
@@ -387,14 +406,6 @@ namespace dg::network_rest_frame::client
         virtual auto max_consume_size() noexcept -> size_t = 0; 
     };
 
-    struct DrainerPredicateInterface
-    {
-        virtual ~DrainerPredicateInterface() noexcept = default;
-
-        virtual auto is_should_drain() noexcept -> bool = 0;
-        virtual void reset() noexcept = 0;
-    };
-
     struct TicketTimeoutManagerInterface
     {
         virtual ~TicketTimeoutManagerInterface() noexcept = default;
@@ -411,8 +422,8 @@ namespace dg::network_rest_frame::client
         virtual ~RestControllerInterface() noexcept = default;
 
         virtual auto request(model::ClientRequest&&) noexcept -> std::expected<std::unique_ptr<ResponseInterface>, exception_t> = 0;
-        virtual auto batch_request(std::move_iterator<model::ClientRequest *>, size_t) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t> = 0;
-        virtual auto get_designated_request_id(size_t, RequestID *) noexcept -> exception_t = 0;
+        virtual auto batch_request(std::move_iterator<model::ClientRequest *> client_request_arr, size_t client_request_arr_sz) noexcept -> std::expected<std::unique_ptr<BatchResponseInterface>, exception_t> = 0;
+        virtual auto get_designated_request_id(size_t request_id_arr_sz, RequestID * request_id_arr) noexcept -> exception_t = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 }
@@ -1530,6 +1541,44 @@ namespace dg::network_rest_frame::server_impl1
             }            
     };
 
+    class OneRequestHandlerAdapter: public virtual RequestHandlerInterface
+    {
+        private:
+
+            std::shared_ptr<OneRequestHandlerInterface> base;
+        
+        public:
+
+            OneRequestHandlerAdapter(std::shared_ptr<OneRequestHandlerInterface> base) noexcept: base(std::move(base)){}
+
+            void handle(std::move_iterator<Request *> request_arr, size_t request_arr_sz, Response * response_arr) noexcept
+            {
+                auto base_request_arr = request_arr.base();
+
+                for (size_t i = 0u; i < request_arr_sz; ++i)
+                {
+                    try
+                    {
+                        response_arr[i] = this->base->handle(base_request_arr[i]);
+                    }
+                    catch (...)
+                    {
+                        response_arr[i] = Response
+                        {
+                            .response                       = {},
+                            .response_serialization_format  = {},
+                            .err_code                       = dg::network_exception::wrap_std_exception(std::current_exception())
+                        };
+                    }
+                }
+            }
+
+            auto max_consume_size() noexcept -> size_t
+            {
+                return std::numeric_limits<size_t>::max();
+            }
+    };
+
     //clear
     class RequestResolverWorker: public virtual dg::network_concurrency::WorkerInterface
     {
@@ -2314,6 +2363,16 @@ namespace dg::network_rest_frame::server_impl1
                                                                                std::move(updatable));
             } 
 
+            static auto get_one_request_adapter(std::shared_ptr<OneRequestHandlerInterface> request_handler) -> std::unique_ptr<RequestHandlerInterface>
+            {
+                if (request_handler == nullptr)
+                {
+                    dg::network_exception::throw_exception(dg::network_exception::INVALID_ARGUMENT);
+                }
+
+                return std::make_unique<OneRequestHandlerAdapter>(std::move(request_handler));
+            }
+
             static auto get_update_worker(std::shared_ptr<UpdatableInterface> updatable,
                                           std::chrono::nanoseconds update_dur) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>
             {
@@ -2434,31 +2493,256 @@ namespace dg::network_rest_frame::server_instance
 {
     using namespace dg::network_rest_frame::server;
 
-    struct Signature{};
-    struct Signature1{};
-
-    using ResolverDictionarySingleton   = stdx::singleton<Signature, std::unique_ptr<RequestHandlerDictionaryInterface>>;
-    using ResolverWorkerSingleton       = stdx::singleton<Signature1, std::shared_ptr<void>>;
-
-    void init()
+    struct BuilderConfig
     {
+        uint64_t cache_each_capacity;
+        uint64_t cache_response_capacity;
+        uint64_t cache_concurrency_sz;
 
+        uint64_t cache_unique_write_set_each_capacity;
+        uint64_t cache_unique_write_set_concurrency_sz;
+
+        uint64_t cache_unique_write_traffic_controller_elemental_thru_cap;
+        uint64_t cache_unique_write_traffic_controller_concurrency_sz;
+        std::chrono::nanoseconds cache_unique_write_traffic_controller_reset_duration;
+
+        uint64_t request_resolver_worker_sz;
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector) const
+        {
+            reflector(cache_each_capacity,
+                      cache_response_capacity,
+                      cache_concurrency_sz,
+                      cache_unique_write_set_each_capacity,
+                      cache_unique_write_set_concurrency_sz,
+                      cache_unique_write_traffic_controller_elemental_thru_cap,
+                      cache_unique_write_traffic_controller_concurrency_sz,
+                      cache_unique_write_traffic_controller_reset_duration,
+                      request_resolver_worker_sz);
+        }
+
+        template <class Reflector>
+        void dg_reflect(const Reflector& reflector)
+        {
+            reflector(cache_each_capacity,
+                      cache_response_capacity,
+                      cache_concurrency_sz,
+                      cache_unique_write_set_each_capacity,
+                      cache_unique_write_set_concurrency_sz,
+                      cache_unique_write_traffic_controller_elemental_thru_cap,
+                      cache_unique_write_traffic_controller_concurrency_sz,
+                      cache_unique_write_traffic_controller_reset_duration,
+                      request_resolver_worker_sz);
+        }
+    };
+
+    struct RestServerSolution
+    {
+        std::shared_ptr<RequestHandlerDictionaryInterface> rest_resolver_dictionary;
+        std::shared_ptr<void> daemon_process;
+    };
+
+    class RestServerBuilder
+    {
+        private:
+
+            uint64_t cache_each_capacity;
+            uint64_t cache_response_capacity;
+            uint64_t cache_concurrency_sz;
+
+            uint64_t cache_unique_write_set_each_capacity;
+            uint64_t cache_unique_write_set_concurrency_sz;
+
+            uint64_t cache_unique_write_traffic_controller_elemental_thru_cap;
+            uint64_t cache_unique_write_traffic_controller_concurrency_sz;
+            std::chrono::nanoseconds cache_unique_write_traffic_controller_reset_duration;
+
+            uint64_t request_resolver_consume_sz;
+            uint64_t request_resolver_mailbox_feed_cap;
+            uint64_t request_resolver_mailbox_prep_feed_cap;
+            uint64_t request_resolver_cache_controller_feed_cap;
+            uint64_t request_resolver_server_fetch_feed_cap;
+            uint64_t request_resolver_cache_server_fetch_feed_cap;
+            uint64_t request_resolver_cache_fetch_feed_cap;
+            uint64_t request_resolver_busy_consume_sz;
+
+            uint64_t request_resolver_worker_sz;
+
+            static inline constexpr size_t DEFAULT_BATCH_SZ         = size_t{1} << 8;
+            static inline constexpr size_t DEFAULT_BUSY_CONSUME_SZ  = 0u;
+
+        public:
+
+            RestServerBuilder(): cache_each_capacity(),
+                                 cache_response_capacity(),
+                                 cache_concurrency_sz(),
+                                 cache_unique_write_set_each_capacity(),
+                                 cache_unique_write_set_concurrency_sz(),
+                                 cache_unique_write_traffic_controller_elemental_thru_cap(),
+                                 cache_unique_write_traffic_controller_concurrency_sz(),
+                                 request_resolver_consume_sz(DEFAULT_BATCH_SZ),
+                                 request_resolver_mailbox_feed_cap(DEFAULT_BATCH_SZ),
+                                 request_resolver_mailbox_prep_feed_cap(DEFAULT_BATCH_SZ),
+                                 request_resolver_cache_controller_feed_cap(DEFAULT_BATCH_SZ),
+                                 request_resolver_server_fetch_feed_cap(DEFAULT_BATCH_SZ),
+                                 request_resolver_cache_server_fetch_feed_cap(DEFAULT_BATCH_SZ),
+                                 request_resolver_cache_fetch_feed_cap(DEFAULT_BATCH_SZ),
+                                 request_resolver_busy_consume_sz(DEFAULT_BUSY_CONSUME_SZ),
+                                 request_resolver_worker_sz(){}
+
+
+            auto set_config(const BuilderConfig& config) -> RestServerBuilder&
+            {
+                this->cache_each_capacity                                       = config.cache_each_capacity;
+                this->cache_response_capacity                                   = config.cache_response_capacity;
+                this->cache_concurrency_sz                                      = config.cache_concurrency_sz;
+
+                this->cache_unique_write_set_each_capacity                      = config.cache_unique_write_set_each_capacity;
+                this->cache_unique_write_set_concurrency_sz                     = config.cache_unique_write_set_concurrency_sz;
+
+                this->cache_unique_write_traffic_controller_elemental_thru_cap  = config.cache_unique_write_traffic_controller_elemental_thru_cap;
+                this->cache_unique_write_traffic_controller_concurrency_sz      = config.cache_unique_write_traffic_controller_concurrency_sz;
+                this->cache_unique_write_traffic_controller_reset_duration      = config.cache_unique_write_traffic_controller_reset_duration;
+
+                this->request_resolver_worker_sz                                = config.request_resolver_worker_sz;
+
+                return *this;
+            }
+
+            auto build() -> RestServerSolution
+            {
+                std::shared_ptr<RequestHandlerDictionaryInterface> handler_dict = this->get_request_handler_dictionary();
+                std::shared_ptr<void> daemon_process                            = this->get_daemon_process(handler_dict);
+
+                return RestServerSolution
+                {
+                    .rest_resolver_dictionary   = handler_dict,
+                    .daemon_process             = daemon_process
+                };
+            }
+
+        private:
+
+            auto run_workable(std::unique_ptr<dg::network_concurrency::WorkerInterface> workable) -> std::shared_ptr<void>
+            {
+                auto resource = dg::network_exception_handler::throw_nolog(dg::network_concurrency::daemon_saferegister(dg::network_concurrency::COMPUTING_DAEMON, std::move(workable))); 
+
+                return std::make_shared<decltype(resource)>(std::move(resource));
+            }
+
+            auto run_workable_vec(std::vector<std::unique_ptr<dg::network_concurrency::WorkerInterface>> workable_vec) -> std::shared_ptr<void>
+            {
+                std::vector<std::shared_ptr<void>> rs{};
+
+                for (auto& workable: workable_vec)
+                {
+                    rs.push_back(this->run_workable(std::move(workable)));
+                }
+
+                return std::make_shared<std::vector<std::shared_ptr<void>>>(std::move(rs));
+            }
+
+            auto get_request_handler_dictionary() -> std::unique_ptr<RequestHandlerDictionaryInterface>
+            {
+                return dg::network_rest_frame::server_impl1::ComponentFactory::get_request_handler_dictionary();
+            }
+
+            auto get_cache_controller() -> std::unique_ptr<InfiniteCacheControllerInterface>
+            {
+                return dg::network_rest_frame::server_impl1::ComponentFactory::get_distributed_cache_controller(this->cache_each_capacity,
+                                                                                                                this->cache_response_capacity,
+                                                                                                                this->cache_concurrency_sz);
+            }
+
+            auto get_cache_unique_write_controller() -> std::unique_ptr<InfiniteCacheUniqueWriteControllerInterface>
+            {
+                return dg::network_rest_frame::server_impl1::ComponentFactory::get_distributed_unique_cache_write_right_controller(this->cache_unique_write_set_each_capacity,
+                                                                                                                                   this->cache_unique_write_set_concurrency_sz);
+            }
+
+            auto get_traffic_controller() -> std::unique_ptr<CacheUniqueWriteTrafficControllerInterface>
+            {
+                return dg::network_rest_frame::server_impl1::ComponentFactory::get_distributed_cache_write_traffic_controller(this->cache_unique_write_traffic_controller_elemental_thru_cap,
+                                                                                                                              this->cache_unique_write_traffic_controller_concurrency_sz);
+            }
+
+            auto get_traffic_update_worker(const std::shared_ptr<CacheUniqueWriteTrafficControllerInterface>& traffic_controller) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>
+            {
+                using namespace dg::network_rest_frame::server_impl1;
+
+                return ComponentFactory::get_update_worker(ComponentFactory::get_traffic_controller_wrapper(traffic_controller, this->cache_unique_write_traffic_controller_reset_duration),
+                                                           this->cache_unique_write_traffic_controller_reset_duration);
+            }
+
+            auto get_request_resolver_worker(const std::shared_ptr<RequestHandlerDictionaryInterface>& dictionary,
+                                             const std::shared_ptr<InfiniteCacheControllerInterface>& cache_controller,
+                                             const std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface>& cache_unique_write_controller,
+                                             const std::shared_ptr<CacheUniqueWriteTrafficControllerInterface>& traffic_controller) -> std::unique_ptr<dg::network_concurrency::WorkerInterface>
+            {
+                using namespace dg::network_rest_frame::server_impl1;
+
+                return ComponentFactory::get_request_resolver(ComponentFactory::get_request_handler_one_fetch_retriever(dictionary),
+                                                              cache_controller,
+                                                              cache_unique_write_controller,
+                                                              traffic_controller,
+                                                              this->request_resolver_consume_sz,
+                                                              this->request_resolver_mailbox_feed_cap,
+                                                              this->request_resolver_mailbox_prep_feed_cap,
+                                                              this->request_resolver_cache_controller_feed_cap,
+                                                              this->request_resolver_server_fetch_feed_cap,
+                                                              this->request_resolver_cache_server_fetch_feed_cap,
+                                                              this->request_resolver_cache_fetch_feed_cap,
+                                                              this->request_resolver_busy_consume_sz);
+            }
+
+            auto get_daemon_process(std::shared_ptr<RequestHandlerDictionaryInterface> dictionary) -> std::shared_ptr<void>
+            {
+                std::vector<std::unique_ptr<dg::network_concurrency::WorkerInterface>> worker_vec           = {};
+
+                std::shared_ptr<InfiniteCacheControllerInterface> cache_controller                          = this->get_cache_controller();
+                std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface> cache_unique_write_controller  = this->get_cache_unique_write_controller();
+                std::shared_ptr<CacheUniqueWriteTrafficControllerInterface> traffic_controller              = this->get_traffic_controller();
+
+                worker_vec.push_back(this->get_traffic_update_worker(traffic_controller));
+
+                for (size_t i = 0u; i < this->request_resolver_worker_sz; ++i)
+                {
+                    worker_vec.push_back(this->get_request_resolver_worker(dictionary, cache_controller, cache_unique_write_controller, traffic_controller));
+                }
+
+                return this->run_workable_vec(std::move(worker_vec));
+            }
+    };
+
+    struct Signature{};
+
+    using SolutionSingleton   = stdx::singleton<Signature, RestServerSolution>;
+
+    void init(const BuilderConfig& config)
+    {
+        SolutionSingleton::get()    = RestServerBuilder{}.set_config(config).build();
     }
 
     void deinit() noexcept
     {
-        ResolverDictionarySingleton::get()  = nullptr;
-        ResolverWorkerSingleton::get()      = nullptr;
+        SolutionSingleton::get()    = {};
+    }
+
+    void hook(const ResourceAddress& resource_addr, std::shared_ptr<OneRequestHandlerInterface> request_handler)
+    {
+        dg::network_exception_handler::nothrow_log(SolutionSingleton::get().rest_resolver_dictionary->add_resolver(resource_addr.resource_addr,
+                                                                                                                   server_impl1::ComponentFactory::get_one_request_adapter(request_handler)));
     }
 
     void hook(const ResourceAddress& resource_addr, std::shared_ptr<RequestHandlerInterface> request_handler)
     {
-        dg::network_exception_handler::nothrow_log(ResolverDictionarySingleton::get()->add_resolver(resource_addr.resource_addr, request_handler));
+        dg::network_exception_handler::nothrow_log(SolutionSingleton::get().rest_resolver_dictionary->add_resolver(resource_addr.resource_addr, request_handler));
     }
 
     void unhook(const ResourceAddress& resource_addr) noexcept
     {
-        ResolverDictionarySingleton::get()->remove_resolver(resource_addr.resource_addr);
+        SolutionSingleton::get().rest_resolver_dictionary->remove_resolver(resource_addr.resource_addr);
     }
 }
 
@@ -3213,7 +3497,8 @@ namespace dg::network_rest_frame::client_impl1{
     };
 
     //clear
-    class TicketTimeoutManager: public virtual TicketTimeoutManagerInterface
+    class TicketTimeoutManager: public virtual TicketTimeoutManagerInterface,
+                                public virtual UpdatableInterface
     {
         public:
 
@@ -3223,8 +3508,27 @@ namespace dg::network_rest_frame::client_impl1{
                 std::chrono::time_point<std::chrono::steady_clock> abs_timeout;
             };
 
+            struct PushWaitBucket
+            {
+                ClockInArgument ** clock_in_ptr_arr;
+                exception_t ** exception_ptr_arr;
+                size_t clock_in_arr_sz;
+                std::binary_semaphore * smp;
+                std::chrono::time_point<std::chrono::steady_clock> since;
+            };
+
+            struct PopWaitBucket
+            {
+                model::ticket_id_t * output_arr;
+                size_t * output_arr_sz;
+                size_t output_arr_cap;
+                std::binary_semaphore * smp;
+            };
+
         private:
 
+            dg::pow2_cyclic_queue<PushWaitBucket> push_wait_bucket_vec;
+            dg::pow2_cyclic_queue<PopWaitBucket> pop_wait_bucket_vec;
             dg::vector<ExpiryBucket> expiry_bucket_queue; //this is harder than expected, we are afraid of the priority queue, yet we would want to discretize this to avoid priority queues
             size_t expiry_bucket_queue_cap;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
@@ -3233,11 +3537,15 @@ namespace dg::network_rest_frame::client_impl1{
 
         public:
 
-            TicketTimeoutManager(dg::vector<ExpiryBucket> expiry_bucket_queue,
+            TicketTimeoutManager(dg::pow2_cyclic_queue<PushWaitBucket> push_wait_bucket_vec,
+                                 dg::pow2_cyclic_queue<PopWaitBucket> pop_wait_bucket_vec,
+                                 dg::vector<ExpiryBucket> expiry_bucket_queue,
                                  size_t expiry_bucket_queue_cap,
                                  std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                  stdx::hdi_container<std::chrono::nanoseconds> max_dur,
-                                 stdx::hdi_container<size_t> max_consume_per_load) noexcept: expiry_bucket_queue(std::move(expiry_bucket_queue)),
+                                 stdx::hdi_container<size_t> max_consume_per_load) noexcept: push_wait_bucket_vec(std::move(push_wait_bucket_vec)),
+                                                                                             pop_wait_bucket_vec(std::move(pop_wait_bucket_vec)),
+                                                                                             expiry_bucket_queue(std::move(expiry_bucket_queue)),
                                                                                              expiry_bucket_queue_cap(expiry_bucket_queue_cap),
                                                                                              mtx(std::move(mtx)),
                                                                                              max_dur(std::move(max_dur)),
@@ -3254,61 +3562,172 @@ namespace dg::network_rest_frame::client_impl1{
                     }
                 }
 
-                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+                dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<ClockInArgument>[]> push_wait_bucket_arr(sz);
+                dg::network_stack_allocation::NoExceptAllocation<std::add_pointer_t<exception_t>[]> exception_ptr_arr(sz);
+                size_t wait_sz = 0u;
+                std::binary_semaphore smp(0);
 
-                auto now        = std::chrono::steady_clock::now(); 
-                auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timeout > rhs.abs_timeout;};
-
-                for (size_t i = 0u; i < sz; ++i)
                 {
-                    auto [ticket_id, current_dur] = std::make_pair(registering_arr[i].clocked_in_ticket, registering_arr[i].expiry_dur);
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
-                    if (current_dur > this->max_clockin_dur())
+                    auto now        = std::chrono::steady_clock::now(); 
+                    auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept
                     {
-                        exception_arr[i] = dg::network_exception::REST_INVALID_TIMEOUT;
-                        continue;
+                        return lhs.abs_timeout > rhs.abs_timeout;
+                    };
+
+                    for (size_t i = 0u; i < sz; ++i)
+                    {
+                        auto [ticket_id, current_dur] = std::make_pair(registering_arr[i].clocked_in_ticket, registering_arr[i].expiry_dur);
+
+                        if (current_dur > this->max_clockin_dur())
+                        {
+                            exception_arr[i] = dg::network_exception::REST_INVALID_TIMEOUT;
+                            continue;
+                        }
+
+                        if (this->expiry_bucket_queue.size() == this->expiry_bucket_queue_cap || !this->push_wait_bucket_vec.empty())
+                        {
+                            push_wait_bucket_arr[wait_sz]   = std::next(registering_arr, i);
+                            exception_ptr_arr[wait_sz]      = std::next(exception_arr, i);
+                            wait_sz                         += 1u;
+
+                            continue;
+                        }
+
+                        this->expiry_bucket_queue.push_back(ExpiryBucket
+                        {
+                            .ticket_id      = ticket_id,
+                            .abs_timeout    = now + current_dur
+                        });
+
+                        std::push_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
+                        exception_arr[i] = dg::network_exception::SUCCESS;
                     }
 
-                    if (this->expiry_bucket_queue.size() == this->expiry_bucket_queue_cap)
+                    if (wait_sz != 0u)
                     {
-                        exception_arr[i] = dg::network_exception::QUEUE_FULL;
-                        continue;
+                        dg::network_exception_handler::nothrow_log(this->push_wait_bucket_vec.push_back(PushWaitBucket
+                        {
+                            .clock_in_ptr_arr   = push_wait_bucket_arr.get(),
+                            .exception_ptr_arr  = exception_ptr_arr.get(),
+                            .clock_in_arr_sz    = wait_sz,
+                            .smp                = &smp,
+                            .since              = now
+                        }));
                     }
-
-                    this->expiry_bucket_queue.push_back(ExpiryBucket{ticket_id, now + current_dur});
-                    std::push_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
-                    exception_arr[i] = dg::network_exception::SUCCESS;
                 }
+
+                if (wait_sz != 0u)
+                {
+                    smp.acquire();
+                }
+
             }
 
             void get_expired_ticket(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept
             {
+                std::binary_semaphore smp(0);
+
+                bool need_wait = [&]() noexcept
+                {
+                    stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                    ticket_arr_sz   = 0u;
+                    auto now        = std::chrono::steady_clock::now();
+                    auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept
+                    {
+                        return lhs.abs_timeout > rhs.abs_timeout;
+                    };
+
+                    while (true)
+                    {
+                        if (ticket_arr_sz == ticket_arr_cap)
+                        {
+                            return false;
+                        }
+
+                        if (this->expiry_bucket_queue.empty())
+                        {
+                            if (ticket_arr_sz == 0u)
+                            {
+                                dg::network_exception_handler::nothrow_log(this->pop_wait_bucket_vec.push_back(PopWaitBucket
+                                {
+                                    .output_arr     = ticket_arr,
+                                    .output_arr_sz  = &ticket_arr_sz,
+                                    .output_arr_cap = ticket_arr_cap,
+                                    .smp            = &smp
+                                }));
+
+                                return true;
+                            }
+
+                            return false;
+                        }
+
+                        if (this->expiry_bucket_queue.front().abs_timeout >= now)
+                        {
+                            if (ticket_arr_sz == 0u)
+                            {
+                                dg::network_exception_handler::nothrow_log(this->pop_wait_bucket_vec.push_back(PopWaitBucket
+                                {
+                                    .output_arr     = ticket_arr,
+                                    .output_arr_sz  = &ticket_arr_sz,
+                                    .output_arr_cap = ticket_arr_cap,
+                                    .smp            = &smp
+                                }));
+
+                                return true;
+                            }
+
+                            return false;
+                        }
+
+                        ticket_arr[ticket_arr_sz++] = this->expiry_bucket_queue.front().ticket_id;
+                        std::pop_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
+                        this->expiry_bucket_queue.pop_back();
+                    }
+                }();
+
+                if (need_wait)
+                {
+                    smp.acquire();
+                }
+            }
+
+            void update() noexcept
+            {
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
-                ticket_arr_sz   = 0u;
-                auto now        = std::chrono::steady_clock::now();
-                auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept {return lhs.abs_timeout > rhs.abs_timeout;};
+                auto now        = std::chrono::steady_clock::now(); 
 
                 while (true)
                 {
-                    if (ticket_arr_sz == ticket_arr_cap)
+                    if (this->expiry_bucket_queue.size() != this->expiry_bucket_queue_cap)
                     {
-                        return;
+                        bool can_progress   = !this->push_wait_bucket_vec.empty();
+
+                        if (can_progress)
+                        {
+                            this->resolve_one_push_doable();
+                            continue;
+                        }
                     }
 
-                    if (this->expiry_bucket_queue.empty())
+                    if (!this->expiry_bucket_queue.empty())
                     {
-                        return;
+                        bool can_progress_1 = !this->pop_wait_bucket_vec.empty(); 
+                        bool can_progress_2 = this->expiry_bucket_queue.front().abs_timeout < now;
+                        bool can_progress   = can_progress_1 & can_progress_2;
+
+                        if (can_progress)
+                        {
+                            this->resolve_one_pop_doable();
+                            continue;
+                        }
                     }
 
-                    if (this->expiry_bucket_queue.front().abs_timeout > now)
-                    {
-                        return;
-                    }
-
-                    ticket_arr[ticket_arr_sz++] = this->expiry_bucket_queue.front().ticket_id;
-                    std::pop_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
-                    this->expiry_bucket_queue.pop_back();
+                    break;
                 }
             }
 
@@ -3328,6 +3747,122 @@ namespace dg::network_rest_frame::client_impl1{
             {
                 return this->max_consume_per_load.value;
             }
+        
+        private:
+
+            void resolve_one_push_doable() noexcept
+            {
+                if (this->expiry_bucket_queue.size() == this->expiry_bucket_queue_cap)
+                {
+                    return;
+                }
+
+                if (this->push_wait_bucket_vec.empty())
+                {
+                    return;
+                }
+
+                PushWaitBucket& bucket = this->push_wait_bucket_vec.front(); 
+
+                auto greater = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept
+                {
+                    return lhs.abs_timeout > rhs.abs_timeout;
+                };
+
+                if constexpr(DEBUG_MODE_FLAG)
+                {
+                    if (bucket.clock_in_arr_sz == 0u)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                this->expiry_bucket_queue.push_back(ExpiryBucket
+                {
+                    .ticket_id      = bucket.clock_in_ptr_arr[0]->clocked_in_ticket,
+                    .abs_timeout    = bucket.since + bucket.clock_in_ptr_arr[0]->expiry_dur
+                });
+
+                std::push_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
+
+                *bucket.exception_ptr_arr[0]    = dg::network_exception::SUCCESS;                
+                bucket.clock_in_ptr_arr         = std::next(bucket.clock_in_ptr_arr);
+                bucket.exception_ptr_arr        = std::next(bucket.exception_ptr_arr);
+                bucket.clock_in_arr_sz          -= 1;
+
+                if (bucket.clock_in_arr_sz == 0u)
+                {
+                    bucket.smp->release();
+                    this->push_wait_bucket_vec.pop_front();
+
+                    return;
+                }
+            }
+
+            void resolve_one_pop_doable() noexcept
+            {
+                if (this->pop_wait_bucket_vec.empty())
+                {
+                    return;
+                }
+
+                auto now                = std::chrono::steady_clock::now(); 
+                bool need_release       = false;
+
+                auto greater = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept
+                {
+                    return lhs.abs_timeout > rhs.abs_timeout;
+                };
+
+                [&]() noexcept
+                {
+                    while (true)
+                    {
+                        if (this->expiry_bucket_queue.empty())
+                        {
+                            return;
+                        }
+
+                        if (this->expiry_bucket_queue.front().abs_timeout >= now)
+                        {
+                            return;
+                        }
+
+                        PopWaitBucket& bucket                           = this->pop_wait_bucket_vec.front(); 
+
+                        if constexpr(DEBUG_MODE_FLAG)
+                        {
+                            if (*bucket.output_arr_sz == bucket.output_arr_cap)
+                            {
+                                dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                                std::abort();
+                            }
+                        }
+
+                        bucket.output_arr[(*bucket.output_arr_sz)++]    = this->expiry_bucket_queue.front().ticket_id;
+                        need_release                                    = true;
+
+                        std::pop_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
+                        this->expiry_bucket_queue.pop_back();
+
+                        if (*bucket.output_arr_sz == bucket.output_arr_cap)
+                        {
+                            bucket.smp->release();
+                            this->pop_wait_bucket_vec.pop_front();
+                            need_release = false;
+
+                            return;
+                        }
+                    }
+                }();
+
+                if (need_release)
+                {
+                    this->pop_wait_bucket_vec.front().smp->release();
+                    this->pop_wait_bucket_vec.pop_front();
+                } 
+            }
     };
 
     //clear
@@ -3338,8 +3873,6 @@ namespace dg::network_rest_frame::client_impl1{
             std::unique_ptr<std::unique_ptr<TicketTimeoutManagerInterface>[]> base_arr;
             size_t pow2_base_arr_sz;
             size_t keyvalue_feed_cap;
-            size_t zero_bounce_sz;
-            std::unique_ptr<DrainerPredicateInterface> drainer_predicate;
             std::chrono::nanoseconds max_dur;
             size_t drain_peek_cap_per_container;
             size_t max_consume_per_load;
@@ -3349,15 +3882,11 @@ namespace dg::network_rest_frame::client_impl1{
             DistributedTicketTimeoutManager(std::unique_ptr<std::unique_ptr<TicketTimeoutManagerInterface>[]> base_arr,
                                             size_t pow2_base_arr_sz,
                                             size_t keyvalue_feed_cap,
-                                            size_t zero_bounce_sz,
-                                            std::unique_ptr<DrainerPredicateInterface> drainer_predicate,
                                             std::chrono::nanoseconds max_dur,
                                             size_t drain_peek_cap_per_container,
                                             size_t max_consume_per_load) noexcept: base_arr(std::move(base_arr)),
                                                                                    pow2_base_arr_sz(pow2_base_arr_sz),
                                                                                    keyvalue_feed_cap(keyvalue_feed_cap),
-                                                                                   zero_bounce_sz(zero_bounce_sz),
-                                                                                   drainer_predicate(std::move(drainer_predicate)),
                                                                                    max_dur(max_dur),
                                                                                    drain_peek_cap_per_container(drain_peek_cap_per_container),
                                                                                    max_consume_per_load(max_consume_per_load){}
@@ -3374,7 +3903,8 @@ namespace dg::network_rest_frame::client_impl1{
 
                 for (size_t i = 0u; i < sz; ++i)
                 {
-                    if (registering_arr[i].expiry_dur > this->max_clockin_dur()){
+                    if (registering_arr[i].expiry_dur > this->max_clockin_dur())
+                    {
                         exception_arr[i] = dg::network_exception::REST_INVALID_TIMEOUT;
                         continue;
                     }
@@ -3398,15 +3928,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             void get_expired_ticket(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept
             {
-                if (this->drainer_predicate->is_should_drain())
-                {
-                    this->internal_drain(ticket_arr, ticket_arr_sz, ticket_arr_cap);
-                    this->drainer_predicate->reset();
-                }
-                else
-                {
-                    this->internal_curious_pop(ticket_arr, ticket_arr_sz, ticket_arr_cap);
-                }
+                this->internal_drain(ticket_arr, ticket_arr_sz, ticket_arr_cap);
             }
 
             void clear() noexcept
@@ -3479,84 +4001,6 @@ namespace dg::network_rest_frame::client_impl1{
                     current_arr_cap     -= current_sz;
                     ticket_arr_sz       += current_sz;
                 }
-            }
-
-            void internal_curious_pop(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept
-            {
-                ticket_arr_sz = 0u;
-
-                for (size_t i = 0u; i < this->zero_bounce_sz; ++i)
-                {
-                    size_t idx = dg::network_randomizer::randomize_int<size_t>() & (this->pow2_base_arr_sz - 1u);
-                    this->base_arr[idx]->get_expired_ticket(ticket_arr, ticket_arr_sz, ticket_arr_cap);
-
-                    if (ticket_arr_sz != 0u)
-                    {
-                        return;
-                    }
-                }
-            }
-    };
-
-    //clear
-    class ExhaustionControlledTicketTimeoutManager: public virtual TicketTimeoutManagerInterface
-    {
-        private:
-
-            std::unique_ptr<TicketTimeoutManagerInterface> base;
-            std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device; //its insanely hard to solve this by using notify + atomic_wait, we'll come up with a patch 
-
-        public:
-
-            ExhaustionControlledTicketTimeoutManager(std::unique_ptr<TicketTimeoutManagerInterface> base,
-                                                     std::shared_ptr<dg::network_concurrency_infretry_x::ExecutorInterface> infretry_device) noexcept: base(std::move(base)),
-                                                                                                                                                       infretry_device(std::move(infretry_device)){}
-
-            void clock_in(ClockInArgument * registering_arr, size_t sz, exception_t * exception_arr) noexcept
-            {
-                auto first_registering_ptr          = registering_arr;
-                auto last_registering_ptr           = std::next(first_registering_ptr, sz);
-                exception_t * first_exception_ptr   = exception_arr;
-                exception_t * last_exception_ptr    = std::next(first_exception_ptr, sz);
-                size_t sliding_window_sz            = sz;
-
-                auto task = [&, this]() noexcept{
-                    this->base->clock_in(first_registering_ptr, sliding_window_sz, first_exception_ptr);
-
-                    exception_t * first_retriable_exception_ptr = std::find(first_exception_ptr, last_exception_ptr, dg::network_exception::QUEUE_FULL);
-                    exception_t * last_retriable_exception_ptr  = std::find_if(first_retriable_exception_ptr, last_exception_ptr, [](exception_t err){return err != dg::network_exception::QUEUE_FULL;});
-
-                    size_t relative_offset                      = std::distance(first_exception_ptr, first_retriable_exception_ptr);
-                    sliding_window_sz                           = std::distance(first_retriable_exception_ptr, last_retriable_exception_ptr);
-
-                    std::advance(first_registering_ptr, relative_offset);
-                    std::advance(first_exception_ptr, relative_offset);
-
-                    return first_exception_ptr == last_exception_ptr;
-                };
-
-                dg::network_concurrency_infretry_x::ExecutableWrapper virtual_task(task);
-                this->infretry_device->exec(virtual_task);
-            }
-
-            void get_expired_ticket(model::ticket_id_t * output_arr, size_t& sz, size_t cap) noexcept
-            {
-                this->base->get_expired_ticket(output_arr, sz, cap);
-            }
-
-            auto max_clockin_dur() const noexcept -> std::chrono::nanoseconds
-            {
-                return this->base->max_clockin_dur();
-            }
-
-            void clear() noexcept
-            {
-                this->base->clear();
-            }
-
-            auto max_consume_size() noexcept -> size_t
-            {
-                return this->base->max_consume_size();
             }
     };
 
