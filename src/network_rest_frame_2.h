@@ -412,8 +412,8 @@ namespace dg::network_rest_frame::client
 
         virtual void clock_in(ClockInArgument * clockin_arr, size_t sz, exception_t * exception_arr) noexcept = 0;
         virtual void get_expired_ticket(model::ticket_id_t * output_arr, size_t& output_arr_sz, size_t output_arr_cap) noexcept = 0;
+        virtual void void_ticket(model::ticket_id_t * ticket_arr, size_t sz) noexcept = 0;
         virtual auto max_clockin_dur() const noexcept -> std::chrono::nanoseconds = 0;
-        virtual void clear() noexcept = 0;
         virtual auto max_consume_size() noexcept -> size_t = 0;
     };
 
@@ -1587,7 +1587,9 @@ namespace dg::network_rest_frame::server_impl1
             std::shared_ptr<RequestHandlerRetrieverInterface> request_handler_map;
             std::shared_ptr<InfiniteCacheControllerInterface> request_cache_controller;
             std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface> cachewrite_uex_controller;
-            std::shared_ptr<CacheUniqueWriteTrafficControllerInterface> cachewrite_traffic_controller; 
+            std::shared_ptr<CacheUniqueWriteTrafficControllerInterface> cachewrite_traffic_controller;
+            uint32_t recv_channel;
+            uint32_t send_channel;  
             size_t resolve_consume_sz;
             size_t mailbox_feed_cap;
             size_t mailbox_prep_feed_cap;
@@ -1603,6 +1605,9 @@ namespace dg::network_rest_frame::server_impl1
                                   std::shared_ptr<InfiniteCacheControllerInterface> request_cache_controller,
                                   std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface> cachewrite_uex_controller,
                                   std::shared_ptr<CacheUniqueWriteTrafficControllerInterface> cachewrite_traffic_controller,
+
+                                  uint32_t recv_channel,
+                                  uint32_t send_channel,
                                   size_t resolve_consume_sz,
                                   size_t mailbox_feed_cap,
                                   size_t mailbox_prep_feed_cap,
@@ -1614,6 +1619,10 @@ namespace dg::network_rest_frame::server_impl1
                                                                     request_cache_controller(std::move(request_cache_controller)),
                                                                     cachewrite_uex_controller(std::move(cachewrite_uex_controller)),
                                                                     cachewrite_traffic_controller(std::move(cachewrite_traffic_controller)),
+
+                                                                    recv_channel(recv_channel),
+                                                                    send_channel(send_channel),
+
                                                                     resolve_consume_sz(resolve_consume_sz),
                                                                     mailbox_feed_cap(mailbox_feed_cap),
                                                                     mailbox_prep_feed_cap(mailbox_prep_feed_cap),
@@ -1627,10 +1636,12 @@ namespace dg::network_rest_frame::server_impl1
             {
                 size_t recv_buf_cap = this->resolve_consume_sz;
                 size_t recv_buf_sz  = {};
+
                 dg::network_stack_allocation::NoExceptAllocation<dg::string[]> recv_buf_arr(recv_buf_cap);
-                dg::network_kernel_mailbox::recv(recv_buf_arr.get(), recv_buf_sz, recv_buf_cap);
+                dg::network_kernel_mailbox::recv(this->recv_channel, recv_buf_arr.get(), recv_buf_sz, recv_buf_cap);
 
                 auto mailbox_feed_resolutor                                 = InternalResponseFeedResolutor{}; 
+                mailbox_feed_resolutor.send_channel                         = this->send_channel;
 
                 size_t trimmed_mailbox_feed_cap                             = std::min(std::min(this->mailbox_feed_cap, dg::network_kernel_mailbox::max_consume_size()), recv_buf_sz);
                 size_t mailbox_feeder_allocation_cost                       = dg::network_producer_consumer::delvrsrv_allocation_cost(&mailbox_feed_resolutor, trimmed_mailbox_feed_cap);
@@ -1786,6 +1797,8 @@ namespace dg::network_rest_frame::server_impl1
 
             struct InternalResponseFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalResponseFeedArgument>
             {
+                uint32_t send_channel;
+
                 void push(std::move_iterator<InternalResponseFeedArgument *> data_arr, size_t sz) noexcept
                 {
                     InternalResponseFeedArgument * base_data_arr = data_arr.base();
@@ -1800,7 +1813,7 @@ namespace dg::network_rest_frame::server_impl1
                         mailbox_arr[i].content_sz   = base_data_arr[i].mailbox_arg.content.size();
                     }
 
-                    dg::network_kernel_mailbox::send(mailbox_arr.get(), sz, exception_arr.get());
+                    dg::network_kernel_mailbox::send(this->send_channel, mailbox_arr.get(), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i)
                     {
@@ -2397,6 +2410,8 @@ namespace dg::network_rest_frame::server_impl1
                                              std::shared_ptr<InfiniteCacheControllerInterface> cache_controller,
                                              std::shared_ptr<InfiniteCacheUniqueWriteControllerInterface> cache_write_controller,
                                              std::shared_ptr<CacheUniqueWriteTrafficControllerInterface> traffic_controller,
+                                             uint32_t recv_channel,
+                                             uint32_t send_channel,
                                              size_t resolve_consume_sz,
                                              size_t mailbox_feed_cap,
                                              size_t mailbox_prep_feed_cap,
@@ -2477,6 +2492,8 @@ namespace dg::network_rest_frame::server_impl1
                                                                std::move(cache_controller),
                                                                std::move(cache_write_controller),
                                                                std::move(traffic_controller),
+                                                               recv_channel,
+                                                               send_channel,
                                                                resolve_consume_sz,
                                                                mailbox_feed_cap,
                                                                mailbox_prep_feed_cap,
@@ -2573,6 +2590,9 @@ namespace dg::network_rest_frame::server_instance
             static inline constexpr size_t DEFAULT_BUSY_CONSUME_SZ  = 0u;
 
         public:
+
+            static inline constexpr uint32_t REST_SERVER_RECV_CHANNEL   = 1134950404UL;
+            static inline constexpr uint32_t REST_SERVER_SEND_CHANNEL   = 1000431304UL;
 
             RestServerBuilder(): cache_each_capacity(),
                                  cache_response_capacity(),
@@ -2686,6 +2706,8 @@ namespace dg::network_rest_frame::server_instance
                                                               cache_controller,
                                                               cache_unique_write_controller,
                                                               traffic_controller,
+                                                              REST_SERVER_RECV_CHANNEL,
+                                                              REST_SERVER_SEND_CHANNEL,
                                                               this->request_resolver_consume_sz,
                                                               this->request_resolver_mailbox_feed_cap,
                                                               this->request_resolver_mailbox_prep_feed_cap,
@@ -2771,7 +2793,14 @@ namespace dg::network_rest_frame::client_impl1{
         return result;
     } 
 
-    //I just dont like it not shared, so let's make it shared pointer shall we?
+    //what took me 1 year to realize is that the cyclic unordered map or advanced cache map are very useful, and it should be the sole metric to drop resources
+    //we don't expect packets to be dropped nor unfair implementations from end-to-end
+    //what we'd want is unique reference of the finite transportation stack, and it has to be thru, there is no room for recovery or anything like that
+    //though we have anticipated for every scenerio of how this could work out
+    //the only worst case scenerio is server processing a request twice, which we'd apply counter measurements by implementing the traffic controller, and the timeout
+
+    //we have reached 100% transmission rate for the kernel_mailbox_impl1_x on finite fixed pipe for multiple concurrent users
+    //this is one step more to compromise what could go wrong, and this is very important that this should not go wrong
 
     //clear
     class BatchRequestResponseBase
@@ -3496,16 +3525,331 @@ namespace dg::network_rest_frame::client_impl1{
             };
     };
 
+    template <class T, class StatelessIdExtractor, class ClockType = std::chrono::steady_clock>
+    class temporal_ordered_item_map
+    {
+        public:
+
+            using value_type    = T;
+            using id_type       = decltype(std::declval<StatelessIdExtractor&>()(std::declval<const T&>()));
+            using clock_type    = ClockType; 
+
+        private:
+
+            struct HeapNode
+            {
+                T item;
+                std::chrono::time_point<ClockType> sched_time;
+                size_t heap_idx;
+            };
+
+            dg::unordered_unstable_map<id_type, HeapNode *> id_heap_map;
+            dg::vector<std::unique_ptr<HeapNode>> temporal_heap;
+            size_t temporal_heap_sz;
+            
+        public:
+
+            temporal_ordered_item_map(size_t cap): id_heap_map(),
+                                                   temporal_heap(),
+                                                   temporal_heap_sz(0u)
+            {
+                this->id_heap_map.reserve(cap);
+
+                for (size_t i = 0u; i < cap; ++i)
+                {
+                    this->temporal_heap.push_back(std::make_unique<HeapNode>(HeapNode{}));
+                }
+            }
+
+            template <class TypeLike>
+            auto add(TypeLike&& item,
+                     std::chrono::time_point<ClockType> expiry_time) noexcept -> exception_t
+            {   
+                if (this->id_heap_map.contains(this->get_id(item)))
+                {
+                    return dg::network_exception::DUPLICATE_ENTRY;
+                }
+
+                std::expected<HeapNode *, exception_t> reference_node = this->add_heap_node(std::forward<TypeLike>(item), expiry_time);
+
+                if (!reference_node.has_value())
+                {
+                    return reference_node.error();
+                }
+
+                try
+                {
+                    auto [map_ptr, status] = id_heap_map.insert(std::make_pair(this->get_id(reference_node.value()->item), reference_node.value()));
+                    dg::network_exception_handler::dg_assert(status);
+                }
+                catch (...)
+                {
+                    dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                    std::abort();
+                }
+
+                return dg::network_exception::SUCCESS;
+            }
+
+            void erase(id_type item_id) noexcept
+            {
+                auto map_ptr = this->id_heap_map.find(item_id);
+
+                if (map_ptr == this->id_heap_map.end())
+                {
+                    return;
+                }
+
+                size_t idx = stdx::safe_ptr_access(map_ptr->second)->heap_idx;
+                this->id_heap_map.erase(map_ptr);
+                this->erase_heap_node_at(idx);
+            }
+
+            auto get_expired_item(std::chrono::time_point<ClockType> time_bar) noexcept -> std::optional<T>
+            {
+                if (this->temporal_heap_sz == 0u)
+                {
+                    return std::nullopt;
+                }
+
+                std::unique_ptr<HeapNode>& front_value = this->temporal_heap.front();
+
+                if (front_value->sched_time >= time_bar)
+                {
+                    return std::nullopt;
+                }
+
+                T result = std::move(front_value->item);
+                id_type associated_id = this->get_id(result);
+
+                this->id_heap_map.erase(associated_id);
+                this->pop_heap_node();
+
+                return std::optional<T>(std::move(result));
+            }
+
+            auto has_expired_item(std::chrono::time_point<ClockType> time_bar) const noexcept -> bool
+            {
+                if (this->temporal_heap_sz == 0u)
+                {
+                    return false;
+                }
+
+                const std::unique_ptr<HeapNode>& front_value = this->temporal_heap.front();
+
+                if (front_value->sched_time >= time_bar)
+                {
+                    return false;
+                }
+
+                return true;
+            }
+            
+            auto size() const noexcept -> size_t
+            {
+                return this->temporal_heap_sz;
+            }
+
+            auto capacity() const noexcept -> size_t
+            {
+                return this->temporal_heap.size();
+            }
+
+            auto empty() const noexcept -> bool
+            {
+                return this->size() == 0u;
+            }
+
+        private:
+
+            auto get_id(const T& item) -> id_type
+            {
+                return StatelessIdExtractor{}(item);
+            }
+
+            static void nullify_heap_node(std::unique_ptr<HeapNode>& arg) noexcept
+            {
+                arg->item       = {};
+                arg->sched_time = {};
+                arg->heap_idx   = {};
+            }
+
+            static void swap_heap_node(std::unique_ptr<HeapNode>& lhs,
+                                       std::unique_ptr<HeapNode>& rhs) noexcept
+            {
+                std::swap(lhs->heap_idx, rhs->heap_idx);
+                std::swap(lhs, rhs);
+            }
+
+            static auto is_less_than(const std::unique_ptr<HeapNode>& lhs,
+                                     const std::unique_ptr<HeapNode>& rhs) noexcept -> bool
+            {
+                return lhs->sched_time < rhs->sched_time;
+            }
+
+            void correct_heap_node_up_at(size_t idx) noexcept
+            {
+                if constexpr(DEBUG_MODE_FLAG)
+                {
+                    if (idx >= this->temporal_heap_sz)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                if (idx == 0u)
+                {
+                    return;
+                }
+
+                size_t parent_idx = (idx - 1) >> 1;
+
+                if (!is_less_than(this->temporal_heap[idx], this->temporal_heap[parent_idx]))
+                {
+                    return;
+                }
+
+                this->swap_heap_node(this->temporal_heap[idx], this->temporal_heap[parent_idx]);
+                this->correct_heap_node_up_at(parent_idx);
+            }
+
+            void correct_heap_node_down_at(size_t idx) noexcept
+            {
+                if constexpr(DEBUG_MODE_FLAG)
+                {
+                    if (idx >= this->temporal_heap_sz)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t cand_idx = idx * 2 + 1;
+
+                if (cand_idx >= this->temporal_heap_sz)
+                {
+                    return;
+                }
+
+                if (cand_idx + 1 < this->temporal_heap_sz && is_less_than(this->temporal_heap[cand_idx + 1], this->temporal_heap[cand_idx]))
+                {
+                    cand_idx += 1;
+                }
+
+                if (!is_less_than(this->temporal_heap[cand_idx], this->temporal_heap[idx]))
+                {
+                    return;
+                }
+
+                this->swap_heap_node(this->temporal_heap[idx], this->temporal_heap[cand_idx]);
+                this->correct_heap_node_down_at(cand_idx);
+            } 
+
+            void correct_heap_node_at(size_t idx) noexcept
+            {
+                if constexpr(DEBUG_MODE_FLAG)
+                {
+                    if (idx >= this->temporal_heap_sz)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                this->correct_heap_node_up_at(idx);
+                this->correct_heap_node_down_at(idx);
+            }
+
+            template <class TypeLike>
+            auto add_heap_node(TypeLike&& item,
+                               std::chrono::time_point<ClockType> sched_time) noexcept -> std::expected<HeapNode *, exception_t>
+            {
+                if (this->temporal_heap_sz == this->temporal_heap.size())
+                {
+                    return std::unexpected(dg::network_exception::RESOURCE_EXHAUSTION);
+                }
+
+                HeapNode * operating_node   = stdx::safe_ptr_access(this->temporal_heap[this->temporal_heap_sz].get());
+
+                operating_node->item        = std::forward<TypeLike>(item);
+                operating_node->sched_time  = sched_time;
+                operating_node->heap_idx    = this->temporal_heap_sz;
+
+                this->temporal_heap_sz      += 1;
+
+                this->correct_heap_node_up_at(this->temporal_heap_sz - 1);
+
+                return operating_node;
+            }
+
+            void erase_heap_node_at(size_t idx) noexcept
+            {
+                if constexpr(DEBUG_MODE_FLAG)
+                {
+                    if (idx >= this->temporal_heap_sz)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t back_node_idx = this->temporal_heap_sz - 1u;
+
+                if (back_node_idx == idx)
+                {
+                    this->nullify_heap_node(this->temporal_heap[back_node_idx]);
+                    this->temporal_heap_sz -= 1u;
+                }
+                else
+                {
+                    this->swap_heap_node(this->temporal_heap[idx], this->temporal_heap[back_node_idx]);
+                    this->nullify_heap_node(this->temporal_heap[back_node_idx]);
+                    this->temporal_heap_sz -= 1u;
+                    this->correct_heap_node_at(idx);
+                }
+            }
+
+            void pop_heap_node() noexcept
+            {
+                if constexpr(DEBUG_MODE_FLAG)
+                {
+                    if (this->temporal_heap_sz == 0u)
+                    {
+                        dg::network_log_stackdump::critical(dg::network_exception::verbose(dg::network_exception::INTERNAL_CORRUPTION));
+                        std::abort();
+                    }
+                }
+
+                size_t back_node_idx = this->temporal_heap_sz - 1u;
+
+                if (back_node_idx == 0u)
+                {
+                    this->nullify_heap_node(this->temporal_heap[back_node_idx]);
+                    this->temporal_heap_sz -= 1u;
+                }
+                else
+                {
+                    this->swap_heap_node(this->temporal_heap.front(), this->temporal_heap[back_node_idx]);
+                    this->nullify_heap_node(this->temporal_heap[back_node_idx]);
+                    this->temporal_heap_sz -= 1u;
+                    this->correct_heap_node_down_at(0u);
+                }
+            }
+    };
+
     //clear
     class TicketTimeoutManager: public virtual TicketTimeoutManagerInterface,
                                 public virtual UpdatableInterface
     {
         public:
 
-            struct ExpiryBucket
+            struct TicketIdExtractor
             {
-                model::ticket_id_t ticket_id;
-                std::chrono::time_point<std::chrono::steady_clock> abs_timeout;
+                constexpr auto operator()(const model::ticket_id_t& arg) -> model::ticket_id_t
+                {
+                    return arg;
+                }
             };
 
             struct PushWaitBucket
@@ -3529,8 +3873,7 @@ namespace dg::network_rest_frame::client_impl1{
 
             dg::pow2_cyclic_queue<PushWaitBucket> push_wait_bucket_vec;
             dg::pow2_cyclic_queue<PopWaitBucket> pop_wait_bucket_vec;
-            dg::vector<ExpiryBucket> expiry_bucket_queue; //this is harder than expected, we are afraid of the priority queue, yet we would want to discretize this to avoid priority queues
-            size_t expiry_bucket_queue_cap;
+            temporal_ordered_item_map<model::ticket_id_t, TicketIdExtractor, std::chrono::steady_clock> expiry_bucket_queue;
             std::unique_ptr<stdx::fair_atomic_flag> mtx;
             stdx::hdi_container<std::chrono::nanoseconds> max_dur;
             stdx::hdi_container<size_t> max_consume_per_load;
@@ -3539,14 +3882,12 @@ namespace dg::network_rest_frame::client_impl1{
 
             TicketTimeoutManager(dg::pow2_cyclic_queue<PushWaitBucket> push_wait_bucket_vec,
                                  dg::pow2_cyclic_queue<PopWaitBucket> pop_wait_bucket_vec,
-                                 dg::vector<ExpiryBucket> expiry_bucket_queue,
-                                 size_t expiry_bucket_queue_cap,
+                                 temporal_ordered_item_map<model::ticket_id_t, TicketIdExtractor, std::chrono::steady_clock> expiry_bucket_queue,
                                  std::unique_ptr<stdx::fair_atomic_flag> mtx,
                                  stdx::hdi_container<std::chrono::nanoseconds> max_dur,
                                  stdx::hdi_container<size_t> max_consume_per_load) noexcept: push_wait_bucket_vec(std::move(push_wait_bucket_vec)),
                                                                                              pop_wait_bucket_vec(std::move(pop_wait_bucket_vec)),
                                                                                              expiry_bucket_queue(std::move(expiry_bucket_queue)),
-                                                                                             expiry_bucket_queue_cap(expiry_bucket_queue_cap),
                                                                                              mtx(std::move(mtx)),
                                                                                              max_dur(std::move(max_dur)),
                                                                                              max_consume_per_load(std::move(max_consume_per_load)){}
@@ -3571,10 +3912,6 @@ namespace dg::network_rest_frame::client_impl1{
                     stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
                     auto now        = std::chrono::steady_clock::now(); 
-                    auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept
-                    {
-                        return lhs.abs_timeout > rhs.abs_timeout;
-                    };
 
                     for (size_t i = 0u; i < sz; ++i)
                     {
@@ -3586,7 +3923,7 @@ namespace dg::network_rest_frame::client_impl1{
                             continue;
                         }
 
-                        if (this->expiry_bucket_queue.size() == this->expiry_bucket_queue_cap || !this->push_wait_bucket_vec.empty())
+                        if (this->expiry_bucket_queue.size() == this->expiry_bucket_queue.capacity() || !this->push_wait_bucket_vec.empty())
                         {
                             push_wait_bucket_arr[wait_sz]   = std::next(registering_arr, i);
                             exception_ptr_arr[wait_sz]      = std::next(exception_arr, i);
@@ -3595,13 +3932,7 @@ namespace dg::network_rest_frame::client_impl1{
                             continue;
                         }
 
-                        this->expiry_bucket_queue.push_back(ExpiryBucket
-                        {
-                            .ticket_id      = ticket_id,
-                            .abs_timeout    = now + current_dur
-                        });
-
-                        std::push_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
+                        dg::network_exception_handler::nothrow_log(this->expiry_bucket_queue.add(ticket_id, now + current_dur));
                         exception_arr[i] = dg::network_exception::SUCCESS;
                     }
 
@@ -3635,10 +3966,6 @@ namespace dg::network_rest_frame::client_impl1{
 
                     ticket_arr_sz   = 0u;
                     auto now        = std::chrono::steady_clock::now();
-                    auto greater    = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept
-                    {
-                        return lhs.abs_timeout > rhs.abs_timeout;
-                    };
 
                     while (true)
                     {
@@ -3647,7 +3974,7 @@ namespace dg::network_rest_frame::client_impl1{
                             return false;
                         }
 
-                        if (this->expiry_bucket_queue.empty())
+                        if (!this->expiry_bucket_queue.has_expired_item(now))
                         {
                             if (ticket_arr_sz == 0u)
                             {
@@ -3665,27 +3992,7 @@ namespace dg::network_rest_frame::client_impl1{
                             return false;
                         }
 
-                        if (this->expiry_bucket_queue.front().abs_timeout >= now)
-                        {
-                            if (ticket_arr_sz == 0u)
-                            {
-                                dg::network_exception_handler::nothrow_log(this->pop_wait_bucket_vec.push_back(PopWaitBucket
-                                {
-                                    .output_arr     = ticket_arr,
-                                    .output_arr_sz  = &ticket_arr_sz,
-                                    .output_arr_cap = ticket_arr_cap,
-                                    .smp            = &smp
-                                }));
-
-                                return true;
-                            }
-
-                            return false;
-                        }
-
-                        ticket_arr[ticket_arr_sz++] = this->expiry_bucket_queue.front().ticket_id;
-                        std::pop_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
-                        this->expiry_bucket_queue.pop_back();
+                        ticket_arr[ticket_arr_sz++] = this->expiry_bucket_queue.get_expired_item(now).value();
                     }
                 }();
 
@@ -3695,15 +4002,44 @@ namespace dg::network_rest_frame::client_impl1{
                 }
             }
 
+            void void_ticket(model::ticket_id_t * ticket_arr, size_t sz) noexcept
+            {
+                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
+
+                for (size_t i = 0u; i < sz; ++i)
+                {
+                    this->expiry_bucket_queue.erase(ticket_arr[i]);
+                }
+
+                this->internal_update();
+            }
+
             void update() noexcept
             {
                 stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
 
-                auto now        = std::chrono::steady_clock::now(); 
+                this->internal_update();
+            }
+
+            auto max_clockin_dur() const noexcept -> std::chrono::nanoseconds
+            {
+                return this->max_dur.value;
+            }
+
+            auto max_consume_size() noexcept -> size_t
+            {
+                return this->max_consume_per_load.value;
+            }
+        
+        private:
+
+            void internal_update() noexcept
+            {
+                auto now = std::chrono::steady_clock::now(); 
 
                 while (true)
                 {
-                    if (this->expiry_bucket_queue.size() != this->expiry_bucket_queue_cap)
+                    if (this->expiry_bucket_queue.size() != this->expiry_bucket_queue.capacity())
                     {
                         bool can_progress   = !this->push_wait_bucket_vec.empty();
 
@@ -3714,10 +4050,9 @@ namespace dg::network_rest_frame::client_impl1{
                         }
                     }
 
-                    if (!this->expiry_bucket_queue.empty())
                     {
                         bool can_progress_1 = !this->pop_wait_bucket_vec.empty(); 
-                        bool can_progress_2 = this->expiry_bucket_queue.front().abs_timeout < now;
+                        bool can_progress_2 = this->expiry_bucket_queue.has_expired_item(now);
                         bool can_progress   = can_progress_1 & can_progress_2;
 
                         if (can_progress)
@@ -3731,28 +4066,9 @@ namespace dg::network_rest_frame::client_impl1{
                 }
             }
 
-            auto max_clockin_dur() const noexcept -> std::chrono::nanoseconds
-            {
-                return this->max_dur.value;
-            }
-
-            void clear() noexcept
-            {
-                stdx::xlock_guard<stdx::fair_atomic_flag> lck_grd(*this->mtx);
-
-                this->expiry_bucket_queue.clear();
-            }
-
-            auto max_consume_size() noexcept -> size_t
-            {
-                return this->max_consume_per_load.value;
-            }
-        
-        private:
-
             void resolve_one_push_doable() noexcept
             {
-                if (this->expiry_bucket_queue.size() == this->expiry_bucket_queue_cap)
+                if (this->expiry_bucket_queue.size() == this->expiry_bucket_queue.capacity())
                 {
                     return;
                 }
@@ -3764,11 +4080,6 @@ namespace dg::network_rest_frame::client_impl1{
 
                 PushWaitBucket& bucket = this->push_wait_bucket_vec.front(); 
 
-                auto greater = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept
-                {
-                    return lhs.abs_timeout > rhs.abs_timeout;
-                };
-
                 if constexpr(DEBUG_MODE_FLAG)
                 {
                     if (bucket.clock_in_arr_sz == 0u)
@@ -3778,13 +4089,8 @@ namespace dg::network_rest_frame::client_impl1{
                     }
                 }
 
-                this->expiry_bucket_queue.push_back(ExpiryBucket
-                {
-                    .ticket_id      = bucket.clock_in_ptr_arr[0]->clocked_in_ticket,
-                    .abs_timeout    = bucket.since + bucket.clock_in_ptr_arr[0]->expiry_dur
-                });
-
-                std::push_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
+                dg::network_exception_handler::nothrow_log(this->expiry_bucket_queue.add(bucket.clock_in_ptr_arr[0]->clocked_in_ticket,
+                                                                                         bucket.since + bucket.clock_in_ptr_arr[0]->expiry_dur));
 
                 *bucket.exception_ptr_arr[0]    = dg::network_exception::SUCCESS;                
                 bucket.clock_in_ptr_arr         = std::next(bucket.clock_in_ptr_arr);
@@ -3807,24 +4113,14 @@ namespace dg::network_rest_frame::client_impl1{
                     return;
                 }
 
-                auto now                = std::chrono::steady_clock::now(); 
-                bool need_release       = false;
-
-                auto greater = [](const ExpiryBucket& lhs, const ExpiryBucket& rhs) noexcept
-                {
-                    return lhs.abs_timeout > rhs.abs_timeout;
-                };
+                auto now            = std::chrono::steady_clock::now(); 
+                bool need_release   = false;
 
                 [&]() noexcept
                 {
                     while (true)
                     {
-                        if (this->expiry_bucket_queue.empty())
-                        {
-                            return;
-                        }
-
-                        if (this->expiry_bucket_queue.front().abs_timeout >= now)
+                        if (!this->expiry_bucket_queue.has_expired_item(now))
                         {
                             return;
                         }
@@ -3840,11 +4136,8 @@ namespace dg::network_rest_frame::client_impl1{
                             }
                         }
 
-                        bucket.output_arr[(*bucket.output_arr_sz)++]    = this->expiry_bucket_queue.front().ticket_id;
+                        bucket.output_arr[(*bucket.output_arr_sz)++]    = this->expiry_bucket_queue.get_expired_item(now).value();
                         need_release                                    = true;
-
-                        std::pop_heap(this->expiry_bucket_queue.begin(), this->expiry_bucket_queue.end(), greater);
-                        this->expiry_bucket_queue.pop_back();
 
                         if (*bucket.output_arr_sz == bucket.output_arr_cap)
                         {
@@ -3921,22 +4214,33 @@ namespace dg::network_rest_frame::client_impl1{
                 }
             }
 
-            auto max_clockin_dur() const noexcept -> std::chrono::nanoseconds
-            {
-                return this->max_dur;
-            }
-
             void get_expired_ticket(model::ticket_id_t * ticket_arr, size_t& ticket_arr_sz, size_t ticket_arr_cap) noexcept
             {
                 this->internal_drain(ticket_arr, ticket_arr_sz, ticket_arr_cap);
             }
 
-            void clear() noexcept
+            void void_ticket(model::ticket_id_t * ticket_arr, size_t sz) noexcept
             {
-                for (size_t i = 0u; i < this->pow2_base_arr_sz; ++i)
+                auto feed_resolutor                 = InternalVoidTicketResolutor{};
+                feed_resolutor.manager_arr          = this->base_arr.get();
+
+                size_t trimmed_keyvalue_feed_cap    = std::min(this->keyvalue_feed_cap, sz);
+                size_t feeder_allocation_cost       = dg::network_producer_consumer::delvrsrv_kv_allocation_cost(&feed_resolutor, trimmed_keyvalue_feed_cap);
+                dg::network_stack_allocation::NoExceptRawAllocation<char[]> feeder_mem(feeder_allocation_cost);
+                auto feeder                         = dg::network_exception_handler::nothrow_log(dg::network_producer_consumer::delvrsrv_kv_open_preallocated_raiihandle(&feed_resolutor, trimmed_keyvalue_feed_cap, feeder_mem.get()));
+
+                for (size_t i = 0u; i < sz; ++i)
                 {
-                    this->base_arr[i]->clear();
+                    size_t hashed_value     = dg::network_hash::hash_reflectible(ticket_arr[i]);
+                    size_t partitioned_idx  = hashed_value & (this->pow2_base_arr_sz - 1u);
+
+                    dg::network_producer_consumer::delvrsrv_kv_deliver(feeder.get(), partitioned_idx, ticket_arr[i]);
                 }
+            }
+
+            auto max_clockin_dur() const noexcept -> std::chrono::nanoseconds
+            {
+                return this->max_dur;
             }
 
             auto max_consume_size() noexcept -> size_t
@@ -3945,6 +4249,16 @@ namespace dg::network_rest_frame::client_impl1{
             }
 
         private:
+
+            struct InternalVoidTicketResolutor: dg::network_producer_consumer::KVConsumerInterface<size_t, model::ticket_id_t>
+            {
+                std::unique_ptr<TicketTimeoutManagerInterface> * manager_arr;
+
+                void push(const size_t& partitioned_idx, std::move_iterator<model::ticket_id_t *> data_arr, size_t sz) noexcept
+                {
+                    this->manager_arr[partitioned_idx]->void_ticket(data_arr.base(), sz);
+                }
+            };
 
             struct InternalClockInFeedArgument
             {
@@ -4042,18 +4356,21 @@ namespace dg::network_rest_frame::client_impl1{
         private:
 
             std::shared_ptr<TicketControllerInterface> ticket_controller;
+            std::shared_ptr<TicketTimeoutManagerInterface> timeout_manager;
             uint32_t channel;
             size_t ticket_controller_feed_cap;
             size_t recv_consume_sz;
             size_t busy_consume_sz;
-        
+
         public:
 
             InBoundWorker(std::shared_ptr<TicketControllerInterface> ticket_controller,
+                          std::shared_ptr<TicketTimeoutManagerInterface> timeout_manager,
                           uint32_t channel,
                           size_t ticket_controller_feed_cap,
                           size_t recv_consume_sz,
                           size_t busy_consume_sz) noexcept: ticket_controller(std::move(ticket_controller)),
+                                                            timeout_manager(std::move(timeout_manager)),
                                                             channel(channel),
                                                             ticket_controller_feed_cap(ticket_controller_feed_cap),
                                                             recv_consume_sz(recv_consume_sz),
@@ -4069,6 +4386,7 @@ namespace dg::network_rest_frame::client_impl1{
 
                 auto feed_resolutor                         = InternalFeedResolutor{};
                 feed_resolutor.ticket_controller            = this->ticket_controller.get();
+                feed_resolutor.timeout_manager              = this->timeout_manager.get();
 
                 size_t trimmed_ticket_controller_feed_cap   = std::min(this->ticket_controller_feed_cap, buf_arr_sz);
                 size_t feeder_allocation_cost               = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_ticket_controller_feed_cap);
@@ -4096,6 +4414,7 @@ namespace dg::network_rest_frame::client_impl1{
             struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<model::InternalResponse>
             {
                 TicketControllerInterface * ticket_controller;
+                TicketTimeoutManagerInterface * timeout_manager;
 
                 void push(std::move_iterator<model::InternalResponse *> response_arr, size_t sz) noexcept
                 {
@@ -4121,6 +4440,8 @@ namespace dg::network_rest_frame::client_impl1{
 
                         stdx::safe_ptr_access(observer_arr[i].value().get())->update(std::move(base_response_arr[i].response)); //declare expectations
                     }
+
+                    this->timeout_manager->void_ticket(ticket_id_arr.get(), sz);
                 }
             };
     };
@@ -4132,18 +4453,22 @@ namespace dg::network_rest_frame::client_impl1{
 
             std::shared_ptr<RequestContainerInterface> request_container;
             size_t mailbox_feed_cap;
+            uint32_t send_channel;
 
         public:
 
             OutBoundWorker(std::shared_ptr<RequestContainerInterface> request_container,
-                           size_t mailbox_feed_cap) noexcept: request_container(std::move(request_container)),
-                                                              mailbox_feed_cap(mailbox_feed_cap){}
+                           size_t mailbox_feed_cap,
+                           uint32_t send_channel) noexcept: request_container(std::move(request_container)),
+                                                            mailbox_feed_cap(mailbox_feed_cap),
+                                                            send_channel(send_channel){}
 
             bool run_one_epoch() noexcept
             {
                 dg::vector<model::InternalRequest> request_vec = this->request_container->pop();
 
                 auto feed_resolutor             = InternalFeedResolutor{};
+                feed_resolutor.send_channel     = this->send_channel;
 
                 size_t trimmed_mailbox_feed_cap = std::min(std::min(this->mailbox_feed_cap, dg::network_kernel_mailbox::max_consume_size()), static_cast<size_t>(request_vec.size()));
                 size_t feeder_allocation_cost   = dg::network_producer_consumer::delvrsrv_allocation_cost(&feed_resolutor, trimmed_mailbox_feed_cap);
@@ -4183,6 +4508,8 @@ namespace dg::network_rest_frame::client_impl1{
 
             struct InternalFeedResolutor: dg::network_producer_consumer::ConsumerInterface<InternalMailBoxArgument>
             {
+                uint32_t send_channel;
+
                 void push(std::move_iterator<InternalMailBoxArgument *> mailbox_arg, size_t sz) noexcept
                 {
                     dg::network_stack_allocation::NoExceptAllocation<exception_t[]> exception_arr(sz);
@@ -4197,7 +4524,7 @@ namespace dg::network_rest_frame::client_impl1{
                         mailbox_arr[i].content_sz   = base_mailbox_arg[i].content.size();
                     }
 
-                    dg::network_kernel_mailbox::send(mailbox_arr.get(), sz, exception_arr.get());
+                    dg::network_kernel_mailbox::send(this->send_channel, mailbox_arr.get(), sz, exception_arr.get());
 
                     for (size_t i = 0u; i < sz; ++i)
                     {
@@ -4682,6 +5009,11 @@ namespace dg::network_rest_frame::client_impl1{
             {
                 return this->max_consume_per_load.value;
             }
+    };
+
+    class ComponentFactory
+    {
+
     };
 }
 
